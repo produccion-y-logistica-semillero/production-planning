@@ -5,7 +5,7 @@ import 'package:production_planning/features/main_page/presentation/pages/welcom
 class MainNavigator extends StatelessWidget{
   final GlobalKey<NavigatorState> _navigatorKey;
 
-  MainNavigator(this._navigatorKey);
+  const MainNavigator(this._navigatorKey, {super.key});
 
   @override
   Widget build(BuildContext context) {

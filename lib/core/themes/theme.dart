@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 final ThemeData lightTheme = ThemeData(
   brightness:  Brightness.light,
-  colorScheme: ColorScheme.light(
-    surface: Color.fromARGB(255, 239, 249, 255),
-    primary: (Colors.blue[100])!,
-    primaryContainer: Color.fromARGB(255, 49, 103, 165),
-    onPrimaryContainer: Colors.white,
+  colorScheme: const ColorScheme.light(
+    surface:  Color.fromARGB(255, 239, 249, 255),
+    //primary: (Color.fromARGB(255, 150, 164, 239))!,
+   // onPrimary:  Colors.white,
+    primaryContainer: Color.fromARGB(255, 26, 56, 122),
+    onPrimaryContainer: Color.fromARGB(255, 255, 255, 255),
+    secondaryContainer:  Color.fromARGB(255, 197, 202, 214),
+    onSecondaryContainer: Color.fromARGB(255, 130, 136, 148),
     
   ),
   useMaterial3: true,   //We can check how it changes with this

@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:easy_sidemenu/easy_sidemenu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/main_page/presentation/widgets/main_navigator.dart';
 
 class MainPage extends StatefulWidget {
@@ -25,6 +29,8 @@ class _MainPageState extends State<MainPage> {
     Color secondaryContainer = Theme.of(context).colorScheme.secondaryContainer;
     Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
     List<dynamic> items = _getMenuItems(context);
+
+    print(BlocProvider.of<MachineBloc>(context));
 
     return Scaffold(
       appBar: AppBar(

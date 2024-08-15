@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/machines/presentation/pages/machines_list_page.dart';
 import 'package:production_planning/features/main_page/presentation/pages/welcome_page.dart';
 

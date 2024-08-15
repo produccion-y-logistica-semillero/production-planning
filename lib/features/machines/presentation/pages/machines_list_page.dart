@@ -1,5 +1,11 @@
+
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/machines/presentation/pages/widgets/add_machine_dialog.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dart:ui';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_event.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_state.dart';
+import 'package:production_planning/features/machines/presentation/widgets/add_machine_dialog.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class MachinesListPage extends StatelessWidget{
@@ -25,12 +31,46 @@ class MachinesListPage extends StatelessWidget{
                   onPressed: () => _addMachine(context), 
                   style: ButtonStyle(
                     backgroundColor: WidgetStatePropertyAll(Theme.of(context).colorScheme.secondaryContainer),
-                    minimumSize: const  WidgetStatePropertyAll(Size(120, 50)),
+                    minimumSize:   WidgetStatePropertyAll(Size(120, 50)),
                     shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   ),
                 ),
               )
             ],
+          ),
+          BlocBuilder<MachineBloc, MachineState>(
+            builder: (context, state){
+              if(state is MachineList){
+                return Expanded(
+                  child: ListView.builder(
+                    itemCount: state.machines.length,
+                    itemBuilder: (context, index) {
+                      return Container(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                  const SizedBox(width: 15,),
+                                  Text(state.machines[index].name, style:  TextStyle(fontSize: 25, fontWeight: FontWeight.bold),),
+                                   const SizedBox(width: 15,),
+                                  SizedBox(
+                                      width: 500,
+                                      child: Text(state.machines[index].description, style:  TextStyle(fontSize: 20),)
+                                  ),
+                              ]
+                            ),
+                            TextButton(onPressed: (){}, child: Text("Agregar maquina especifica")),
+
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }
+              return SizedBox();
+            }
           )
         ],
       ),
@@ -41,8 +81,15 @@ class MachinesListPage extends StatelessWidget{
     await showDialog(
       context: context, 
       builder: (context){
-        return AddMachineDialog(nameController: _nameController, descController: _descController,);
+        return AddMachineDialog(nameController: _nameController, descController: _descController, addMachine: ()=>_registerMachine(context),);
       }
     );
+  }
+
+  void _registerMachine(BuildContext context){
+    BlocProvider.of<MachineBloc>(context).add(OnAddNewMachine(_nameController.text, _descController.text));
+    Navigator.of(context).pop();
+    _nameController.clear();
+    _descController.clear();
   }
 }

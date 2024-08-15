@@ -4,6 +4,9 @@ import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class MachinesListPage extends StatelessWidget{
 
+  final _nameController = TextEditingController();
+  final _descController = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
     Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
@@ -38,7 +41,7 @@ class MachinesListPage extends StatelessWidget{
     await showDialog(
       context: context, 
       builder: (context){
-        return AddMachineDialog();
+        return AddMachineDialog(nameController: _nameController, descController: _descController,);
       }
     );
   }

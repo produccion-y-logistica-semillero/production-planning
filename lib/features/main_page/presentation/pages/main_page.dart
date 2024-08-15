@@ -1,5 +1,3 @@
-import 'dart:ffi';
-
 import 'package:easy_sidemenu/easy_sidemenu.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/features/main_page/presentation/widgets/main_navigator.dart';
@@ -22,10 +20,8 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    Color onPrimary = Theme.of(context).colorScheme.onPrimary;
     Color primaryContainer = Theme.of(context).colorScheme.primaryContainer;
     Color onPrimaryContainer = Theme.of(context).colorScheme.onPrimaryContainer;
-    Color surface = Theme.of(context).colorScheme.surface;
     Color secondaryContainer = Theme.of(context).colorScheme.secondaryContainer;
     Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
     List<dynamic> items = _getMenuItems(context);
@@ -34,7 +30,7 @@ class _MainPageState extends State<MainPage> {
       appBar: AppBar(
         backgroundColor: secondaryContainer,
         toolbarHeight: 40,
-        title: Center(child: Text("Production planning", style: TextStyle(fontSize: 15, color: onSecondaryContainer),)),
+        title: Center(child: Text("Planeacion de producción", style: TextStyle(fontSize: 15, color: onSecondaryContainer),)),
         //to manually control if the side menu is expanded or not
         leading:  GestureDetector(
           child: IconButton(

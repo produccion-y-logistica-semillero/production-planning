@@ -42,6 +42,7 @@ class MachineBloc extends Bloc<MachineEvent, MachineState>{
           (failure) => emit(MachineAddingError(machines)), 
           (newMach){
             machines.add(newMach);
+            print(machines);
             emit(MachineAddingSuccess(machines));
           }
         );

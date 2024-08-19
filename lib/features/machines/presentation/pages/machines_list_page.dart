@@ -41,6 +41,7 @@ class MachinesListPage extends StatelessWidget{
           ),
           BlocBuilder<MachineBloc, MachineState>(
             builder: (context, state){
+              print("listening for bloc changes ${state.machines}");
               return switch(state){
                 (MachineInitial _) => SizedBox(),
                 (MachineRetrieving _) => Text("Loading"),

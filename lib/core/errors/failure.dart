@@ -1,3 +1,3 @@
 abstract class Failure{}
 
-class LocalStorageError extends Failure{}
+class LocalStorageFailure implements Failure{}

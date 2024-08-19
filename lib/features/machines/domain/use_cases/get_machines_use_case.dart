@@ -13,6 +13,6 @@ class GetMachinesUseCase implements UseCase<List<MachineEntity>, void>{
   
   @override
   Future<Either<Failure,List<MachineEntity>>> call({void p}) async {
-    return Right([]);
+    return repository.getAllMachines();
   }
 }

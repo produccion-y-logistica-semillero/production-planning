@@ -6,8 +6,8 @@ import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
 
-void main() {
-  initDependencies();
+void main() async {
+  await initDependencies();
   runApp(const MyApp());
 }
 

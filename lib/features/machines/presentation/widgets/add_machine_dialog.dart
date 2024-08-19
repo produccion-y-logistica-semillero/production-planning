@@ -1,7 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-import 'package:production_planning/features/main_page/presentation/widgets/new_machine_input_field.dart';
+import 'package:production_planning/features/machines/presentation/widgets/new_machine_input_field.dart';
 
 class AddMachineDialog extends StatelessWidget{
 

@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class NewMachineInputField extends StatelessWidget{
@@ -14,7 +13,7 @@ class NewMachineInputField extends StatelessWidget{
   @override
   Widget build(BuildContext context) {
     return Container(
-              margin: EdgeInsets.symmetric(horizontal: 50),
+              margin: const EdgeInsets.symmetric(horizontal: 50),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -26,7 +25,7 @@ class NewMachineInputField extends StatelessWidget{
                       maxLines: maxLines,
                       decoration: InputDecoration(
                         hintText: hintText,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                         isDense: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),

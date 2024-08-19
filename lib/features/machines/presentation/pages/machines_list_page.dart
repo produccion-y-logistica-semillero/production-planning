@@ -6,6 +6,7 @@ import 'package:production_planning/features/machines/presentation/bloc/machines
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_state.dart';
 import 'package:production_planning/features/machines/presentation/widgets/add_machine_dialog.dart';
+import 'package:production_planning/features/machines/presentation/widgets/machines_list_view.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class MachinesListPage extends StatelessWidget{
@@ -28,10 +29,10 @@ class MachinesListPage extends StatelessWidget{
                 child: TextButton.icon(
                   label: Text("Agregar maquina", style: TextStyle(color:onSecondaryContainer ),),
                   icon: Icon(Icons.upload, color: onSecondaryContainer,),
-                  onPressed: () => _addMachine(context), 
+                  onPressed: () => _clickNewMachine(context), 
                   style: ButtonStyle(
                     backgroundColor: WidgetStatePropertyAll(Theme.of(context).colorScheme.secondaryContainer),
-                    minimumSize:   WidgetStatePropertyAll(Size(120, 50)),
+                    minimumSize:   const WidgetStatePropertyAll(Size(120, 50)),
                     shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   ),
                 ),
@@ -40,36 +41,14 @@ class MachinesListPage extends StatelessWidget{
           ),
           BlocBuilder<MachineBloc, MachineState>(
             builder: (context, state){
-              if(state is MachineList){
-                return Expanded(
-                  child: ListView.builder(
-                    itemCount: state.machines.length,
-                    itemBuilder: (context, index) {
-                      return Container(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                  const SizedBox(width: 15,),
-                                  Text(state.machines[index].name, style:  TextStyle(fontSize: 25, fontWeight: FontWeight.bold),),
-                                   const SizedBox(width: 15,),
-                                  SizedBox(
-                                      width: 500,
-                                      child: Text(state.machines[index].description, style:  TextStyle(fontSize: 20),)
-                                  ),
-                              ]
-                            ),
-                            TextButton(onPressed: (){}, child: Text("Agregar maquina especifica")),
-
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                );
-              }
-              return SizedBox();
+              return switch(state){
+                (MachineInitial _) => SizedBox(),
+                (MachineRetrieving _) => Text("Loading"),
+                (MachineRetrievingSuccess _) => MachinesListView(machines: state.machines!),
+                (MachineAddingSuccess _) => MachinesListView(machines: state.machines!),
+                (MachineAddingError _) => MachinesListView(machines: state.machines!),
+                (MachineRetrievingError _) => Text("Error fetching"),
+              };
             }
           )
         ],
@@ -77,16 +56,16 @@ class MachinesListPage extends StatelessWidget{
     );
   }
 
-  void _addMachine(BuildContext context) async {
+  void _clickNewMachine(BuildContext context) async {
     await showDialog(
       context: context, 
       builder: (context){
-        return AddMachineDialog(nameController: _nameController, descController: _descController, addMachine: ()=>_registerMachine(context),);
+        return AddMachineDialog(nameController: _nameController, descController: _descController, addMachine: ()=>_addMachine(context),);
       }
     );
   }
 
-  void _registerMachine(BuildContext context){
+  void _addMachine(BuildContext context){
     BlocProvider.of<MachineBloc>(context).add(OnAddNewMachine(_nameController.text, _descController.text));
     Navigator.of(context).pop();
     _nameController.clear();

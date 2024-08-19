@@ -5,5 +5,8 @@ class OnAddNewMachine extends MachineEvent{
   final String description;
 
   OnAddNewMachine(this.name, this.description);
-  
+}
+
+class OnMachineRetrieving extends MachineEvent{
+
 }

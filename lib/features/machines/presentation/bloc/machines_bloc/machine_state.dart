@@ -1,4 +1,3 @@
-import 'package:dartz/dartz.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
 
 sealed class MachineState{

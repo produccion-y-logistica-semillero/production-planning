@@ -40,6 +40,8 @@ dependencies:
   get_it: ^7.7.0
   #for database sqllite
   sqflite: ^2.3.3+1
+  #path, for path management, with database mostly
+  path: ^1.9.0
 
 
   # The following adds the Cupertino Icons font to your application.

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/machines/presentation/pages/machines_list_page.dart';
 import 'package:production_planning/features/main_page/presentation/pages/welcome_page.dart';
 
@@ -16,7 +19,11 @@ class MainNavigator extends StatelessWidget{
                 WidgetBuilder builder;
                 switch (settings.name) {
                   case '/machines':
-                    builder = (BuildContext _) => MachinesListPage();
+                    //we provide the bloc provider so that the context then on have access to it
+                    builder = (BuildContext _) => BlocProvider(
+                      create: (_) => GetIt.instance.get<MachineBloc>(),
+                      child: MachinesListPage()
+                    );
                     break;
                   case '/welcomePage':
                     builder = (BuildContext _) => WelcomePage();

@@ -11,5 +11,6 @@ class OnMachineTypeRetrieving extends MachineEvent{}
 
 class OnDeleteMachineType extends MachineEvent{
   final int id;
-  OnDeleteMachineType(this.id);
+  final int index;
+  OnDeleteMachineType(this.id, this.index);
 }

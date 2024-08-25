@@ -1,7 +1,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'dart:ui';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_state.dart';
@@ -13,6 +12,8 @@ class MachinesListPage extends StatelessWidget{
 
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
+
+  MachinesListPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -41,22 +42,32 @@ class MachinesListPage extends StatelessWidget{
           ),
           BlocBuilder<MachineBloc, MachineState>(
             builder: (context, state){
+              //this is pending for customize, because right now is not showing success or error
+              //messages, it simply shows again the list, we need to add success or error dialogs
               Widget widget =  switch(state){
-                (MachineInitial _) => SizedBox(),
-                (MachineRetrieving _) => Text("Loading"),
-                (MachineRetrievingSuccess _) => MachinesListView(
+                (MachineInitial _) => const SizedBox(),
+                (MachineTypesRetrieving _) => const Text("Loading"),
+                (MachineTypesRetrievingError _) => const Text("Error fetching"),
+                (MachineTypesRetrievingSuccess _) => MachinesListView(
                     machineTypes: state.machineTypes!,
-                    deleteMachineType: (id)=>_deleteMachineType(context, id),
+                    deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
                   ),
-                (MachineAddingSuccess _) => MachinesListView(
+                (MachineTypesAddingSuccess _) => MachinesListView(
                     machineTypes: state.machineTypes!,
-                     deleteMachineType: (id)=>_deleteMachineType(context, id),
+                     deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
                   ),
-                (MachineAddingError _) => MachinesListView(
+                (MachineTypesAddingError _) => MachinesListView(
                     machineTypes: state.machineTypes!,
-                     deleteMachineType: (id)=>_deleteMachineType(context, id),
+                     deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
                   ),
-                (MachineRetrievingError _) => Text("Error fetching"),
+                (MachineTypeDeletionError _) => MachinesListView(
+                    machineTypes: state.machineTypes!,
+                    deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
+                  ),
+                (MachineTypeDeletionSuccess _) => MachinesListView(
+                    machineTypes: state.machineTypes!,
+                    deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
+                  ),
               };
               return Expanded(
                 child: Container(
@@ -88,7 +99,7 @@ class MachinesListPage extends StatelessWidget{
     );
   }
 
-  void _deleteMachineType(BuildContext context, int machineId) async{
+  void _deleteMachineType(BuildContext context, int machineId, int index) async{
     await showDialog(
       context: context,
       builder: (context) {
@@ -103,7 +114,7 @@ class MachinesListPage extends StatelessWidget{
             ),
             TextButton(
               onPressed: (){
-                BlocProvider.of<MachineBloc>(context).add(OnDeleteMachineType(machineId));
+                BlocProvider.of<MachineBloc>(context).add(OnDeleteMachineType(machineId, index));
                 Navigator.of(context).pop();
               }, 
               child: const Text("Eliminar")

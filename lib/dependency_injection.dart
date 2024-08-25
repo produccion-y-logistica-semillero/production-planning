@@ -1,11 +1,12 @@
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/data/db/database_provider.dart';
-import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
-import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
+import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
-import 'package:production_planning/features/machines/domain/use_cases/add_machine_use_case.dart';
-import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
+import 'package:production_planning/features/machines/domain/use_cases/add_machine_type_use_case.dart';
+import 'package:production_planning/features/machines/domain/use_cases/delete_machine_type_use_case.dart';
+import 'package:production_planning/features/machines/domain/use_cases/get_machines_type_use_case.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -25,15 +26,20 @@ Future<void> initDependencies() async{
       dispose: (db) async => await DatabaseProvider.closeDatabaseConnection());
 
   //Machine data sources
-  depIn.registerLazySingleton<MachineDao>(() => MachineDaoSQLlite(depIn.get<Database>()));
+  depIn.registerLazySingleton<MachineTypeDao>(() => MachineTypeDaoSQLlite(depIn.get<Database>()));
   //Machine repositories
-  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(machineDao: depIn.get<MachineDao>()));
+  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(machineDao: depIn.get<MachineTypeDao>()));
   //Machine use cases
-  depIn.registerLazySingleton<AddMachineUseCase>(() => AddMachineUseCase(repository: depIn.get<MachineRepository>()));
-  depIn.registerLazySingleton<GetMachinesUseCase>(() => GetMachinesUseCase(repository: depIn.get<MachineRepository>()));
+  depIn.registerLazySingleton<AddMachineTypeUseCase>(() => AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
+  depIn.registerLazySingleton<GetMachineTypesUseCase>(() => GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
+  depIn.registerLazySingleton<DeleteMachineTypeUseCase>(()=>DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
   //Bloc machine
   //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
   depIn.registerFactory<MachineBloc>(
-    ()=> MachineBloc(depIn.get<AddMachineUseCase>() , depIn.get<GetMachinesUseCase>())
+    ()=> MachineBloc(
+      depIn.get<AddMachineTypeUseCase>() , 
+      depIn.get<GetMachineTypesUseCase>(),
+      depIn.get<DeleteMachineTypeUseCase>(),
+    )
   );
 }

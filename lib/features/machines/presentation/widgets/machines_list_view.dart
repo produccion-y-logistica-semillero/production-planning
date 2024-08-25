@@ -6,7 +6,7 @@ class MachinesListView extends StatelessWidget{
 
   final List<MachineTypeEntity> machineTypes;
 
-  final void Function(int) deleteMachineType;
+  final void Function(int, int) deleteMachineType;
 
   MachinesListView({
     super.key, 
@@ -69,7 +69,7 @@ class MachinesListView extends StatelessWidget{
                                   icon: const Icon(Icons.add)
                                 ),
                                 IconButton(
-                                  onPressed: ()=>deleteMachineType(machineTypes[index].id!), 
+                                  onPressed: ()=>deleteMachineType(machineTypes[index].id!, index), 
                                   icon: const Icon(Icons.delete, color: Colors.red,)
                                 ),
                               ],

@@ -1,14 +1,14 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
-import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
-import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
-import 'package:production_planning/features/machines/data/models/machine_model.dart';
+import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
+import 'package:production_planning/features/machines/data/models/machine_type_model.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 
 class MachineRepositoryImpl implements MachineRepository{
 
-  final MachineDao machineDao;
+  final MachineTypeDao machineDao;
 
   MachineRepositoryImpl({required this.machineDao});
 
@@ -26,10 +26,11 @@ class MachineRepositoryImpl implements MachineRepository{
     }
   }
 
+//need to check if it's good to get only the ID or if it could be better to get the entire entry
   @override
   Future<Either<Failure, int>> insertMachine(MachineTypeEntity machine) async {
     try{
-      int id = await machineDao.insertMachine(MachineModel.fromEntity(machine));
+      int id = await machineDao.insertMachine(MachineTypeModel.fromEntity(machine));
       return Right(id);
     }
     on Failure catch(failure){

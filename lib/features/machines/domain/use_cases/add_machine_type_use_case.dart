@@ -5,12 +5,13 @@ import 'package:dartz/dartz.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 
-class AddMachineUseCase implements UseCase<MachineTypeEntity, Map<String, dynamic>>{
+class AddMachineTypeUseCase implements UseCase<MachineTypeEntity, Map<String, dynamic>>{
 
   final MachineRepository repository;
 
-  AddMachineUseCase({required this.repository});
+  AddMachineTypeUseCase({required this.repository});
 
+//need to check if it's good to get only the ID or if it could be better to get the entire entry
   @override
   Future<Either<Failure, MachineTypeEntity>> call({required p}) async {
     final machine = MachineTypeEntity(name: p["name"], description: p["description"]);

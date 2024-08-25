@@ -30,8 +30,6 @@ class _MainPageState extends State<MainPage> {
     Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
     List<dynamic> items = _getMenuItems(context);
 
-    print(BlocProvider.of<MachineBloc>(context));
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: secondaryContainer,

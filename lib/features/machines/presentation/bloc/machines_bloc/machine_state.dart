@@ -11,23 +11,31 @@ final class MachineInitial extends MachineState{
   MachineInitial(super.machineTypes);
 }
 
-final class MachineRetrieving extends MachineState{
-  MachineRetrieving(super.machineTypes);
+final class MachineTypesRetrieving extends MachineState{
+  MachineTypesRetrieving(super.machineTypes);
 }
 
-final class MachineRetrievingError extends MachineState{
-  MachineRetrievingError(super.machineTypes);
+final class MachineTypesRetrievingError extends MachineState{
+  MachineTypesRetrievingError(super.machineTypes);
 }
 
-final class MachineRetrievingSuccess extends MachineState{
-  MachineRetrievingSuccess(super.machineTypes);
+final class MachineTypesRetrievingSuccess extends MachineState{
+  MachineTypesRetrievingSuccess(super.machineTypes);
 }
 
-final class MachineAddingSuccess extends MachineState{
-  MachineAddingSuccess(super.machineTypes);
+final class MachineTypesAddingSuccess extends MachineState{
+  MachineTypesAddingSuccess(super.machineTypes);
 }
 
-final class MachineAddingError extends MachineState{
-  MachineAddingError(super.machineTypes);
+final class MachineTypesAddingError extends MachineState{
+  MachineTypesAddingError(super.machineTypes);
+}
+
+final class MachineTypeDeletionError extends MachineState{
+  MachineTypeDeletionError(super.machineTypes);
+}
+
+final class MachineTypeDeletionSuccess extends MachineState{
+  MachineTypeDeletionSuccess(super.machineTypes);
 }
 

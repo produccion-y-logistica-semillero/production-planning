@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/data/db/database_provider.dart';
-import 'package:production_planning/features/machines/data/data_sources/machine_data_source_sqllite.dart';
+import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 import 'package:production_planning/features/machines/domain/use_cases/add_machine_use_case.dart';
@@ -24,9 +25,9 @@ Future<void> initDependencies() async{
       dispose: (db) async => await DatabaseProvider.closeDatabaseConnection());
 
   //Machine data sources
-  depIn.registerLazySingleton<MachineDataSourceSqllite>(() => MachineDataSourceSqllite(depIn.get<Database>()));
+  depIn.registerLazySingleton<MachineDao>(() => MachineDaoSQLlite(depIn.get<Database>()));
   //Machine repositories
-  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(sqlLiteSource: depIn.get<MachineDataSourceSqllite>()));
+  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(machineDao: depIn.get<MachineDao>()));
   //Machine use cases
   depIn.registerLazySingleton<AddMachineUseCase>(() => AddMachineUseCase(repository: depIn.get<MachineRepository>()));
   depIn.registerLazySingleton<GetMachinesUseCase>(() => GetMachinesUseCase(repository: depIn.get<MachineRepository>()));

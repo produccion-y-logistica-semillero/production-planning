@@ -1,5 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/machines/domain/use_cases/add_machine_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_event.dart';
@@ -14,7 +14,7 @@ class MachineBloc extends Bloc<MachineEvent, MachineState>{
   MachineBloc(this._addMachineUseCase, this._getMachinesUseCase): super(MachineInitial([]))
   {
     //Handler for event onMachineRetrieving
-    on<OnMachineRetrieving>(
+    on<OnMachineTypeRetrieving>(
       (event, emit) async{
         //emit initial event so we show loading
         emit(MachineRetrieving(null));
@@ -29,10 +29,10 @@ class MachineBloc extends Bloc<MachineEvent, MachineState>{
     );
 
     //Handler for event on add new machine
-    on<OnAddNewMachine>(
+    on<OnAddNewMachineType>(
       (event, emit) async{
         //retrieving already loaded machines on screen
-        List<MachineEntity> machines = state.machines ==null? []: state.machines!;
+        List<MachineTypeEntity> machines = state.machineTypes ==null? []: state.machineTypes!;
         //IMPORTANT, FOR NOW WE WILL PASS THE ENTITY VALUES IN A MAP
         //BUT WE LOOSE TYPE SAFETY WITH THIS, SO THIS NEEDS TO BE ANALYZED IN ORDER TO IMPROVE IT
         final response = await _addMachineUseCase(p: {"name" :event.name, "description":event.description});
@@ -52,7 +52,7 @@ class MachineBloc extends Bloc<MachineEvent, MachineState>{
 
 
     //trigger initial event to get machines
-    add(OnMachineRetrieving());
+    add(OnMachineTypeRetrieving());
 
   }
 

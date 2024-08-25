@@ -23,9 +23,19 @@ class DatabaseProvider{
             description TEXT
           );
         ''');
-        /*await db.execute('''
-
-        ''');*/
+        await db.execute('''
+          CREATE TABLE MACHINE (
+              machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              machine_type_id INTEGER NOT NULL,
+              status_id INTEGER NOT NULL,
+              processing_time DATETIME NOT NULL,
+              preparation_time DATETIME NOT NULL,
+              rest_time DATETIME,
+              continue_capacity INTEGER,
+              FOREIGN KEY (machine_type_id) REFERENCES machine_type(machine_type_id),
+              FOREIGN KEY (status_id) REFERENCES status(status_id)
+          );
+        ''');
       }
     );
     return _database!;

@@ -29,7 +29,7 @@ class MachinesListPage extends StatelessWidget{
                 child: TextButton.icon(
                   label: Text("Agregar maquina", style: TextStyle(color:onSecondaryContainer ),),
                   icon: Icon(Icons.upload, color: onSecondaryContainer,),
-                  onPressed: () => _clickNewMachine(context), 
+                  onPressed: () => _clickNewMachineType(context), 
                   style: ButtonStyle(
                     backgroundColor: WidgetStatePropertyAll(Theme.of(context).colorScheme.secondaryContainer),
                     minimumSize:   const WidgetStatePropertyAll(Size(120, 50)),
@@ -41,15 +41,29 @@ class MachinesListPage extends StatelessWidget{
           ),
           BlocBuilder<MachineBloc, MachineState>(
             builder: (context, state){
-              print("listening for bloc changes ${state.machines}");
-              return switch(state){
+              Widget widget =  switch(state){
                 (MachineInitial _) => SizedBox(),
                 (MachineRetrieving _) => Text("Loading"),
-                (MachineRetrievingSuccess _) => MachinesListView(machines: state.machines!),
-                (MachineAddingSuccess _) => MachinesListView(machines: state.machines!),
-                (MachineAddingError _) => MachinesListView(machines: state.machines!),
+                (MachineRetrievingSuccess _) => MachinesListView(
+                    machineTypes: state.machineTypes!,
+                    deleteMachineType: (id)=>_deleteMachineType(context, id),
+                  ),
+                (MachineAddingSuccess _) => MachinesListView(
+                    machineTypes: state.machineTypes!,
+                     deleteMachineType: (id)=>_deleteMachineType(context, id),
+                  ),
+                (MachineAddingError _) => MachinesListView(
+                    machineTypes: state.machineTypes!,
+                     deleteMachineType: (id)=>_deleteMachineType(context, id),
+                  ),
                 (MachineRetrievingError _) => Text("Error fetching"),
               };
+              return Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(30),
+                  child: widget,
+                ),
+              );
             }
           )
         ],
@@ -57,19 +71,46 @@ class MachinesListPage extends StatelessWidget{
     );
   }
 
-  void _clickNewMachine(BuildContext context) async {
+  void _clickNewMachineType(BuildContext context) async {
     await showDialog(
       context: context, 
       builder: (context){
-        return AddMachineDialog(nameController: _nameController, descController: _descController, addMachine: ()=>_addMachine(context),);
+        return AddMachineDialog(
+          nameController: _nameController, 
+          descController: _descController, 
+          addMachine: (){
+            BlocProvider.of<MachineBloc>(context).add(OnAddNewMachineType(_nameController.text, _descController.text));
+            Navigator.of(context).pop();
+            _nameController.clear();
+            _descController.clear();
+          },);
       }
     );
   }
 
-  void _addMachine(BuildContext context){
-    BlocProvider.of<MachineBloc>(context).add(OnAddNewMachine(_nameController.text, _descController.text));
-    Navigator.of(context).pop();
-    _nameController.clear();
-    _descController.clear();
+  void _deleteMachineType(BuildContext context, int machineId) async{
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          icon: const Icon(Icons.dangerous, color: Colors.red,),
+          title: const Text("¿Estas seguro?"),
+          content: const Text("Si eliminas este tipo de maquina, todas las maquinas asociadas seran eliminadas, ¿deseas continuar?"),
+          actions: [
+            TextButton(
+              onPressed: ()=>Navigator.of(context).pop(), 
+              child: const Text("Cancelar")
+            ),
+            TextButton(
+              onPressed: (){
+                BlocProvider.of<MachineBloc>(context).add(OnDeleteMachineType(machineId));
+                Navigator.of(context).pop();
+              }, 
+              child: const Text("Eliminar")
+            )
+          ],
+        );
+      }
+    );
   }
 }

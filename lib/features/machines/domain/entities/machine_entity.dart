@@ -1,6 +1,18 @@
 class MachineEntity{
-  final String name;
-  final String description;
+  int? id;
+  String? status;
+  Duration processingTime;
+  Duration preparationTime;
+  Duration? restTime;
+  int? continueCapacity;
 
-  MachineEntity({required this.name,  required this.description});
+  MachineEntity({
+    this.id,
+    required this.status,
+    required this.processingTime,
+    required this.preparationTime,
+    this.restTime,
+    this.continueCapacity
+  });
+
 }

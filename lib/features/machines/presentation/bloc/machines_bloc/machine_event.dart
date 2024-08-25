@@ -1,12 +1,15 @@
 sealed class MachineEvent{}
 
-class OnAddNewMachine extends MachineEvent{
+class OnAddNewMachineType extends MachineEvent{
   final String name;
   final String description;
 
-  OnAddNewMachine(this.name, this.description);
+  OnAddNewMachineType(this.name, this.description);
 }
 
-class OnMachineRetrieving extends MachineEvent{
+class OnMachineTypeRetrieving extends MachineEvent{}
 
+class OnDeleteMachineType extends MachineEvent{
+  final int id;
+  OnDeleteMachineType(this.id);
 }

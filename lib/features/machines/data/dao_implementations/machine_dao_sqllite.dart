@@ -1,12 +1,12 @@
-import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/models/machine_model.dart';
 import 'package:sqflite/sqflite.dart';
 
-class MachineDataSourceSqllite {
+class MachineDaoSQLlite implements MachineDao{
 
   final Database db;
-  MachineDataSourceSqllite(this.db);
+  MachineDaoSQLlite(this.db);
 
   Future<List<MachineModel>> getAllMachines() async {
     print("trying to get all the machinessss");
@@ -22,9 +22,10 @@ class MachineDataSourceSqllite {
   }
 
 
-  Future<void> insertMachine(MachineModel model) async{
+  Future<int> insertMachine(MachineModel model) async{
     try{
-      await db.insert('MACHINE_TYPES', model.toJson());
+      int id = await db.insert('MACHINE_TYPES', model.toJson());
+      return id;
     }
     catch(error){
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");

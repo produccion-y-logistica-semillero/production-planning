@@ -1,33 +1,33 @@
-import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
 
 sealed class MachineState{
   //Since we want all states to still have the list, we move this attribute here
   //so all states have it
-  List<MachineEntity>? machines;
-  MachineState(this.machines);
+  List<MachineTypeEntity>? machineTypes;
+  MachineState(this.machineTypes);
 }
 
 final class MachineInitial extends MachineState{
-  MachineInitial(super.machines);
+  MachineInitial(super.machineTypes);
 }
 
 final class MachineRetrieving extends MachineState{
-  MachineRetrieving(super.machines);
+  MachineRetrieving(super.machineTypes);
 }
 
 final class MachineRetrievingError extends MachineState{
-  MachineRetrievingError(super.machines);
+  MachineRetrievingError(super.machineTypes);
 }
 
 final class MachineRetrievingSuccess extends MachineState{
-  MachineRetrievingSuccess(super.machines);
+  MachineRetrievingSuccess(super.machineTypes);
 }
 
 final class MachineAddingSuccess extends MachineState{
-  MachineAddingSuccess(super.machines);
+  MachineAddingSuccess(super.machineTypes);
 }
 
 final class MachineAddingError extends MachineState{
-  MachineAddingError(super.machines);
+  MachineAddingError(super.machineTypes);
 }
 

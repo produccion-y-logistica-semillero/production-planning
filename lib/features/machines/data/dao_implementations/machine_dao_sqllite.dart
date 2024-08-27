@@ -1,6 +1,6 @@
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:sqflite/sqflite.dart';
 
 class MachineDaoSqllite implements MachineDao{

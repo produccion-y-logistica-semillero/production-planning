@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/themes/theme.dart';
 import 'package:production_planning/dependency_injection.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
 
 void main() async {
@@ -16,16 +16,11 @@ class MyApp extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return /*MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => GetIt.instance.get<MachineBloc>())
-      ],
-      child:*/ MaterialApp(
+    return  MaterialApp(
         title: 'Flutter Demo',
         theme: lightTheme,
         home: MainPage(),
         debugShowCheckedModeBanner: false,
-      //),
     );
   }
 }

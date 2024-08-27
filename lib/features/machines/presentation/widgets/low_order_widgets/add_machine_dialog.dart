@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/machines/presentation/widgets/new_machine_input_field.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/new_machine_input_field.dart';
 
 class AddMachineDialog extends StatelessWidget{
 

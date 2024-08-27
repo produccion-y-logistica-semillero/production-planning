@@ -14,3 +14,9 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## THIS readme is not structured by now...
+
+## IMPORTANT
+-   the navigator that controls what's shown in the main page, its on features/main_page/presentation/widgets/main_navigator.dart, there's
+    where the providers of each page are provided

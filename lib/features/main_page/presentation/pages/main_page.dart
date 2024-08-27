@@ -1,9 +1,5 @@
-import 'dart:async';
-
 import 'package:easy_sidemenu/easy_sidemenu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/main_page/presentation/widgets/main_navigator.dart';
 
 class MainPage extends StatefulWidget {

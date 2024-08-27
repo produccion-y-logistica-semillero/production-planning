@@ -10,7 +10,7 @@ class DatabaseProvider{
 
     //I'm using this to manually locate my database and deleting it when I need new creation, it's not
     //the best way, but anyways, it works for me at the moment, can comment the line while we don't need it
-    //print(path);
+    print(path);
 
     _database = await openDatabase(
       path,
@@ -24,7 +24,7 @@ class DatabaseProvider{
           );
         ''');
         await db.execute('''
-          CREATE TABLE MACHINE (
+          CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
               machine_type_id INTEGER NOT NULL,
               status_id INTEGER NOT NULL,

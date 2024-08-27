@@ -5,19 +5,19 @@ class MachineTypeModel{
   String name;
   String description;
 
-   MachineTypeModel({required this.id, required this.name,  required this.description});
+  MachineTypeModel({required this.id, required this.name,  required this.description});
 
-   factory  MachineTypeModel.fromJson(Map<String, dynamic> data){
+  factory  MachineTypeModel.fromJson(Map<String, dynamic> data){
     return MachineTypeModel(id: data["machine_type_id"], name: data["name"], description: data["description"]);
-   }
+  }
 
-   factory MachineTypeModel.fromEntity(MachineTypeEntity machine){
+  factory MachineTypeModel.fromEntity(MachineTypeEntity machine){
     return MachineTypeModel(id: machine.id, name: machine.name, description: machine.description);
-   }
+  }
 
-   MachineTypeEntity toEntity(){
+  MachineTypeEntity toEntity(){
     return MachineTypeEntity(id: id, name: name, description: description);
-   }
+  }
 
    Map<String, dynamic> toJson(){
     return {

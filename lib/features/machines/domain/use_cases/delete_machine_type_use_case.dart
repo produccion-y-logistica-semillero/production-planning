@@ -11,7 +11,6 @@ class DeleteMachineTypeUseCase extends UseCase<bool, int>{
 
   @override
   Future<Either<Failure, bool>> call({required int p}) {
-    // TODO: implement call
-    throw UnimplementedError();
+    return repository.deleteMachineType(p);
   }
 }

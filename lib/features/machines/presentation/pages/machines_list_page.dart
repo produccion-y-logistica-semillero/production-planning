@@ -69,9 +69,12 @@ class MachinesListPage extends StatelessWidget{
                     deleteMachineType: (id, index)=>_deleteMachineType(context, id, index),
                   ),
               };
+              //IF WE ARE IN THE INITIAL STATE, WE TRIGGER THE FETCHING OF THE MACHINES
+              if(state is MachineInitial) BlocProvider.of<MachineBloc>(context).add(OnMachineTypeRetrieving());
+
               return Expanded(
                 child: Container(
-                  padding: EdgeInsets.all(30),
+                  padding: const EdgeInsets.all(30),
                   child: widget,
                 ),
               );
@@ -85,13 +88,15 @@ class MachinesListPage extends StatelessWidget{
   void _clickNewMachineType(BuildContext context) async {
     await showDialog(
       context: context, 
-      builder: (context){
+      builder: (dialogContext){
         return AddMachineDialog(
           nameController: _nameController, 
           descController: _descController, 
           addMachine: (){
+            //IMPORTANT, notice how we operate over the external context, because thats the one with the bloc provider
+            //but we pop over the dialog widget, since that's the one where the dialog is displaying
             BlocProvider.of<MachineBloc>(context).add(OnAddNewMachineType(_nameController.text, _descController.text));
-            Navigator.of(context).pop();
+            Navigator.of(dialogContext).pop();
             _nameController.clear();
             _descController.clear();
           },);
@@ -102,20 +107,20 @@ class MachinesListPage extends StatelessWidget{
   void _deleteMachineType(BuildContext context, int machineId, int index) async{
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           icon: const Icon(Icons.dangerous, color: Colors.red,),
           title: const Text("¿Estas seguro?"),
           content: const Text("Si eliminas este tipo de maquina, todas las maquinas asociadas seran eliminadas, ¿deseas continuar?"),
           actions: [
             TextButton(
-              onPressed: ()=>Navigator.of(context).pop(), 
+              onPressed: ()=>Navigator.of(dialogContext).pop(), 
               child: const Text("Cancelar")
             ),
             TextButton(
               onPressed: (){
                 BlocProvider.of<MachineBloc>(context).add(OnDeleteMachineType(machineId, index));
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
               }, 
               child: const Text("Eliminar")
             )

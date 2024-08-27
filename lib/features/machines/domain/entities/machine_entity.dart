@@ -15,4 +15,6 @@ class MachineEntity{
     this.continueCapacity
   });
 
+  
+
 }

@@ -6,6 +6,8 @@ abstract class MachineRepository{
 
   Future<Either<Failure, List<MachineTypeEntity>>> getAllMachines();
 
-  Future<Either<Failure, int>> insertMachine(MachineTypeEntity machine);
+  Future<Either<Failure, int>> insertMachineType(MachineTypeEntity machine);
+
+  Future<Either<Failure, bool>> deleteMachineType(int id);
   
 }

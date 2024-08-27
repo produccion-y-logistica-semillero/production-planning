@@ -1,6 +1,8 @@
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/data/db/database_provider.dart';
+import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
 import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
@@ -22,17 +24,26 @@ Future<void> initDependencies() async{
   //registering database, I do it like this so that the app can register all the other dependencies while opening the database
   //we also register the dispose method so it closes the connection
   final Database db = await  DatabaseProvider.open();
-  depIn.registerSingleton<Database>(db, 
-      dispose: (db) async => await DatabaseProvider.closeDatabaseConnection());
 
-  //Machine data sources
+  depIn.registerSingleton<Database>(db, 
+      dispose: (db) async => await DatabaseProvider.closeDatabaseConnection()
+  );
+
+  //Machine daos
   depIn.registerLazySingleton<MachineTypeDao>(() => MachineTypeDaoSQLlite(depIn.get<Database>()));
+  depIn.registerLazySingleton<MachineDao>(()=> MachineDaoSqllite(depIn.get<Database>()));
+
   //Machine repositories
-  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(machineDao: depIn.get<MachineTypeDao>()));
+  depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(
+    machineTypeDao: depIn.get<MachineTypeDao>(),
+    machineDao:  depIn.get<MachineDao>()
+  ));
+
   //Machine use cases
   depIn.registerLazySingleton<AddMachineTypeUseCase>(() => AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
   depIn.registerLazySingleton<GetMachineTypesUseCase>(() => GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
   depIn.registerLazySingleton<DeleteMachineTypeUseCase>(()=>DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
+  
   //Bloc machine
   //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
   depIn.registerFactory<MachineBloc>(

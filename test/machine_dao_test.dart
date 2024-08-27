@@ -1,7 +1,4 @@
 
-
-import 'dart:math';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
@@ -11,6 +8,8 @@ import 'package:sqflite/sqflite.dart';
 
 
 class MockDatabase extends Mock implements Database{}
+
+
 void main() async {
 
    test('machine data retrieval',() async {
@@ -20,7 +19,7 @@ void main() async {
       final expected = [
         MachineTypeModel(id: 1, name: 'maquina1', description: 'es la maquina 1')
       ];
-
+    
       //simulate database returning
       when(()=> mockDatabase.query('MACHINE_TYPES'))
       .thenAnswer((_)async => [
@@ -40,6 +39,7 @@ void main() async {
     final mockDatabase = MockDatabase();
     final MachineTypeDao dao = MachineTypeDaoSQLlite(mockDatabase);
     final machineTypeModel = MachineTypeModel(id: null, name: 'maquina1', description: 'es la maquina 1');
+
     const expected = 1;
 
     // Mock the insert method to return a Future<int>

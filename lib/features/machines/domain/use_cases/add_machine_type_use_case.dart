@@ -11,17 +11,17 @@ class AddMachineTypeUseCase implements UseCase<MachineTypeEntity, Map<String, dy
 
   AddMachineTypeUseCase({required this.repository});
 
-//need to check if it's good to get only the ID or if it could be better to get the entire entry
+  //need to check if it's good to get only the ID or if it could be better to get the entire entry
   @override
   Future<Either<Failure, MachineTypeEntity>> call({required p}) async {
     final machine = MachineTypeEntity(name: p["name"], description: p["description"]);
-    final response = await repository.insertMachine(machine);
+    final response = await repository.insertMachineType(machine);
     return response.fold(
       (f) => Left(f),
       (id) {
         machine.id = id;
         return Right(machine);
       }
-      ); 
+    ); 
   }
 } 

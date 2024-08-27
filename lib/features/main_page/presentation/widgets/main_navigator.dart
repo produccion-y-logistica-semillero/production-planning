@@ -19,9 +19,10 @@ class MainNavigator extends StatelessWidget{
                 WidgetBuilder builder;
                 switch (settings.name) {
                   case '/machines':
-                    //we provide the bloc provider so that the context then on have access to it
+                  //IMPORTANT, WE PROVIDE THE PROVIDER HERE, AS NEAR TO THE PART OF THE WIDGET TREE
+                  //IT WILL BE USED, THIS IS TO ONLY HAVE THAT INFO IN MEMORY WHEN WE ARE IN THIS PAGE.
                     builder = (BuildContext _) => BlocProvider(
-                      create: (_) => GetIt.instance.get<MachineBloc>(),
+                      create: (context)=>GetIt.instance.get<MachineBloc>(),
                       child: MachinesListPage()
                     );
                     break;

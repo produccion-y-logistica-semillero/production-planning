@@ -8,6 +8,15 @@ class MachineTypeDaoSQLlite implements MachineTypeDao{
   final Database db;
   MachineTypeDaoSQLlite(this.db);
 
+
+  @override
+  String getTableName() => "MACHINE_TYPES";
+  
+  @override
+  String getTablePK() => "machine_type_id";
+
+  //THE ERRORS PRINTED HERE ARE JUST BY NOW, OBVIOUSLY WE HAVE TO CHANGE THOSE 
+  //TO LOGS, AND THEN TO LITERALLLLY MANAGING ALL POSSIBLE ERRORS
   @override
   Future<List<MachineTypeModel>> getAllMachines() async {
     //await db.rawQuery('SELECT * FROM machine_types');
@@ -27,6 +36,18 @@ class MachineTypeDaoSQLlite implements MachineTypeDao{
     try{
       int id = await db.insert('MACHINE_TYPES', model.toJson());
       return id;
+    }
+    catch(error){
+      print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
+  Future<bool> deleteMachine(int id) async {
+    try{
+      await db.delete('MACHINE_TYPES', where: 'machine_type_id = ?', whereArgs: [id]);
+      return true;
     }
     catch(error){
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");

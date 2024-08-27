@@ -67,8 +67,8 @@ class MachineBloc extends Bloc<MachineEvent, MachineState>{
 
 
 
-    //trigger initial event to get machines
-    add(OnMachineTypeRetrieving());
+    //CHANGE THIS, ONLY TO BE CALLED ONCE ENTERED TO THE PAGE
+    //add(OnMachineTypeRetrieving());
 
   }
 

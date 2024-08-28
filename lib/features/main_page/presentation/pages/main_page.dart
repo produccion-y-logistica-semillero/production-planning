@@ -1,6 +1,6 @@
 import 'package:easy_sidemenu/easy_sidemenu.dart';
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/main_page/presentation/widgets/main_navigator.dart';
+import 'package:production_planning/features/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
 
 class MainPage extends StatefulWidget {
   @override
@@ -95,6 +95,13 @@ class _MainPageState extends State<MainPage> {
           _navigateTo('/machines');
         },
       ),
+      SideMenuItem(
+        title: 'Secuencias',
+        icon: Icon(Icons.work_history, color: Theme.of(context).colorScheme.primaryContainer,),
+        onTap: (index, _) {
+          _navigateTo('/sequences');
+        },
+      ),
       const SideMenuExpansionItem(
         title: "Expansion",
         children: [
@@ -112,7 +119,6 @@ class _MainPageState extends State<MainPage> {
       setState(() {
         _isNavigating = true;
       });
-
       await _navigatorKey.currentState!.pushNamed(routeName);
 
       setState(() {

@@ -18,7 +18,7 @@ class MachineDaoSqllite implements MachineDao{
   @override
   Future<bool> deleteWhere(String field, int value) async{
     try{
-      await db.delete('MACHINES', where: '$field = ?', whereArgs: [value]);
+      await db.delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
       return true;
     }
     catch(error){

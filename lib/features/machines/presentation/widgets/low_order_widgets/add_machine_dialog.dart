@@ -1,61 +1,77 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/new_machine_input_field.dart';
+import 'package:flutter/services.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/hour_text_input.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/new_machine_hour_field.dart';
 
 class AddMachineDialog extends StatelessWidget{
+  final String machineTypeName;
 
-  final TextEditingController _nameController;
-  final TextEditingController _descController;
-  final void Function() addMachine;
-
-  const AddMachineDialog({required TextEditingController nameController, required TextEditingController descController, required this.addMachine, super.key}): 
-    _nameController = nameController,
-    _descController = descController;
+  AddMachineDialog(this.machineTypeName);
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: SizedBox(
-        height: 350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
-        width:  MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        height: 450, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
+        width:  800,//MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
         child: Column(
           children: [
-            const SizedBox(height: 15,),
-            const Text("Agregar tipo de maquina"),
+            const SizedBox(height: 10,),
+            Text('Nueva maquina de $machineTypeName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),),
+            const SizedBox(height: 20,),
+            NewMachineHourField(text: '1 hora de trabajo promedio de $machineTypeName para esta maquina equivale a: '),
             const SizedBox(height: 30,),
-            NewMachineInputField(
-              sizedBoxWidth: 30,
-              title: "Nombre : ",
-              hintText: "Nueva maquina",
-              maxLines: 1,
-              controller: _nameController,
-            ),
+            NewMachineHourField(text: 'Tiempo de preparacion de la maquina: '),
             const SizedBox(height: 30,),
-            NewMachineInputField(
-              sizedBoxWidth: 10,
-              title: "Descripcion : ",
-              hintText: "Descripcion maquina",
-              maxLines: 5,
-              controller: _descController,
+            NewMachineHourField(text: 'Tiempo de descanso necesario: '),
+            const SizedBox(height: 30,),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 430,
+                  child: Text('Numero de procesamientos continuos (sin descanso): ', maxLines: 2,)
+                ),
+                Container(
+                  width: 180,
+                  child: TextField(
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.all(10),
+                      border: OutlineInputBorder()
+                    ),
+                  ),
+                )
+              ],
             ),
-            const SizedBox(height: 40,),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 40),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: (){
-                      Navigator.of(context).pop();
-                    }, 
-                    child: const Text("Cancelar"),
+            SizedBox(height: 40,),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: ()=>Navigator.of(context).pop(), 
+                  child: const Text("Cancelar"),
+                  style: ButtonStyle(
+                    padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
+                   // backgroundColor: WidgetStatePropertyAll(Colors.red),
                   ),
-                  const SizedBox(width: 15,),
-                  TextButton(
-                    onPressed: addMachine, 
-                    child: const Text("Agregar")
+                ),
+                SizedBox(width: 50,),
+                TextButton(
+                  onPressed: (){},
+                  child: const Text("Agregar"),
+                  style: ButtonStyle(
+                    padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
+                   // backgroundColor: WidgetStatePropertyAll(const Color.fromARGB(255, 177, 218, 179)),
                   ),
-                ],
-              ),
+                ),
+              ],
             )
           ],
         ),

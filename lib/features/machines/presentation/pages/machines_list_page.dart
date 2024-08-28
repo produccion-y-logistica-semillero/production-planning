@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_state.dart';
-import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_type_dialog.dart';
 import 'package:production_planning/features/machines/presentation/widgets/high_order_widgets/machines_list_view.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
@@ -74,7 +74,7 @@ class MachinesListPage extends StatelessWidget{
     await showDialog(
       context: context, 
       builder: (dialogContext){
-        return AddMachineDialog(
+        return AddMachineTypeDialog(
           nameController: _nameController, 
           descController: _descController, 
           addMachine: (){

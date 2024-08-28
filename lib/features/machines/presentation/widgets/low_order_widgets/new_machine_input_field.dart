@@ -26,7 +26,7 @@ class NewMachineInputField extends StatelessWidget{
                       decoration: InputDecoration(
                         hintText: hintText,
                         contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                        isDense: true,
+                        isDense: true,  //this attribute is the one that removes the extra padding between the text and the input
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         )

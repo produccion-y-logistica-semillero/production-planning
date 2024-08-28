@@ -7,6 +7,7 @@ import 'package:production_planning/features/machines/presentation/bloc/machine_
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_state.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
 
 class MachinesListView extends StatelessWidget{
 
@@ -60,8 +61,9 @@ class MachinesListView extends StatelessWidget{
                                     onExpansionChanged: (value){
                                       //when expanded, if it was expanded, we will collapse and remove the items from state, if it was collapse
                                       //we will trigger the machines retrieving event of that machine type
-                                      if(state is MachinesRetrievingSuccess) BlocProvider.of<MachineBloc>(context).add(OnMachinesExpansionCollpased());
-                                      else{
+                                      if(state is MachinesRetrievingSuccess) {
+                                        BlocProvider.of<MachineBloc>(context).add(OnMachinesExpansionCollpased());
+                                      } else {
                                         BlocProvider.of<MachineBloc>(context).add(OnMachinesRetrieving(machineTypes[index].id!));
                                       }
                                     },
@@ -73,7 +75,7 @@ class MachinesListView extends StatelessWidget{
                                         (MachinesRetrievingSuccess _) => state.machines.map((machine)=>ListTile(
                                               title: Text(machine.id.toString()),
                                             )).toList(),
-                                        MachinesStateInitial()=>[ListTile(title: Text("No machines"),)],
+                                        MachinesStateInitial()=>[const ListTile(title: Text("No machines"),)],
                                       }
                                   ),
                                 ),
@@ -81,20 +83,18 @@ class MachinesListView extends StatelessWidget{
                               //the action buttons inside a container whcih has them in a row
                               Expanded(
                                 flex: 1,
-                                child: Container(
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                    children: [
-                                      IconButton(
-                                        onPressed: (){}, 
-                                        icon: const Icon(Icons.add)
-                                      ),
-                                      IconButton(
-                                        onPressed: ()=>_deleteMachineType(context, machineTypes[index].id!, index), 
-                                        icon: const Icon(Icons.delete, color: Colors.red,)
-                                      ),
-                                    ],
-                                  ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    IconButton(
+                                      onPressed: ()=>_addNewMachine(context, machineTypes[index].id!, machineTypes[index].name), 
+                                      icon: const Icon(Icons.add)
+                                    ),
+                                    IconButton(
+                                      onPressed: ()=>_deleteMachineType(context, machineTypes[index].id!, index), 
+                                      icon: const Icon(Icons.delete, color: Colors.red,)
+                                    ),
+                                  ],
                                 ),
                               )
                             ]
@@ -129,6 +129,15 @@ class MachinesListView extends StatelessWidget{
             )
           ],
         );
+      }
+    );
+  }
+
+  void _addNewMachine(BuildContext context, int machineId, String machineTypeName) async{
+    await showDialog(
+      context: context, 
+      builder: (dialogContext){
+        return AddMachineDialog(machineTypeName);
       }
     );
   }

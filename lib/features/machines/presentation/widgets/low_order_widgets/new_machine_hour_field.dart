@@ -3,8 +3,9 @@ import 'package:production_planning/features/machines/presentation/widgets/low_o
 
 class NewMachineHourField extends StatelessWidget{
   final String text;
+  final TextEditingController controller;
 
-  NewMachineHourField({super.key, required this.text});
+  const NewMachineHourField({super.key, required this.text, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +16,7 @@ class NewMachineHourField extends StatelessWidget{
                   width: 430,
                   child: Text(text, maxLines: 2,)
                 ),
-                const HourTextInput(),
+                HourTextInput(controller: controller,),
               ],
             );
   }

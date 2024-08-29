@@ -4,6 +4,7 @@ import 'package:production_planning/features/machines/data/dao_implementations/m
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:production_planning/features/machines/data/models/machine_type_model.dart';
+import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 
@@ -15,7 +16,7 @@ class MachineRepositoryImpl implements MachineRepository{
   MachineRepositoryImpl({required this.machineTypeDao, required this.machineDao});
 
   @override
-  Future<Either<Failure, List<MachineTypeEntity>>> getAllMachines() async {
+  Future<Either<Failure, List<MachineTypeEntity>>> getAllMachineTypes() async {
     try{
       return Right(
         (await machineTypeDao.getAllMachines())
@@ -50,6 +51,12 @@ class MachineRepositoryImpl implements MachineRepository{
     on Failure catch(failure){
       return Left(failure);
     }
+  }
+
+  @override
+  Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) {
+    // TODO: implement getAllMachinesFromType
+    throw UnimplementedError();
   }
 
 }

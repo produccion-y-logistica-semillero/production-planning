@@ -3,17 +3,20 @@ import 'package:flutter/services.dart';
 
 class HourTextInput extends StatelessWidget{
 
-  const HourTextInput({super.key});
+  final TextEditingController controller;
+
+  const HourTextInput({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 180,
       child: TextField(
+        controller: controller,
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(4),  //Only up to 4 digits HH:MM
+          LengthLimitingTextInputFormatter(4),  //Only up to 4 digits HH:MM, it ignores the ':' in the counting because we already tell that it's .digitsOnly, if we hadn't that, then it would be up to 5, because it would count the ':'
           TimeInputFormatter(),
         ],
         decoration: const InputDecoration(

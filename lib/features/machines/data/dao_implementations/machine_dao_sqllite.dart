@@ -15,6 +15,8 @@ class MachineDaoSqllite implements MachineDao{
     throw UnimplementedError();
   }
 
+  
+
   @override
   Future<bool> deleteWhere(String field, int value) async{
     try{

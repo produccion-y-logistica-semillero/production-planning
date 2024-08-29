@@ -12,7 +12,7 @@ class GetMachinesUseCase implements UseCase<List<MachineEntity>, int>{
 
   @override
   Future<Either<Failure, List<MachineEntity>>> call({required int p}) {
-    // TODO: implement call
+    // return repository.getAllMachinesFromType(p);
     throw UnimplementedError();
   }
 }

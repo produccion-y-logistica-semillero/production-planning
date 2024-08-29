@@ -3,16 +3,16 @@ class MachineEntity{
   String? status;
   Duration processingTime;
   Duration preparationTime;
-  Duration? restTime;
-  int? continueCapacity;
+  Duration restTime;
+  int continueCapacity;
 
   MachineEntity({
     this.id,
     required this.status,
     required this.processingTime,
     required this.preparationTime,
-    this.restTime,
-    this.continueCapacity
+    required this.restTime,
+    required this.continueCapacity
   });
 
   

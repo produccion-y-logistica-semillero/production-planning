@@ -8,6 +8,7 @@ import 'package:production_planning/features/machines/presentation/bloc/machines
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
+import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/machine_display_tile.dart';
 
 class MachinesListView extends StatelessWidget{
 
@@ -72,9 +73,9 @@ class MachinesListView extends StatelessWidget{
                                       switch(state){
                                         (MachinesRetrieving _ )=> [const ListTile(title: Text("Loading"),)],
                                         (MachinesRetrievingError _ )=> [const ListTile(title: Text("Error loading"),)],
-                                        (MachinesRetrievingSuccess _) => state.machines.map((machine)=>ListTile(
-                                              title: Text(machine.id.toString()),
-                                            )).toList(),
+                                        (MachinesRetrievingSuccess _) => state.machines.map((machine)=> MachineDisplayTile(
+                                          machine
+                                        )).toList(),
                                         MachinesStateInitial()=>[const ListTile(title: Text("No machines"),)],
                                       }
                                   ),
@@ -134,10 +135,47 @@ class MachinesListView extends StatelessWidget{
   }
 
   void _addNewMachine(BuildContext context, int machineId, String machineTypeName) async{
+    final TextEditingController controllerCapacity = TextEditingController();
+    final TextEditingController controllerPreparation = TextEditingController();
+    final TextEditingController controllerRestTime = TextEditingController();
+    final TextEditingController controllerContinue = TextEditingController();
+
     await showDialog(
       context: context, 
       builder: (dialogContext){
-        return AddMachineDialog(machineTypeName);
+        return AddMachineDialog(
+          machineTypeName,
+          capacityController: controllerCapacity,
+          preparationController: controllerPreparation,
+          restTimeController: controllerRestTime,
+          continueController: controllerContinue,
+          addMachineHandle: ()async{
+            if(
+              controllerCapacity.text.length != 5 || 
+              controllerPreparation.text.length != 5 || 
+              controllerRestTime.text.length != 5 || 
+              controllerContinue.text.isEmpty
+            ){
+              //if not all the fields have been added then we show another dialog showing the message
+              //we could try to have a custom field in the same dialog that shows the message, but that would imply
+              //to handle state in the dialog, and I don't want to deal with that
+              await showDialog(
+                context: dialogContext,
+                builder: (subDialogContext){
+                  return const AlertDialog(
+                    icon: Icon(Icons.dangerous_outlined, color: Colors.red,),
+                    content: Text("Asegurese de llenar todos los campos correctamente"),
+                  );
+                }
+              );
+            }
+            //else if to check if the inputs are correct, for instance, no 12:85
+            else {
+              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text));
+              Navigator.of(dialogContext).pop();
+            }
+          },
+        );
       }
     );
   }

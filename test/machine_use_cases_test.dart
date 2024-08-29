@@ -19,14 +19,14 @@ void main(){
     ];
 
     //simulating repository response
-    when(()=>mockRepository.getAllMachines()).thenAnswer((_)async => Right(machineList));
+    when(()=>mockRepository.getAllMachineTypes()).thenAnswer((_)async => Right(machineList));
 
     //do
     final result = await useCase();
 
     //assert
     expect(result, equals(Right(machineList)));
-    verify(() => mockRepository.getAllMachines()).called(1);  //make sure that it was called exactly once
+    verify(() => mockRepository.getAllMachineTypes()).called(1);  //make sure that it was called exactly once
 
   });
 }

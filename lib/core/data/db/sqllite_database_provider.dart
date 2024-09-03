@@ -1,7 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-class DatabaseProvider{
+class SQLLiteDatabaseProvider{
   static Database? _database;
 
   static Future<Database> open() async{

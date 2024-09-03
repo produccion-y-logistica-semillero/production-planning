@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:get_it/get_it.dart';
-import 'package:production_planning/core/data/db/database_provider.dart';
+import 'package:production_planning/core/data/db/sqllite_database_provider.dart';
+import 'package:production_planning/core/factories/factory.dart';
+import 'package:production_planning/core/factories/sqllite_factory.dart';
 import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
 import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
@@ -14,8 +16,7 @@ import 'package:production_planning/features/machines/domain/use_cases/get_machi
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqlLite;
 
 
 final depIn = GetIt.instance;
@@ -23,25 +24,20 @@ final depIn = GetIt.instance;
 Future<void> initDependencies() async{
   try{
     // Initialize the sqflite FFI loader for desktop platforms
-    sqfliteFfiInit();
+    sqlLite.sqfliteFfiInit();
     // Set the database factory to FFI
-    databaseFactory = databaseFactoryFfi;
+    sqlLite.databaseFactory = sqlLite.databaseFactoryFfi;
     //registering database, I do it like this so that the app can register all the other dependencies while opening the database
     //we also register the dispose method so it closes the connection
-    final Database db = await  DatabaseProvider.open();
 
-    depIn.registerSingleton<Database>(db, 
-        dispose: (db) async => await DatabaseProvider.closeDatabaseConnection()
-    );
+    //creating DAO's factory
+    final Factory daoFactory = await SqlLiteFactory.create();
 
-    //Machine daos
-    depIn.registerLazySingleton<MachineTypeDao>(() => MachineTypeDaoSQLlite(depIn.get<Database>()));
-    depIn.registerLazySingleton<MachineDao>(()=> MachineDaoSqllite(depIn.get<Database>()));
 
     //Machine repositories
     depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(
-      machineTypeDao: depIn.get<MachineTypeDao>(),
-      machineDao:  depIn.get<MachineDao>()
+      machineTypeDao: daoFactory.getMachineTypeDao(),
+      machineDao:  daoFactory.getMachineDao()
     ));
 
     //Machine use cases

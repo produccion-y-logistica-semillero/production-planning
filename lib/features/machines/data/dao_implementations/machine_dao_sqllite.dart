@@ -10,13 +10,22 @@ class MachineDaoSqllite implements MachineDao{
   MachineDaoSqllite(this.db);
 
   @override
-  Future<bool> delete(int id) {
-    // TODO: implement delete
-    throw UnimplementedError();
+  Future<bool> delete(int id) async {
+    try {
+      await db.delete(
+        'MACHINES',
+        where: 'machine_id = ?',
+        whereArgs: [id],
+      );
+      return true;
+    } catch (error) {
+      print("Error deleting machine with id ${id}: ${error.toString()}");
+      throw LocalStorageFailure();
+    }
   }
 
-  
 
+  
   @override
   Future<bool> deleteWhere(String field, int value) async{
     try{

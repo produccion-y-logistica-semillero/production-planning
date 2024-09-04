@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 void logMessage(String message) {
   final logFile = File('log.txt');
   logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
+  
 }
 
 void main() async {

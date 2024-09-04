@@ -10,7 +10,7 @@ class DeleteMachineTypeUseCase implements UseCase<bool, int> {
 
   @override
   Future<Either<Failure, bool>> call({required int p}) async {
-    final response = await repository.deleteMachineType(p);
+    final response = await repository.deleteMachine(p);
     return response.fold(
       (f) => Left(f),
       (success) => Right(success),

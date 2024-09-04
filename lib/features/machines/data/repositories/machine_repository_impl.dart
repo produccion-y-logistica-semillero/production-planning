@@ -46,7 +46,7 @@ class MachineRepositoryImpl implements MachineRepository{
     try{
       await machineDao.deleteWhere(machineTypeDao.getTablePK(), id);  //we delete first all the machines associated with that machine type
       await machineTypeDao.deleteMachine(id);
-      return Right(true);
+      return Right (true);
     }
     on Failure catch(failure){
       return Left(failure);
@@ -57,6 +57,18 @@ class MachineRepositoryImpl implements MachineRepository{
   Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) {
     // TODO: implement getAllMachinesFromType
     throw UnimplementedError();
+  }
+
+  //Machines Specific Implementations
+
+  Future<Either<Failure, bool>> deleteMachine(int id) async{
+    try{
+      await machineDao.delete(id);
+      return Right(true);
+    }
+    on Failure catch(failure){
+      return Left(failure);
+    }
   }
 
 }

@@ -9,6 +9,8 @@ import 'package:sqflite/sqflite.dart';
 class SqlLiteFactory implements Factory{
 
   final Database db;
+  MachineTypeDaoSQLlite? machineTypeDaoSQLlite;
+  MachineDaoSqllite? machineDaoSqllite;
 
   //static factory constructor to perform async operation
   static Future<SqlLiteFactory> create() async{
@@ -19,9 +21,13 @@ class SqlLiteFactory implements Factory{
   SqlLiteFactory(this.db);
 
   @override
-  MachineTypeDao getMachineTypeDao() => MachineTypeDaoSQLlite(db);
+  MachineTypeDao getMachineTypeDao() {
+    return machineTypeDaoSQLlite ??= MachineTypeDaoSQLlite(db);
+  }
   @override
-  MachineDao getMachineDao() => MachineDaoSqllite(db);
+  MachineDao getMachineDao(){ 
+    return machineDaoSqllite ??= MachineDaoSqllite(db);
+  }
 
   @override
   void closeDatabase() {

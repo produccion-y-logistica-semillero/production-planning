@@ -31,7 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   #side menu dependecy for main screen
-  easy_sidemenu: ^0.6.0
+  flutter_side_menu: ^0.5.3
   #functional programing, to use Either
   dartz: ^0.10.1
   #for state management
@@ -44,6 +44,8 @@ dependencies:
   sqflite_common_ffi: ^2.3.3
   #path, for path management, with database mostly
   path: ^1.9.0
+  #provider for basic state management with provider with the side menu
+  provider: ^6.1.2
 
 
   # The following adds the Cupertino Icons font to your application.

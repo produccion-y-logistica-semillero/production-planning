@@ -17,60 +17,58 @@ import 'package:production_planning/features/machines/presentation/bloc/machines
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-
 final depIn = GetIt.instance;
 
-Future<void> initDependencies() async{
-  try{
+Future<void> initDependencies() async {
+  try {
     // Initialize the sqflite FFI loader for desktop platforms
     sqfliteFfiInit();
     // Set the database factory to FFI
     databaseFactory = databaseFactoryFfi;
     //registering database, I do it like this so that the app can register all the other dependencies while opening the database
     //we also register the dispose method so it closes the connection
-    final Database db = await  DatabaseProvider.open();
+    final Database db = await DatabaseProvider.open();
 
-    depIn.registerSingleton<Database>(db, 
-        dispose: (db) async => await DatabaseProvider.closeDatabaseConnection()
-    );
+    depIn.registerSingleton<Database>(db,
+        dispose: (db) async =>
+            await DatabaseProvider.closeDatabaseConnection());
 
     //Machine daos
-    depIn.registerLazySingleton<MachineTypeDao>(() => MachineTypeDaoSQLlite(depIn.get<Database>()));
-    depIn.registerLazySingleton<MachineDao>(()=> MachineDaoSqllite(depIn.get<Database>()));
+    depIn.registerLazySingleton<MachineTypeDao>(
+        () => MachineTypeDaoSQLlite(depIn.get<Database>()));
+    depIn.registerLazySingleton<MachineDao>(
+        () => MachineDaoSqllite(depIn.get<Database>()));
 
     //Machine repositories
-    depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(
-      machineTypeDao: depIn.get<MachineTypeDao>(),
-      machineDao:  depIn.get<MachineDao>()
-    ));
+    depIn.registerLazySingleton<MachineRepository>(() => MachineRepositoryImpl(
+        machineTypeDao: depIn.get<MachineTypeDao>(),
+        machineDao: depIn.get<MachineDao>()));
 
     //Machine use cases
-    depIn.registerLazySingleton<AddMachineTypeUseCase>(() => AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
-    depIn.registerLazySingleton<GetMachineTypesUseCase>(() => GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
-    depIn.registerLazySingleton<DeleteMachineTypeUseCase>(()=>DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
-    depIn.registerLazySingleton<GetMachinesUseCase>(()=> GetMachinesUseCase(repository: depIn.get<MachineRepository>()));
-    
+    depIn.registerLazySingleton<AddMachineTypeUseCase>(() =>
+        AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
+    depIn.registerLazySingleton<GetMachineTypesUseCase>(() =>
+        GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
+    depIn.registerLazySingleton<DeleteMachineTypeUseCase>(() =>
+        DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
+    depIn.registerLazySingleton<GetMachinesUseCase>(
+        () => GetMachinesUseCase(repository: depIn.get<MachineRepository>()));
+
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
     depIn.registerFactory<MachineBloc>(
-      ()=> MachineBloc(
-        depIn.get<GetMachinesUseCase>()
-      )
-    );
-    depIn.registerFactory<MachineTypesBloc>(
-      ()=> MachineTypesBloc(
-        depIn.get<AddMachineTypeUseCase>() , 
-        depIn.get<GetMachineTypesUseCase>(),
-        depIn.get<DeleteMachineTypeUseCase>(),
-      )
-    );
-  }
-  catch(e){
+        () => MachineBloc(depIn.get<GetMachinesUseCase>()));
+    depIn.registerFactory<MachineTypesBloc>(() => MachineTypesBloc(
+          depIn.get<AddMachineTypeUseCase>(),
+          depIn.get<GetMachineTypesUseCase>(),
+          depIn.get<DeleteMachineTypeUseCase>(),
+        ));
+  } catch (e) {
     logMessage('Dependency initialization failed: $e');
   }
 }
 
 void logMessage(String message) {
-  final logFile = File('log.txt');
-  logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
+  // final logFile = File('log.txt');
+  // logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
 }

@@ -3,8 +3,7 @@ import 'package:production_planning/features/machines/data/dao_interfaces/machin
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:sqflite/sqflite.dart';
 
-class MachineDaoSqllite implements MachineDao{
-
+class MachineDaoSqllite implements MachineDao {
   final Database db;
 
   MachineDaoSqllite(this.db);
@@ -15,15 +14,12 @@ class MachineDaoSqllite implements MachineDao{
     throw UnimplementedError();
   }
 
-  
-
   @override
-  Future<bool> deleteWhere(String field, int value) async{
-    try{
+  Future<bool> deleteWhere(String field, int value) async {
+    try {
       await db.delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
       return true;
-    }
-    catch(error){
+    } catch (error) {
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
       throw LocalStorageFailure();
     }

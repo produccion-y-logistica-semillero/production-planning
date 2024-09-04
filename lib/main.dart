@@ -11,6 +11,7 @@ import 'package:production_planning/features/main_page/presentation/pages/main_p
 void logMessage(String message) {
   final logFile = File('log.txt');
   logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
+  
 }
 
 void main() async {

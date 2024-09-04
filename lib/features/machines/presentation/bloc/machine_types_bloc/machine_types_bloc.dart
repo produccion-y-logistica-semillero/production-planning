@@ -57,9 +57,11 @@ class MachineTypesBloc extends Bloc<MachineTypeEvent, MachineTypeState>{
         final response = await _deleteMachineTUseCase(p: event.id);
         response.fold(
           (failure) => emit(MachineTypeDeletionError(state.machineTypes)),
-          (success){
-            state.machineTypes?.removeAt(event.index);
-            emit(MachineTypeDeletionSuccess(state.machineTypes));
+          (boolean){
+            if(boolean) {
+              state.machineTypes?.removeAt(event.index);
+              emit(MachineTypeDeletionSuccess(state.machineTypes));
+            }
           }
         );
       }

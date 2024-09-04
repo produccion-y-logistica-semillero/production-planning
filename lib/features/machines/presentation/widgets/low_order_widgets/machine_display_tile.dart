@@ -4,8 +4,9 @@ import 'package:production_planning/features/machines/domain/entities/machine_en
 class MachineDisplayTile extends StatelessWidget{
 
   final MachineEntity machine;
+  final void Function() deleteHandler;
 
-  const MachineDisplayTile(this.machine);
+  const MachineDisplayTile(this.machine, this.deleteHandler);
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +27,10 @@ class MachineDisplayTile extends StatelessWidget{
             width: 400,
             child:  Text('Tiempo de procesamiento ${machine.processingTime.toString().substring(0,8)}'),
           ),
-          IconButton(onPressed: (){}, icon: Icon(Icons.delete, color: Colors.red,))
+          IconButton(
+            onPressed: deleteHandler,
+            icon: Icon(Icons.delete, color: Colors.red,)
+          )
         ],
       ),
     );

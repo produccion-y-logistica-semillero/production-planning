@@ -7,6 +7,7 @@ final ThemeData lightTheme = ThemeData(
     //primary: (Color.fromARGB(255, 150, 164, 239))!,
    // onPrimary:  Colors.white,
     primaryContainer: Color.fromARGB(255, 26, 56, 122),
+    primaryFixed: Color.fromARGB(255, 108, 123, 151),
     onPrimaryContainer: Color.fromARGB(255, 255, 255, 255),
     secondaryContainer:  Color.fromARGB(255, 197, 202, 214),
     onSecondaryContainer: Color.fromARGB(255, 130, 136, 148),

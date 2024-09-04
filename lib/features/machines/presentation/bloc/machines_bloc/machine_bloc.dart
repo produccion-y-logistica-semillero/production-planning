@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/machines/domain/use_cases/delete_machine_id_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_event.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machines_state.dart';
@@ -7,14 +8,15 @@ import 'package:production_planning/features/machines/presentation/bloc/machines
 class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
 
   final GetMachinesUseCase _getMachinesUseCase;
+  final DeleteMachineUseCase _deleteMachineUseCase;
 
-  MachineBloc(this._getMachinesUseCase)
-  :super(MachinesStateInitial()){
+  MachineBloc(this._getMachinesUseCase, this._deleteMachineUseCase)
+  :super(MachinesStateInitial(null)){
     //event for when we at first seek the machines
     on<OnMachinesRetrieving>(
       (event, emit)async {
         //emit so it shows loading
-        emit(MachinesRetrieving());
+        emit(MachinesRetrieving(null));
 
         List<MachineEntity> machines = [
           MachineEntity(status: "Disponible", processingTime: Duration(), preparationTime: Duration(), restTime: Duration(), continueCapacity: 5, id:10),
@@ -34,7 +36,7 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
     on<OnNewMachine>(
       (event, emit) async{
         List<MachineEntity> machines = [];
-        if(state is MachinesRetrievingSuccess) machines = (state as MachinesRetrievingSuccess).machines;
+        if(state is MachinesRetrievingSuccess) machines = state.machines??[];
         final capacity = Duration(
           hours: int.parse(event.capacity.substring(0,2)),
           minutes: int.parse(event.capacity.substring(3,5)),
@@ -56,9 +58,27 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
       }
     );
 
+    on<OnDeleteMachine>(
+      (event, emit) async{
+        List<MachineEntity> machines = state.machines??[];
+
+        final response = await _deleteMachineUseCase(p:event.machineID);
+
+        response.fold(
+          (failure) => emit(MachineDeletionError(machines)),
+          (boolean){
+            if(boolean){
+              machines.removeWhere((machine) => machine.id == event.machineID);
+              emit(MachineDeletionSuccess(machines));
+            }
+          }
+        );
+      }
+    );
+
     on<OnMachinesExpansionCollpased>(
       (event, emit){
-        emit(MachinesStateInitial());
+        emit(MachinesStateInitial(null));
       }
     );
   }

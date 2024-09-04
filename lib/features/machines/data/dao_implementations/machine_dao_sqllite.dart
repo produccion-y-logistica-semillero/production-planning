@@ -12,12 +12,12 @@ class MachineDaoSqllite implements MachineDao{
   @override
   Future<bool> delete(int id) async {
     try {
-      await db.delete(
+      int n = await db.delete(
         'MACHINES',
         where: 'machine_id = ?',
         whereArgs: [id],
       );
-      return true;
+      return n > 1 ? true : false;
     } catch (error) {
       print("Error deleting machine with id ${id}: ${error.toString()}");
       throw LocalStorageFailure();
@@ -29,8 +29,8 @@ class MachineDaoSqllite implements MachineDao{
   @override
   Future<bool> deleteWhere(String field, int value) async{
     try{
-      await db.delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
-      return true;
+      int n = await db.delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
+      return n == 1 ? true: false;
     }
     catch(error){
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");

@@ -6,6 +6,7 @@ import 'package:production_planning/core/factories/sqllite_factory.dart';
 import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 import 'package:production_planning/features/machines/domain/use_cases/add_machine_type_use_case.dart';
+import 'package:production_planning/features/machines/domain/use_cases/delete_machine_id_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/delete_machine_type_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_type_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
@@ -40,12 +41,14 @@ Future<void> initDependencies() async{
     depIn.registerLazySingleton<GetMachineTypesUseCase>(() => GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<DeleteMachineTypeUseCase>(()=>DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetMachinesUseCase>(()=> GetMachinesUseCase(repository: depIn.get<MachineRepository>()));
+    depIn.registerLazySingleton<DeleteMachineUseCase>(()=> DeleteMachineUseCase(repository: depIn.get<MachineRepository>()));
     
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
     depIn.registerFactory<MachineBloc>(
       ()=> MachineBloc(
-        depIn.get<GetMachinesUseCase>()
+        depIn.get<GetMachinesUseCase>(),
+        depIn.get<DeleteMachineUseCase>()
       )
     );
     depIn.registerFactory<MachineTypesBloc>(

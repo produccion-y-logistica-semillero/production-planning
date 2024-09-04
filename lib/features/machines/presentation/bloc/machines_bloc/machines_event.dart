@@ -18,3 +18,9 @@ class OnNewMachine implements MachinesEvent{
 
   OnNewMachine(this.capacity, this.preapartion, this.rest, this.continueCapacity);
 }
+
+class OnDeleteMachine implements MachinesEvent{
+  final int machineID;
+  
+  OnDeleteMachine(this.machineID);
+}

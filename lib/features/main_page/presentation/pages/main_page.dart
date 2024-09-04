@@ -21,6 +21,7 @@ class MainPage extends StatelessWidget {
     Color onPrimaryContainer = Theme.of(context).colorScheme.onPrimaryContainer;
     Color secondaryContainer = Theme.of(context).colorScheme.secondaryContainer;
     Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
+    Color primaryFixed = Theme.of(context).colorScheme.primaryFixed;
 
     return Scaffold(
       appBar: AppBar(
@@ -71,7 +72,9 @@ class MainPage extends StatelessWidget {
                             title: 'Maquinas',
                             titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
                             itemHeight: 60,
-                            hoverColor: secondaryContainer,
+                            hoverColor: primaryFixed,
+                            highlightSelectedColor: primaryFixed,
+                            selectedTitleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
                             icon: const Icon(Icons.build),
                           ),
                       SideMenuItemDataTile(
@@ -83,7 +86,9 @@ class MainPage extends StatelessWidget {
                             title: 'Secuencias',
                             titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
                             itemHeight: 60,
-                            hoverColor: secondaryContainer,
+                            hoverColor: primaryFixed,
+                            highlightSelectedColor: primaryFixed,
+                            selectedTitleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
                             icon: const Icon(Icons.work_history),
                           ),
                        

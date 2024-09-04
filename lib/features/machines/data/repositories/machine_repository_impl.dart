@@ -45,8 +45,8 @@ class MachineRepositoryImpl implements MachineRepository{
   Future<Either<Failure, bool>> deleteMachineType(int id) async{
     try{
       await machineDao.deleteWhere(machineTypeDao.getTablePK(), id);  //we delete first all the machines associated with that machine type
-      await machineTypeDao.deleteMachine(id);
-      return Right (true);
+      bool res = await machineTypeDao.deleteMachine(id);
+      return Right (res);
     }
     on Failure catch(failure){
       return Left(failure);
@@ -63,8 +63,8 @@ class MachineRepositoryImpl implements MachineRepository{
 
   Future<Either<Failure, bool>> deleteMachine(int id) async{
     try{
-      await machineDao.delete(id);
-      return Right(true);
+      bool res = await machineDao.delete(id);
+      return Right(res);
     }
     on Failure catch(failure){
       return Left(failure);

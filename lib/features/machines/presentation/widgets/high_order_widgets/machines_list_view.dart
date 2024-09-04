@@ -73,10 +73,23 @@ class MachinesListView extends StatelessWidget{
                                       switch(state){
                                         (MachinesRetrieving _ )=> [const ListTile(title: Text("Loading"),)],
                                         (MachinesRetrievingError _ )=> [const ListTile(title: Text("Error loading"),)],
-                                        (MachinesRetrievingSuccess _) => state.machines.map((machine)=> MachineDisplayTile(
-                                          machine
+                                        //here we pass the machines to display
+                                        (MachinesRetrievingSuccess _) => state.machines!.map(
+                                          (machine)=> MachineDisplayTile(
+                                            machine,
+                                            ()=>_deleteMachine(context, machine.id!)
                                         )).toList(),
-                                        MachinesStateInitial()=>[const ListTile(title: Text("No machines"),)],
+                                        (MachineDeletionSuccess _) => state.machines!.map(
+                                          (machine)=> MachineDisplayTile(
+                                            machine,
+                                            ()=>_deleteMachine(context, machine.id!)
+                                        )).toList(),
+                                        (MachineDeletionError _)=> state.machines!.map(
+                                          (machine)=> MachineDisplayTile(
+                                            machine,
+                                            ()=>_deleteMachine(context, machine.id!)
+                                        )).toList(),
+                                        MachinesStateInitial()=>[const ListTile(title: Text(""),)],
                                       }
                                   ),
                                 ),
@@ -129,6 +142,32 @@ class MachinesListView extends StatelessWidget{
               child: const Text("Eliminar")
             )
           ],
+        );
+      }
+    );
+  }
+
+  void _deleteMachine(BuildContext context, int machineId) async{
+    await showDialog(
+      context: context, 
+      builder: (dialogContext){
+        return AlertDialog(
+          icon:  const Icon(Icons.dangerous, color: Colors.red,),
+          title: const Text("¿Estas seguro de eliminar la maquina?"),
+          actions: [
+            TextButton(
+              onPressed: ()=>Navigator.of(dialogContext).pop(), 
+              child: const Text("Cancelar"),
+            ),
+            TextButton(
+              onPressed: (){
+                BlocProvider.of<MachineBloc>(context).add(OnDeleteMachine(machineId));
+                Navigator.of(dialogContext).pop();
+              }, 
+              child: const Text("Confirmar")
+            ),
+
+          ]
         );
       }
     );

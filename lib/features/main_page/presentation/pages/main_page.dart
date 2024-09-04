@@ -4,12 +4,7 @@ import 'package:production_planning/features/main_page/presentation/provider/sid
 import 'package:production_planning/features/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
 import 'package:provider/provider.dart';
 
-class MainPage extends StatefulWidget {
-  @override
-  State<MainPage> createState() => _MainPageState();
-}
-
-class _MainPageState extends State<MainPage> {
+class MainPage extends StatelessWidget {
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -40,9 +35,7 @@ class _MainPageState extends State<MainPage> {
             ),
             icon: Center(child: Icon(Icons.menu, color: onSecondaryContainer,)),
             onPressed: (){
-              setState(() {
-                _menuExpanded = _menuExpanded ? false: true;
-              });
+               Provider.of<SideMenuProvider>(context, listen: false).changeExpansion();
             },
           ),
         )
@@ -53,6 +46,7 @@ class _MainPageState extends State<MainPage> {
           Consumer<SideMenuProvider>(
             builder: (context, provider, _) {
               return SideMenu(
+                hasResizerToggle: false,
                 mode: provider.expanded ? SideMenuMode.auto : SideMenuMode.compact,
                 minWidth: 70,
                 maxWidth: 300,

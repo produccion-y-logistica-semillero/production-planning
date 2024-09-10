@@ -55,6 +55,7 @@ class MachineRepositoryImpl implements MachineRepository{
 
   @override
   Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) {
+    
     // TODO: implement getAllMachinesFromType
     throw UnimplementedError();
   }

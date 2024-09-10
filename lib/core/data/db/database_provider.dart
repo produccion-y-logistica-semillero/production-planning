@@ -36,6 +36,12 @@ class DatabaseProvider{
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
         ''');
+        await db.execute('''
+          CREATE TABLE STATUS (
+            status_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+          );
+        ''');
       }
     );
     return _database!;

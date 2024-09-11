@@ -3,6 +3,7 @@ import 'package:production_planning/features/machines/domain/entities/machine_en
 
 class MachineModel {
   int? id;
+  int? machineTypeId;
   String? status;
   Duration processingTime;
   Duration preparationTime;
@@ -11,6 +12,7 @@ class MachineModel {
 
   MachineModel({
   required this.id, 
+  this.machineTypeId,
   required this.status, 
   required this.processingTime,
   required this.preparationTime,
@@ -20,7 +22,8 @@ class MachineModel {
 
   factory MachineModel.fromJson(Map<String, dynamic> data){
     return MachineModel(
-      id: data["machine_id"], 
+      id: data["machine_id"],
+      machineTypeId: data["machine_type_id"],
       status: data["status_id"],
       processingTime: data["processing_time"],
       preparationTime: data["preparation_time"], 
@@ -31,6 +34,7 @@ class MachineModel {
 
   MachineEntity toEntity(){
     return MachineEntity(
+      machineTypeId: machineTypeId,
       status: status, 
       processingTime: processingTime, 
       preparationTime: preparationTime, 
@@ -38,13 +42,6 @@ class MachineModel {
       continueCapacity: continueCapacity
     );
   }
-/*
-  Map<String, dynamic> toJson(){
-    return {
-      if(id != null) "machine_id" : id,
-      
-    }
-  }
-  */
+  
 }
 

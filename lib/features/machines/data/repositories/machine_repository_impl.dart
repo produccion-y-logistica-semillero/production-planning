@@ -3,6 +3,7 @@ import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/status_dao.dart';
 import 'package:production_planning/features/machines/data/models/machine_type_model.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
@@ -12,8 +13,9 @@ class MachineRepositoryImpl implements MachineRepository{
 
   final MachineTypeDao machineTypeDao;
   final MachineDao machineDao;
+  final StatusDao statusDao;
 
-  MachineRepositoryImpl({required this.machineTypeDao, required this.machineDao});
+  MachineRepositoryImpl({required this.machineTypeDao, required this.machineDao, required this.statusDao});
 
   @override
   Future<Either<Failure, List<MachineTypeEntity>>> getAllMachineTypes() async {
@@ -59,5 +61,31 @@ class MachineRepositoryImpl implements MachineRepository{
     // TODO: implement getAllMachinesFromType
     throw UnimplementedError();
   }
+  
+  @override
+  Future<Either<Failure, int>> insertMachine(MachineEntity machine) async {
+    try{
+      int id = await machineDao.insertMachine(machineEntityToJson(machine));
+      return Right(id);
+    }
+    on Failure catch(failure){
+      return Left(failure);
+    }
+  }
+
+  Map<String, dynamic> machineEntityToJson(MachineEntity entity){
+    return {
+      if(entity.id != null) 
+      "machine_id"        : entity.id,
+      "machine_type_id"   : entity.machineTypeId,
+      "status_id"         : statusDao.getIdByName(entity.status),
+      "processing_time"   : entity.processingTime,
+      "preparation_time"  : entity.preparationTime,
+      "rest_time"         : entity.restTime,
+      "continue_capacity" : entity.continueCapacity
+    };
+  }
+
+  
 
 }

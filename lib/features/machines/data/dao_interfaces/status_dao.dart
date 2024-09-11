@@ -1,3 +1,4 @@
 abstract class StatusDao{
-  Future<String> getStateNameById(int id);
+  Future<String> getNameById(int id);
+  Future<int> getIdByName(String? name);
 }

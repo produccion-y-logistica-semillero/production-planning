@@ -4,6 +4,7 @@ import 'package:production_planning/features/machines/data/dao_implementations/m
 import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
+import 'package:production_planning/features/machines/data/dao_interfaces/status_dao.dart';
 import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
 import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
 import 'package:production_planning/features/machines/domain/use_cases/add_machine_type_use_case.dart';
@@ -38,7 +39,8 @@ Future<void> initDependencies() async{
   //Machine repositories
   depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(
     machineTypeDao: depIn.get<MachineTypeDao>(),
-    machineDao:  depIn.get<MachineDao>()
+    machineDao:  depIn.get<MachineDao>(),
+    statusDao: depIn.get<StatusDao>()
   ));
 
   //Machine use cases

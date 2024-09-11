@@ -21,7 +21,7 @@ void main(){
     ]);
 
     // do
-    final result = await dao.getStateNameById(1);
+    final result = await dao.getNameById(1);
 
     // assert
     expect(result, expected);

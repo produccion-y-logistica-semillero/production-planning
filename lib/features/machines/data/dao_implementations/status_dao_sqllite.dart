@@ -7,10 +7,22 @@ class StatusDaoSqllite implements StatusDao{
   StatusDaoSqllite(this.db);
 
   @override
-  Future<String> getStateNameById(int id) async{
+  Future<String> getNameById(int id) async{
     try{
       List<Map<String, dynamic>> table = (await db.query('STATUS', columns: ['name'], where: 'id = ?', whereArgs: [id]));
       return table[0]['name'];
+    }
+    catch(error){
+      print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
+      throw LocalStorageFailure();
+    }
+  }
+  
+  @override
+  Future<int> getIdByName(String? name) async{
+    try{
+      List<Map<String, dynamic>> table = (await db.query('STATUS', columns: ['id'], where: 'name = ?', whereArgs: [name]));
+      return table[0]['id'];
     }
     catch(error){
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");

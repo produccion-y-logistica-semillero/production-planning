@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/themes/theme.dart';
 import 'package:production_planning/dependency_injection.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/features/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:provider/provider.dart';
@@ -30,7 +30,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return  MaterialApp(
         title: 'Flutter Demo',
-        theme: lightTheme,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: MaterialTheme.lightMediumContrastScheme()
+        ),
         //here we provide the provider of the side menu
         home: ChangeNotifierProvider(
           create: (context)=>SideMenuProvider(),

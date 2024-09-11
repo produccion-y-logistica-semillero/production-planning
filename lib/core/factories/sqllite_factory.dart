@@ -1,9 +1,9 @@
 import 'package:production_planning/core/data/db/sqllite_database_provider.dart';
 import 'package:production_planning/core/factories/factory.dart';
-import 'package:production_planning/features/machines/data/dao_implementations/machine_dao_sqllite.dart';
-import 'package:production_planning/features/machines/data/dao_implementations/machine_type_dao_sqllite.dart';
-import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
-import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
+import 'package:production_planning/features/0_machines/data/dao_implementations/machine_dao_sqllite.dart';
+import 'package:production_planning/features/0_machines/data/dao_implementations/machine_type_dao_sqllite.dart';
+import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_dao.dart';
+import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SqlLiteFactory implements Factory{

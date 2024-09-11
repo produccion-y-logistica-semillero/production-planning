@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -58,6 +59,24 @@ class SQLLiteDatabaseProvider{
               machine_type_id INTEGER NOT NULL,
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
               FOREIGN KEY (machine_type_id) REFERENCES machineTypes(machine_types_id)
+          );
+        ''');
+        await db.execute('''
+          CREATE TABLE orders (
+              order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              reg_date DATE NOT NULL
+          );
+        ''');
+        await db.execute('''
+          CREATE TABLE sequence_x_orders (
+              sequence_x_order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sequence_id INTEGER NOT NULL,
+              order_id INTEGER NOT NULL,
+              amount INTEGER NOT NULL,
+              due_date DATE NOT NULL,
+              priority INTEGER NOT NULL,
+              FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
+              FOREIGN KEY (order_id) REFERENCES orders(order_id)
           );
         ''');
       }

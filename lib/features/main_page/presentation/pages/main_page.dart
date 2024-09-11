@@ -19,22 +19,22 @@ class MainPage extends StatelessWidget {
   Widget build(BuildContext context) {
     Color primaryContainer = Theme.of(context).colorScheme.primaryContainer;
     Color onPrimaryContainer = Theme.of(context).colorScheme.onPrimaryContainer;
-    Color secondaryContainer = Theme.of(context).colorScheme.secondaryContainer;
-    Color onSecondaryContainer = Theme.of(context).colorScheme.onSecondaryContainer;
+    Color tertiaryContainer = Theme.of(context).colorScheme.tertiaryContainer;
+    Color onTertiaryContainer = Theme.of(context).colorScheme.onTertiaryContainer;
     Color primaryFixed = Theme.of(context).colorScheme.primaryFixed;
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: secondaryContainer,
+        backgroundColor: tertiaryContainer,
         toolbarHeight: 40,
-        title: Center(child: Text("Planeacion de producción", style: TextStyle(fontSize: 15, color: onSecondaryContainer),)),
+        title: Center(child: Text("Planeacion de producción", style: TextStyle(fontSize: 15, color: onTertiaryContainer),)),
         //to manually control if the side menu is expanded or not
         leading:  GestureDetector(
           child: IconButton(
             style: const ButtonStyle(
               padding: WidgetStatePropertyAll(EdgeInsets.all(0))
             ),
-            icon: Center(child: Icon(Icons.menu, color: onSecondaryContainer,)),
+            icon: Center(child: Icon(Icons.menu, color: onTertiaryContainer,)),
             onPressed: (){
                Provider.of<SideMenuProvider>(context, listen: false).changeExpansion();
             },
@@ -63,35 +63,9 @@ class MainPage extends StatelessWidget {
                     )
                   ),
                   items : [
-                     SideMenuItemDataTile(
-                            isSelected: provider.selectedOption == 1 ? true : false,  //checks if the selected option is its one
-                            onTap: (){
-                              provider.changeOption(1);
-                              _navigateTo('/machines');
-                            },
-                            title: 'Maquinas',
-                            titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
-                            itemHeight: 60,
-                            hoverColor: primaryFixed,
-                            highlightSelectedColor: primaryFixed,
-                            selectedTitleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
-                            icon: const Icon(Icons.build),
-                          ),
-                      SideMenuItemDataTile(
-                            isSelected: provider.selectedOption == 2 ? true : false, //checks if the selected option is its one
-                            onTap: (){
-                              provider.changeOption(2);
-                               _navigateTo('/sequences');
-                            },
-                            title: 'Secuencias',
-                            titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
-                            itemHeight: 60,
-                            hoverColor: primaryFixed,
-                            highlightSelectedColor: primaryFixed,
-                            selectedTitleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
-                            icon: const Icon(Icons.work_history),
-                          ),
-                       
+                      createItem(provider, context, '/machines', 'Maquinas', 1, Icons.settings),
+                      createItem(provider, context, '/sequences', 'Secuencias',2,  Icons.work),
+                      createItem(provider, context, '/orders', 'Ordenes', 3, Icons.schedule_send_sharp),
                   ],
                   footer: const Text('Pontificia universidad Javeriana'),
                 )
@@ -114,4 +88,27 @@ class MainPage extends StatelessWidget {
         _isNavigating = false;
     }
   }
+
+  SideMenuItemDataTile createItem(SideMenuProvider provider, BuildContext context, String route, String title, int number, IconData icon)
+  {
+
+    Color onPrimaryContainer = Theme.of(context).colorScheme.onPrimaryContainer;
+    Color primaryFixed = Theme.of(context).colorScheme.primaryFixed;
+    return SideMenuItemDataTile(
+                            isSelected: provider.selectedOption == number ? true : false, //checks if the selected option is its one
+                            onTap: (){
+                              provider.changeOption(number);
+                               _navigateTo(route);
+                            },
+                            title: title,
+                            titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
+                            itemHeight: 60,
+                            hoverColor: primaryFixed,
+                            highlightSelectedColor: primaryFixed,
+                            selectedTitleStyle: TextStyle(color: onPrimaryContainer, fontSize: 20),
+                            icon: Icon(icon),
+                          );
+  }
+
+
 }

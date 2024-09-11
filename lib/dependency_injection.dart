@@ -3,15 +3,15 @@ import 'dart:io';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/core/factories/sqllite_factory.dart';
-import 'package:production_planning/features/machines/data/repositories/machine_repository_impl.dart';
-import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
-import 'package:production_planning/features/machines/domain/use_cases/add_machine_type_use_case.dart';
-import 'package:production_planning/features/machines/domain/use_cases/delete_machine_id_use_case.dart';
-import 'package:production_planning/features/machines/domain/use_cases/delete_machine_type_use_case.dart';
-import 'package:production_planning/features/machines/domain/use_cases/get_machines_type_use_case.dart';
-import 'package:production_planning/features/machines/domain/use_cases/get_machines_use_case.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/features/0_machines/data/repositories/machine_repository_impl.dart';
+import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/add_machine_type_use_case.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/delete_machine_id_use_case.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/delete_machine_type_use_case.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_type_use_case.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_use_case.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machine_bloc.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 

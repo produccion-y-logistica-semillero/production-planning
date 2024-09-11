@@ -46,6 +46,10 @@ dependencies:
   path: ^1.9.0
   #provider for basic state management with provider with the side menu
   provider: ^6.1.2
+  #for Gantt diagram
+  gantt_chart: ^0.3.0
+  #second Gantt diagram
+  gantt_view: ^0.1.4
 
 
   # The following adds the Cupertino Icons font to your application.

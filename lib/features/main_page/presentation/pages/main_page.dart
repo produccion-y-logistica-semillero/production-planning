@@ -10,10 +10,9 @@ class MainPage extends StatelessWidget {
 
   bool _isNavigating = false; // Add this to track navigation status
 
-  bool _menuExpanded = true; //To control to hide or expand the side menu manually
-
   int selected = 0; //this variable keeps track of the option selected in the menu
 
+  MainPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +20,6 @@ class MainPage extends StatelessWidget {
     Color onPrimaryContainer = Theme.of(context).colorScheme.onPrimaryContainer;
     Color tertiaryContainer = Theme.of(context).colorScheme.tertiaryContainer;
     Color onTertiaryContainer = Theme.of(context).colorScheme.onTertiaryContainer;
-    Color primaryFixed = Theme.of(context).colorScheme.primaryFixed;
 
     return Scaffold(
       appBar: AppBar(

@@ -29,7 +29,7 @@ class SequenceModel{
 
   Map<String, dynamic> toJson(){
     return  {
-      if(sequenceId != null) "job_id" : sequenceId,
+      if(sequenceId != null) "sequence_id" : sequenceId,
       "name" : name
     };
   }

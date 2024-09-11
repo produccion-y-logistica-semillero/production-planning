@@ -5,4 +5,5 @@ import 'package:production_planning/features/1_sequences/domain/entities/sequenc
 abstract class SequencesRepository{
   Future<Either<Failure, bool>> createSequence(SequenceEntity job);
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences();
+  Future<Either<Failure, SequenceEntity?>> getFullSequence(int id);
 }

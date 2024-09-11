@@ -31,7 +31,25 @@ class SequencesRepositoryImpl implements SequencesRepository{
   @override
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences() async{
     try{
-
+      final list = (await sequencesDao.getSequences()).map(
+        (model) => SequenceEntity(model.sequenceId, null, model.name)
+      ).toList();
+      return Right(list);
+    }
+    on LocalStorageFailure catch(f){
+      return Left(f);
+    }
+  }
+  
+  @override
+  Future<Either<Failure, SequenceEntity?>> getFullSequence(int id) async {
+    try{
+      final SequenceEntity?  seq = (await sequencesDao.getSequenceById(id))?.toEntity();
+      if(seq != null){
+        seq.tasks = (await tasksDao.getTasksBySequenceId(id)).map((model) => model.toEntity()).toList();
+        return Right(seq);
+      }
+      return const Right(null);
     }
     on LocalStorageFailure catch(f){
       return Left(f);

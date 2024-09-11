@@ -4,6 +4,10 @@ import 'package:production_planning/features/0_machines/data/dao_implementations
 import 'package:production_planning/features/0_machines/data/dao_implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_type_dao.dart';
+import 'package:production_planning/features/1_sequences/data/dao_implementations/sequences_dao_sqllite.dart';
+import 'package:production_planning/features/1_sequences/data/dao_implementations/tasks_dao_sqllite.dart';
+import 'package:production_planning/features/1_sequences/data/dao_interfaces/sequences_dao.dart';
+import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SqlLiteFactory implements Factory{
@@ -11,6 +15,8 @@ class SqlLiteFactory implements Factory{
   final Database db;
   MachineTypeDaoSQLlite? machineTypeDaoSQLlite;
   MachineDaoSqllite? machineDaoSqllite;
+  SequencesDaoSqllite? sequencesDaoSqllite;
+  TasksDaoSqllite? tasksDaoSqllite;
 
   //static factory constructor to perform async operation
   static Future<SqlLiteFactory> create() async{
@@ -27,6 +33,16 @@ class SqlLiteFactory implements Factory{
   @override
   MachineDao getMachineDao(){ 
     return machineDaoSqllite ??= MachineDaoSqllite(db);
+  }
+
+  @override
+  SequencesDao getSequenceDao() {
+    return sequencesDaoSqllite ??= SequencesDaoSqllite(db);
+  }
+
+  @override
+  TasksDao getTaskDao() {
+    return tasksDaoSqllite ??= TasksDaoSqllite(db);
   }
 
   @override

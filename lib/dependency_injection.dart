@@ -12,6 +12,11 @@ import 'package:production_planning/features/0_machines/domain/use_cases/get_mac
 import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_use_case.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/features/1_sequences/data/repositories/sequences_repository_impl.dart';
+import 'package:production_planning/features/1_sequences/domain/repositories/sequences_repository.dart';
+import 'package:production_planning/features/1_sequences/domain/use_cases/add_sequence_use_case.dart';
+import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequence_use_case.dart';
+import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 
@@ -35,6 +40,12 @@ Future<void> initDependencies() async{
       machineTypeDao: daoFactory.getMachineTypeDao(),
       machineDao:  daoFactory.getMachineDao()
     ));
+    
+    //Sequences repositories
+    depIn.registerLazySingleton<SequencesRepository>(()=> SequencesRepositoryImpl(
+      sequencesDao: daoFactory.getSequenceDao(), 
+      tasksDao: daoFactory.getTaskDao()
+    ));
 
     //Machine use cases
     depIn.registerLazySingleton<AddMachineTypeUseCase>(() => AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
@@ -42,6 +53,11 @@ Future<void> initDependencies() async{
     depIn.registerLazySingleton<DeleteMachineTypeUseCase>(()=>DeleteMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetMachinesUseCase>(()=> GetMachinesUseCase(repository: depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<DeleteMachineUseCase>(()=> DeleteMachineUseCase(repository: depIn.get<MachineRepository>()));
+
+    //Sequences use cases
+    depIn.registerLazySingleton<AddSequenceUseCase>(()=> AddSequenceUseCase(depIn.get<SequencesRepository>()));
+    depIn.registerLazySingleton<GetSequenceUseCase>(()=> GetSequenceUseCase(depIn.get<SequencesRepository>()));
+    depIn.registerLazySingleton<GetSequencesUseCase>(()=> GetSequencesUseCase(depIn.get<SequencesRepository>()));
     
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton

@@ -1,5 +1,6 @@
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
+import 'package:production_planning/features/1_sequences/data/models/sequence_model.dart';
 import 'package:production_planning/features/1_sequences/data/models/task_model.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -14,6 +15,17 @@ class TasksDaoSqllite implements TasksDao{
     try{
       int id = await db.insert('TASKS', task.toJson());
       return id;
+    }catch(error){
+      throw LocalStorageFailure();
+    }
+  }
+  
+  @override
+  Future<List<TaskModel>> getTasksBySequenceId(int id) async{
+    try{
+      return (await db.query('TASKS', where: 'sequence_id = ?', whereArgs: [id]))
+      .map((json) => TaskModel.fromJson(json))
+      .toList();
     }catch(error){
       throw LocalStorageFailure();
     }

@@ -27,6 +27,16 @@ class TaskModel{
       machineTypeId: entity.machineTypeId);
   }
 
+  factory TaskModel.fromJson(Map<String, dynamic> map){
+    return TaskModel(
+      execOrder: map["exec_order"], 
+      nProcUnits: map["n_proc_units"], 
+      description: map["description"], 
+      sequenceId: map["sequence_id"], 
+      machineTypeId: map["machine_type_id"]
+    );
+  }
+
   Map<String, dynamic> toJson(){
     String timeStamp = '${nProcUnits.hour.toString().padLeft(2, '0')}:${nProcUnits.minute.toString().padLeft(2, '0')}:00'; 
     return {
@@ -36,6 +46,14 @@ class TaskModel{
       "n_proc_units" : '1970-01-01 $timeStamp', //the default date since we only care about the time, not date
       "description" : description
     };
+  }
+
+  TaskEntity toEntity(){
+    return TaskEntity(
+      execOrder: execOrder, 
+      processingUnits: nProcUnits, 
+      description: description, 
+      machineTypeId: machineTypeId);
   }
 
 }

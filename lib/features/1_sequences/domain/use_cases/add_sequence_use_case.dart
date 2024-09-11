@@ -24,7 +24,7 @@ class AddSequenceUseCase implements UseCase<bool, List<dynamic>>{
               machineTypeId: t.machineTypeId)
           ).toList();
           
-    final SequenceEntity seq = SequenceEntity(tasks, p[0] as String);
+    final SequenceEntity seq = SequenceEntity(null, tasks, p[0] as String);
     return repository.createSequence(seq);
   }
 }

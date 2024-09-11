@@ -79,6 +79,59 @@ class SQLLiteDatabaseProvider{
               FOREIGN KEY (order_id) REFERENCES orders(order_id)
           );
         ''');
+
+        //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
+        await db.execute('''
+          -- Insert default statuses
+          INSERT INTO status (status) VALUES ('Active');
+          INSERT INTO status (status) VALUES ('Inactive');
+          INSERT INTO status (status) VALUES ('Maintenance');
+
+          -- Insert default machine types
+          INSERT INTO machine_types (name, description) VALUES ('Type A', 'Basic machine type A');
+          INSERT INTO machine_types (name, description) VALUES ('Type B', 'Advanced machine type B');
+          INSERT INTO machine_types (name, description) VALUES ('Type C', 'High capacity machine type C');
+
+          -- Insert default machines
+          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (1, 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5);
+
+          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (2, 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3);
+
+          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (3, 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7);
+
+          -- Insert default sequences
+          INSERT INTO sequences (name) VALUES ('Sequence Alpha');
+          INSERT INTO sequences (name) VALUES ('Sequence Beta');
+          INSERT INTO sequences (name) VALUES ('Sequence Gamma');
+
+          -- Insert default tasks
+          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
+          VALUES (1, '2024-09-08 09:00:00', 'Task 1 description', 1, 1);
+
+          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
+          VALUES (2, '2024-09-08 10:00:00', 'Task 2 description', 2, 2);
+
+          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
+          VALUES (3, '2024-09-08 11:00:00', 'Task 3 description', 3, 3);
+
+          -- Insert default orders
+          INSERT INTO orders (reg_date) VALUES ('2024-09-08');
+          INSERT INTO orders (reg_date) VALUES ('2024-09-07');
+          INSERT INTO orders (reg_date) VALUES ('2024-09-06');
+
+          -- Insert default sequence_x_orders (associating sequences with orders)
+          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          VALUES (1, 1, 100, '2024-09-10', 1);
+
+          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          VALUES (2, 2, 200, '2024-09-11', 2);
+
+          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          VALUES (3, 3, 150, '2024-09-12', 3);
+        ''');
       }
     );
     return _database!;

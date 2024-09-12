@@ -4,6 +4,7 @@ import 'package:production_planning/features/machines/data/dao_implementations/m
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:production_planning/features/machines/data/dao_interfaces/status_dao.dart';
+import 'package:production_planning/features/machines/data/models/machine_model.dart';
 import 'package:production_planning/features/machines/data/models/machine_type_model.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
@@ -56,10 +57,19 @@ class MachineRepositoryImpl implements MachineRepository{
   }
 
   @override
-  Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) {
-    
-    // TODO: implement getAllMachinesFromType
-    throw UnimplementedError();
+  Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) async {
+    try{
+      List<Map<String, dynamic>> machinesJson = await machineDao.getMachinesByType(machineTypeId);
+      List<MachineEntity> machines = [];
+      for(Map<String, dynamic> json in machinesJson){
+        MachineEntity machine = MachineModel.fromJson(json).toEntity();
+        machines.add(machine);
+      }
+      return Right(machines);
+    }
+    on Failure catch(failure){
+      return Left(failure);
+    }
   }
   
   @override

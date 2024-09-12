@@ -62,7 +62,7 @@ class GanttPage extends StatelessWidget {
           GanttChart(
             tasks: tasks,
             startDate: DateTime(2023, 9, 1),
-            endDate: DateTime(2023, 9, 2),
+            endDate: DateTime(2023, 9, 30),
           ),
         ]
       ),

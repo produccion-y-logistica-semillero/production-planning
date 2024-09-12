@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
+import 'package:provider/provider.dart';
 
-class GanttChart extends StatelessWidget {
+class GanttChart extends StatefulWidget {
   final List<GanttTask> tasks;
   final DateTime startDate;
   final DateTime endDate;
@@ -13,76 +14,107 @@ class GanttChart extends StatelessWidget {
     required this.endDate,
   }) : super(key: key);
 
+  @override
+  State<GanttChart> createState() => _GanttChartState();
+}
+
+class _GanttChartState extends State<GanttChart> {
+
+  final ScrollController _scrollController = ScrollController();
+  double _currentValue = 1;
+
   double _calculatePosition(DateTime date, double totalWidth) {
-    int totalMinutes = endDate.difference(startDate).inMinutes; //total minutes of the cart
-    int dayOffset = date.difference(startDate).inMinutes;     //position in minutes of the passed date
+    int totalMinutes = widget.endDate.difference(widget.startDate).inMinutes; //total minutes of the cart
+    int dayOffset = date.difference(widget.startDate).inMinutes;     //position in minutes of the passed date
     return (dayOffset / totalMinutes) * totalWidth;         //asjusted the minutes to the width size
   }
 
   @override
   Widget build(BuildContext context) {
     // Remove explicit fixed width and make chart adaptable to zoom level
-    double chartHeight = MediaQuery.of(context).size.height*0.7;
-    double chartWidth = MediaQuery.of(context).size.width * 0.7; // Provide some initial large width
+    double chartHeight = MediaQuery.of(context).size.height*0.5;
+    double chartWidth = (MediaQuery.of(context).size.width * 0.7)*_currentValue;  //the width depends on the selected by user
 
-    return InteractiveViewer(
-      boundaryMargin: const EdgeInsets.all(16.0),
-      minScale: 1,
-      maxScale: 5.0,  // Allow zooming in and out more freely
-      child: Container(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildChartHeaders(chartWidth),
-            const SizedBox(height: 8.0),
-            Container(
-              width: chartWidth,
-              height: chartHeight,
-              child: Stack(
-                children: tasks.asMap().entries.map((entry) {
-                  int index = entry.key;
-                  GanttTask task = entry.value;
-                  double taskStartPosition =
-                      _calculatePosition(task.startDate, chartWidth);
-                  double taskEndPosition =
-                      _calculatePosition(task.endDate, chartWidth);
-                  
-                  if(taskEndPosition > chartWidth) taskEndPosition = chartWidth;
-                  return Positioned(
-                    top: index * 50.0,
-                    left: taskStartPosition,
-                    child: Container(
-                      width: taskEndPosition - taskStartPosition,
-                      height: 40.0,
-                      decoration: BoxDecoration(
-                        color: task.color,
-                        borderRadius: BorderRadius.circular(5)
-                      ),
-                      child: Center(
-                        child: Text(
-                          task.name,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
+    return Column(
+      children: [
+        //slider to select the horizontal zoom
+        Slider(
+          value: _currentValue, 
+          min: 1,
+          max: 10,
+          divisions: 10,
+          label: _currentValue.toStringAsFixed(1),
+          onChanged: (val){
+            setState(() {
+              _currentValue = val;
+            });
+          }
+        ),
+        //previously I used an interactive viewer for zoom, but I consider it unnecesary now
+        GestureDetector(
+          onHorizontalDragUpdate: (details){
+            _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+          },
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            child: Container(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildChartHeaders(chartWidth),
+                  const SizedBox(height: 8.0),
+                  Container(
+                    width: chartWidth,
+                    height: chartHeight,
+                    child: Stack(
+                      children: widget.tasks.asMap().entries.map((entry) {
+                        int index = entry.key;
+                        GanttTask task = entry.value;
+                        double taskStartPosition =
+                            _calculatePosition(task.startDate, chartWidth);
+                        double taskEndPosition =
+                            _calculatePosition(task.endDate, chartWidth);
+                        
+                        if(taskEndPosition > chartWidth) taskEndPosition = chartWidth;
+                        return Positioned(
+                          top: index * 50.0,
+                          left: taskStartPosition,
+                          child: Container(
+                            width: taskEndPosition - taskStartPosition,
+                            height: 40.0,
+                            decoration: BoxDecoration(
+                              color: task.color,
+                              borderRadius: BorderRadius.circular(5)
+                            ),
+                            child: Center(
+                              child: Text(
+                                task.name,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildChartHeaders(double totalWidth) {
     List<SizedBox> days = [];
-    int totalDays = endDate.difference(startDate).inDays;
+    int totalDays = widget.endDate.difference(widget.startDate).inDays;
 
     //iterate over the days in range
     for (int i = 0; i < totalDays; i++) {
-      DateTime currentDate = startDate.add(Duration(days: i));
+      DateTime currentDate = widget.startDate.add(Duration(days: i));
 
       //for this day we add the
       final dayRow =  Center(

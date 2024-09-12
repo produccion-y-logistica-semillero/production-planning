@@ -14,16 +14,16 @@ class GanttChart extends StatelessWidget {
   }) : super(key: key);
 
   double _calculatePosition(DateTime date, double totalWidth) {
-    int totalDays = endDate.difference(startDate).inDays;
-    int dayOffset = date.difference(startDate).inDays;
-    return (dayOffset / totalDays) * totalWidth;
+    int totalMinutes = endDate.difference(startDate).inMinutes; //total minutes of the cart
+    int dayOffset = date.difference(startDate).inMinutes;     //position in minutes of the passed date
+    return (dayOffset / totalMinutes) * totalWidth;         //asjusted the minutes to the width size
   }
 
   @override
   Widget build(BuildContext context) {
     // Remove explicit fixed width and make chart adaptable to zoom level
     double chartHeight = MediaQuery.of(context).size.height*0.7;
-    double chartWidth = 1000; // Provide some initial large width
+    double chartWidth = MediaQuery.of(context).size.width * 0.7; // Provide some initial large width
 
     return InteractiveViewer(
       boundaryMargin: const EdgeInsets.all(16.0),
@@ -47,14 +47,18 @@ class GanttChart extends StatelessWidget {
                       _calculatePosition(task.startDate, chartWidth);
                   double taskEndPosition =
                       _calculatePosition(task.endDate, chartWidth);
-
+                  
+                  if(taskEndPosition > chartWidth) taskEndPosition = chartWidth;
                   return Positioned(
                     top: index * 50.0,
                     left: taskStartPosition,
                     child: Container(
                       width: taskEndPosition - taskStartPosition,
                       height: 40.0,
-                      color: task.color,
+                      decoration: BoxDecoration(
+                        color: task.color,
+                        borderRadius: BorderRadius.circular(5)
+                      ),
                       child: Center(
                         child: Text(
                           task.name,
@@ -73,36 +77,46 @@ class GanttChart extends StatelessWidget {
   }
 
   Widget _buildChartHeaders(double totalWidth) {
-    List<Column> days = [];
+    List<SizedBox> days = [];
     int totalDays = endDate.difference(startDate).inDays;
 
     //iterate over the days in range
-    for (int i = 0; i <= totalDays; i++) {
+    for (int i = 0; i < totalDays; i++) {
       DateTime currentDate = startDate.add(Duration(days: i));
 
       //for this day we add the
       final dayRow =  Center(
           child: Text(
             '${currentDate.day}/${currentDate.month}',
-            style: const TextStyle(fontSize: 10.0),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
       );
 
       List<Widget> hoursRow= [];
-      //iterate over the Hours in the day
-      for(int i = 0; i < 24; i++){
-        hoursRow.add(
-          Text('${i}:00', style: TextStyle(fontSize: 4),)
-        );
+      //iterate over the Hours in the day, only if we're displaying only 1 day, for more than 1 day it doesn't look good
+      if(totalDays == 1){
+        for(int i = 0; i <= 24; i++){
+          hoursRow.add(
+            Text('${i}:00', style: TextStyle(fontSize: 12),)
+          );
+          hoursRow.add(SizedBox( height:10, child:  VerticalDivider(width: 2,)));
+        }
       }
 
       //adding the two rows, the day, and the row of hours to the list of columns
       days.add(
-        Column(
-          children: [
-            dayRow,
-            Row(children: hoursRow,)
-          ],
+        SizedBox(
+          width: totalWidth / totalDays,
+          child: Column(
+            children: [
+              dayRow,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: hoursRow,
+              ),
+              const Divider()
+            ],
+          ),
         )
       );
     }
@@ -110,11 +124,6 @@ class GanttChart extends StatelessWidget {
 
     //we return a sized box with the dynamic width depending on the days
     //and inside we have the row with all the numbers
-    return SizedBox(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: days,
-      ),
-    );
+    return  Row(children: days,);
   }
 }

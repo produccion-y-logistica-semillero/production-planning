@@ -25,8 +25,8 @@ class GanttPage extends StatelessWidget {
     List<GanttTask> tasks = [
       GanttTask(
         name: "Task 1",
-        startDate: DateTime(2023, 9, 1),
-        endDate: DateTime(2023, 9, 5),
+        startDate: DateTime(2023, 9, 1, 15),
+        endDate: DateTime(2023, 9, 1, 24),
         color: Colors.red,
       ),
       GanttTask(
@@ -62,7 +62,7 @@ class GanttPage extends StatelessWidget {
           GanttChart(
             tasks: tasks,
             startDate: DateTime(2023, 9, 1),
-            endDate: DateTime(2023, 9, 12),
+            endDate: DateTime(2023, 9, 2),
           ),
         ]
       ),

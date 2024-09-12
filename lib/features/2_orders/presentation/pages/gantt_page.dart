@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:production_planning/features/2_orders/presentation/widgets/high_order/gantt_chart.dart';
+import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class GanttTask {
   final String name;
@@ -12,101 +14,6 @@ class GanttTask {
     required this.endDate,
     this.color = Colors.blue,
   });
-}
-
-// Gantt Chart Widget
-class GanttChart extends StatelessWidget {
-  final List<GanttTask> tasks;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  const GanttChart({
-    Key? key,
-    required this.tasks,
-    required this.startDate,
-    required this.endDate,
-  }) : super(key: key);
-
-  double _calculatePosition(DateTime date, double totalWidth) {
-    int totalDays = endDate.difference(startDate).inDays;
-    int dayOffset = date.difference(startDate).inDays;
-    return (dayOffset / totalDays) * totalWidth;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Remove explicit fixed width and make chart adaptable to zoom level
-    double chartHeight = 50.0 * tasks.length;
-    double chartWidth = 1000; // Provide some initial large width
-
-    return InteractiveViewer(
-      boundaryMargin: const EdgeInsets.all(16.0),
-      minScale: 0.5,
-      maxScale: 5.0,  // Allow zooming in and out more freely
-      child: Container(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildChartHeaders(chartWidth),
-            const SizedBox(height: 8.0),
-            Container(
-              width: chartWidth,
-              height: chartHeight,
-              child: Stack(
-                children: tasks.asMap().entries.map((entry) {
-                  int index = entry.key;
-                  GanttTask task = entry.value;
-                  double taskStartPosition =
-                      _calculatePosition(task.startDate, chartWidth);
-                  double taskEndPosition =
-                      _calculatePosition(task.endDate, chartWidth);
-
-                  return Positioned(
-                    top: index * 50.0,
-                    left: taskStartPosition,
-                    child: Container(
-                      width: taskEndPosition - taskStartPosition,
-                      height: 40.0,
-                      color: task.color,
-                      child: Center(
-                        child: Text(
-                          task.name,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChartHeaders(double totalWidth) {
-    List<Widget> headers = [];
-    int totalDays = endDate.difference(startDate).inDays;
-
-    for (int i = 0; i <= totalDays; i++) {
-      DateTime currentDate = startDate.add(Duration(days: i));
-      headers.add(SizedBox(
-        width: totalWidth / totalDays, // Dynamic width per day
-        child: Center(
-          child: Text(
-            '${currentDate.day}/${currentDate.month}',
-            style: const TextStyle(fontSize: 10.0),
-          ),
-        ),
-      ));
-    }
-
-    return Row(
-      children: headers,
-    );
-  }
 }
 
 // Example usage of the Gantt Chart
@@ -134,16 +41,30 @@ class GanttPage extends StatelessWidget {
         endDate: DateTime(2023, 9, 12),
         color: Colors.blue,
       ),
+      GanttTask(
+        name: "Task 3",
+        startDate: DateTime(2023, 9, 5),
+        endDate: DateTime(2023, 9, 7),
+        color: Colors.blue,
+      ),
+      GanttTask(
+        name: "Task 3",
+        startDate: DateTime(2023, 9, 1),
+        endDate: DateTime(2023, 9, 4),
+        color: Colors.blue,
+      ),
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Zoomable Gantt Chart Example"),
-      ),
-      body: GanttChart(
-        tasks: tasks,
-        startDate: DateTime(2023, 9, 1),
-        endDate: DateTime(2023, 9, 12),
+      appBar: getAppBar(),
+      body: Column(
+        children: [
+          GanttChart(
+            tasks: tasks,
+            startDate: DateTime(2023, 9, 1),
+            endDate: DateTime(2023, 9, 12),
+          ),
+        ]
       ),
     );
   }

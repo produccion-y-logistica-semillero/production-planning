@@ -6,13 +6,14 @@ class GanttChart extends StatefulWidget {
   final List<GanttTask> tasks;
   final DateTime startDate;
   final DateTime endDate;
+  final int totalDays;
 
-  const GanttChart({
-    Key? key,
+  GanttChart({
+    super.key,
     required this.tasks,
     required this.startDate,
     required this.endDate,
-  }) : super(key: key);
+  }): totalDays = endDate.difference(startDate).inDays;
 
   @override
   State<GanttChart> createState() => _GanttChartState();
@@ -22,11 +23,12 @@ class _GanttChartState extends State<GanttChart> {
 
   final ScrollController _scrollController = ScrollController();
   double _currentValue = 1;
+  double hourWidth = 0;
 
   double _calculatePosition(DateTime date, double totalWidth) {
-    int totalMinutes = widget.endDate.difference(widget.startDate).inMinutes; //total minutes of the cart
+    int totalMinutes = widget.totalDays * 24 * 60; //total minutes of the cart
     int dayOffset = date.difference(widget.startDate).inMinutes;     //position in minutes of the passed date
-    return (dayOffset / totalMinutes) * totalWidth;         //asjusted the minutes to the width size
+    return ((dayOffset / totalMinutes) * totalWidth) + (hourWidth/2);         //asjusted the minutes to the width size, also takeninto account hour widht so it matches with the hours positions
   }
 
   @override
@@ -34,6 +36,8 @@ class _GanttChartState extends State<GanttChart> {
     // Remove explicit fixed width and make chart adaptable to zoom level
     double chartHeight = MediaQuery.of(context).size.height*0.5;
     double chartWidth = (MediaQuery.of(context).size.width * 0.7)*_currentValue;  //the width depends on the selected by user
+    hourWidth = (chartWidth/widget.totalDays)/24;
+
 
     return Column(
       children: [
@@ -50,12 +54,15 @@ class _GanttChartState extends State<GanttChart> {
             });
           }
         ),
-        //previously I used an interactive viewer for zoom, but I consider it unnecesary now
+
+        //gesture detector to detect drag and scroll depending on how the user dragged
         GestureDetector(
           onHorizontalDragUpdate: (details){
             _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
           },
-          child: SingleChildScrollView(
+          child: 
+          //the child is a scroll view but, the controller is managed in the gesture detector, so is the gesture detector the one managing the controller
+          SingleChildScrollView(
             controller: _scrollController,
             scrollDirection: Axis.horizontal,
             child: Container(
@@ -63,8 +70,10 @@ class _GanttChartState extends State<GanttChart> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  //days and hours
                   _buildChartHeaders(chartWidth),
                   const SizedBox(height: 8.0),
+                  //chart
                   Container(
                     width: chartWidth,
                     height: chartHeight,
@@ -77,7 +86,9 @@ class _GanttChartState extends State<GanttChart> {
                         double taskEndPosition =
                             _calculatePosition(task.endDate, chartWidth);
                         
-                        if(taskEndPosition > chartWidth) taskEndPosition = chartWidth;
+                        if(taskEndPosition > chartWidth) taskEndPosition = chartWidth; //this is to mantaint the curvature
+                        
+                        //actual bar of the project and it's positioned
                         return Positioned(
                           top: index * 50.0,
                           left: taskStartPosition,
@@ -96,6 +107,7 @@ class _GanttChartState extends State<GanttChart> {
                             ),
                           ),
                         );
+                        //actual bar of the project and it's positioned
                       }).toList(),
                     ),
                   ),
@@ -108,10 +120,13 @@ class _GanttChartState extends State<GanttChart> {
     );
   }
 
+
   Widget _buildChartHeaders(double totalWidth) {
     List<SizedBox> days = [];
     int totalDays = widget.endDate.difference(widget.startDate).inDays;
+    double dayWidth = totalWidth/totalDays;
 
+    
     //iterate over the days in range
     for (int i = 0; i < totalDays; i++) {
       DateTime currentDate = widget.startDate.add(Duration(days: i));
@@ -123,22 +138,33 @@ class _GanttChartState extends State<GanttChart> {
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
       );
-
-      List<Widget> hoursRow= [];
+      
+      List<SizedBox> hoursRow= [];
       //iterate over the Hours in the day, only if we're displaying only 1 day, for more than 1 day it doesn't look good
-      if(totalDays == 1){
-        for(int i = 0; i <= 24; i++){
-          hoursRow.add(
+      if(dayWidth > 800){
+        int numberHours = (i < (totalDays-1)) ? 23: 24;
+        for(int i = 0; i <= numberHours ; i++){
+          List<Widget> column = [];
+          column.add(SizedBox( height:10, child:  VerticalDivider(width: 2,)));
+
+          column.add(
             Text('${i}:00', style: TextStyle(fontSize: 12),)
           );
-          hoursRow.add(SizedBox( height:10, child:  VerticalDivider(width: 2,)));
+          hoursRow.add(
+            SizedBox(
+              width: hourWidth,
+              child: Column(
+                children: column,
+              )
+            )
+          );
         }
       }
 
       //adding the two rows, the day, and the row of hours to the list of columns
       days.add(
         SizedBox(
-          width: totalWidth / totalDays,
+          width: dayWidth,
           child: Column(
             children: [
               dayRow,

@@ -35,47 +35,53 @@ class GanttChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Remove explicit fixed width and make chart adaptable to zoom level
     double chartHeight = 50.0 * tasks.length;
-    double chartWidth = MediaQuery.of(context).size.width;
+    double chartWidth = 1000; // Provide some initial large width
 
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildChartHeaders(chartWidth),
-          const SizedBox(height: 8.0),
-          Container(
-            width: chartWidth,
-            height: chartHeight,
-            child: Stack(
-              children: tasks.asMap().entries.map((entry) {
-                int index = entry.key;
-                GanttTask task = entry.value;
-                double taskStartPosition =
-                    _calculatePosition(task.startDate, chartWidth);
-                double taskEndPosition =
-                    _calculatePosition(task.endDate, chartWidth);
+    return InteractiveViewer(
+      boundaryMargin: const EdgeInsets.all(16.0),
+      minScale: 0.5,
+      maxScale: 5.0,  // Allow zooming in and out more freely
+      child: Container(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildChartHeaders(chartWidth),
+            const SizedBox(height: 8.0),
+            Container(
+              width: chartWidth,
+              height: chartHeight,
+              child: Stack(
+                children: tasks.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  GanttTask task = entry.value;
+                  double taskStartPosition =
+                      _calculatePosition(task.startDate, chartWidth);
+                  double taskEndPosition =
+                      _calculatePosition(task.endDate, chartWidth);
 
-                return Positioned(
-                  top: index * 50.0,
-                  left: taskStartPosition,
-                  child: Container(
-                    width: taskEndPosition - taskStartPosition,
-                    height: 40.0,
-                    color: task.color,
-                    child: Center(
-                      child: Text(
-                        task.name,
-                        style: const TextStyle(color: Colors.white),
+                  return Positioned(
+                    top: index * 50.0,
+                    left: taskStartPosition,
+                    child: Container(
+                      width: taskEndPosition - taskStartPosition,
+                      height: 40.0,
+                      color: task.color,
+                      child: Center(
+                        child: Text(
+                          task.name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -86,7 +92,8 @@ class GanttChart extends StatelessWidget {
 
     for (int i = 0; i <= totalDays; i++) {
       DateTime currentDate = startDate.add(Duration(days: i));
-      headers.add(Expanded(
+      headers.add(SizedBox(
+        width: totalWidth / totalDays, // Dynamic width per day
         child: Center(
           child: Text(
             '${currentDate.day}/${currentDate.month}',
@@ -97,7 +104,6 @@ class GanttChart extends StatelessWidget {
     }
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: headers,
     );
   }
@@ -132,7 +138,7 @@ class GanttPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Gantt Chart Example"),
+        title: const Text("Zoomable Gantt Chart Example"),
       ),
       body: GanttChart(
         tasks: tasks,

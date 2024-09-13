@@ -8,12 +8,12 @@ import 'package:production_planning/features/machines/domain/use_cases/add_machi
 import 'package:production_planning/features/machines/domain/use_cases/delete_machine_type_use_case.dart';
 import 'package:production_planning/features/machines/domain/use_cases/get_machines_type_use_case.dart';
 import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
+// import 'package:production_planning/features/machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
 
 void logMessage(String message) {
   final logFile = File('log.txt');
-  logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
+  logFile.writeAsStringSync('$message\n', mode: FileMode.append);
 }
 
 void main() async {

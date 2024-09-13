@@ -1,4 +1,4 @@
-class MachineEntity{
+class MachineEntity {
   int? id;
   String? status;
   Duration processingTime;
@@ -6,15 +6,11 @@ class MachineEntity{
   Duration restTime;
   int continueCapacity;
 
-  MachineEntity({
-    this.id,
-    required this.status,
-    required this.processingTime,
-    required this.preparationTime,
-    required this.restTime,
-    required this.continueCapacity
-  });
-
-  
-
+  MachineEntity(
+      {this.id,
+      required this.status,
+      required this.processingTime,
+      required this.preparationTime,
+      required this.restTime,
+      required this.continueCapacity});
 }

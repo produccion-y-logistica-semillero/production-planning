@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:production_planning/features/sequences/domain/entities/process_entity.dart';
 import 'package:production_planning/features/sequences/presentation/widgets/high_order_widgets/order_process.dart';
 
 class OrderList extends StatefulWidget {
-  final List<Map<String, String>> orders;
+  final List<Map<String, dynamic>> orders;
 
   const OrderList({super.key, required this.orders});
 
@@ -12,7 +13,7 @@ class OrderList extends StatefulWidget {
 
 class _OrderListState extends State<OrderList> {
   String? _selectedOrderName;
-  String? _selectedOrderProcess;
+  ProcessEntity? _selectedOrderProcess;
 
   @override
   Widget build(BuildContext context) {
@@ -56,15 +57,21 @@ class _OrderListState extends State<OrderList> {
             ),
           ),
         ),
-        // Display the selected order below the dropdown
         if (_selectedOrderProcess != null)
           OrderProcess(process: _selectedOrderProcess!),
         if (_selectedOrderProcess == null)
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Ninguna orden seleccionada',
-              style: TextStyle(fontSize: 18, color: Colors.black),
+          Container(
+            constraints: const BoxConstraints(
+              maxHeight: 400,
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(
+                child: Text(
+                  'Ninguna orden seleccionada',
+                  style: TextStyle(fontSize: 18, color: Colors.black),
+                ),
+              ),
             ),
           )
       ],

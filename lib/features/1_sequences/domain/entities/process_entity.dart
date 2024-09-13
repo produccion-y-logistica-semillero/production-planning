@@ -1,4 +1,4 @@
-import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 
 class ProcessEntity {
   final List<MachineTypeEntity> machines;

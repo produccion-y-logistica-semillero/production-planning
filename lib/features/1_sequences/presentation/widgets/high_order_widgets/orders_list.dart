@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/sequences/domain/entities/process_entity.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/high_order_widgets/order_process.dart';
+import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/order_process.dart';
 
 class OrderList extends StatefulWidget {
   final List<Map<String, dynamic>> orders;

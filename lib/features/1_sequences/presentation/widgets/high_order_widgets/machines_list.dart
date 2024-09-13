@@ -1,7 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 
 class MachinesList extends StatelessWidget {
   final List<MachineTypeEntity> machineTypes;

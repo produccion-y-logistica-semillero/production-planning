@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/low_order_widgets/add_machines_successful.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/add_machines_successful.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
 
 class AddOrderForm extends StatefulWidget {
   final List<MachineTypeEntity> selectedMachines;

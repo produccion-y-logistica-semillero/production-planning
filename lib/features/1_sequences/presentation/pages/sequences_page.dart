@@ -2,15 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:production_planning/features/sequences/domain/entities/process_entity.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/high_order_widgets/orders_list.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
+import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_state.dart';
+import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/high_order_widgets/machines_list.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_state.dart';
-import 'package:production_planning/features/machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
-import 'package:production_planning/features/sequences/presentation/widgets/high_order_widgets/add_order.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/machines_list.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
+
 
 class SequencesPage extends StatefulWidget {
   const SequencesPage({super.key});

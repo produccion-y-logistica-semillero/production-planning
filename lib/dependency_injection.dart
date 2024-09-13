@@ -17,6 +17,7 @@ import 'package:production_planning/features/1_sequences/domain/repositories/seq
 import 'package:production_planning/features/1_sequences/domain/use_cases/add_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
@@ -76,6 +77,11 @@ Future<void> initDependencies() async {
         depIn.get<DeleteMachineTypeUseCase>(),
       )
     );
+    depIn.registerFactory<SequencesBloc>(
+      ()=> SequencesBloc(
+        depIn.get<GetMachineTypesUseCase>(),
+      )
+    );
 
     //Bloc orders
     depIn.registerFactory<OrdersBloc>(
@@ -89,11 +95,6 @@ Future<void> initDependencies() async {
     );
   }
   catch(e){
-    logMessage('Dependency initialization failed: $e');
+    //to implement file logging later if needed
   }
-}
-
-void logMessage(String message) {
-  // final logFile = File('log.txt');
-  // logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
 }

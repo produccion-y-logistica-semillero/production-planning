@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/features/0_machines/presentation/pages/machines_list_page.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/orders_page.dart';
 import 'package:production_planning/features/main_page/presentation/pages/welcome_page.dart';
@@ -22,7 +23,10 @@ class MainNavigator extends StatelessWidget{
                 WidgetBuilder builder;
                 switch (settings.name) {
                   case '/sequences':
-                    builder = (BuildContext _) => SequencesPage();
+                    builder = (BuildContext _) => BlocProvider(
+                      create: (context) => GetIt.instance.get<SequencesBloc>(),
+                      child: SequencesPage()
+                    );
                     break;
                   case '/orders':
                     builder = (BuildContext _) => BlocProvider(

@@ -6,16 +6,9 @@ import 'package:production_planning/features/main_page/presentation/pages/main_p
 import 'package:production_planning/features/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:provider/provider.dart';
 
-void logMessage(String message) {
-  final logFile = File('log.txt');
-  logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
-  
-}
 
 void main() async {
-  logMessage('App started');
   await initDependencies();
-  logMessage('dependencies started');
   runApp(const MyApp());
 }
 

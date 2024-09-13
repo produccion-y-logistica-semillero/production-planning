@@ -3,25 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_state.dart';
 import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/machines_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
 
 
-class SequencesPage extends StatefulWidget {
-  const SequencesPage({super.key});
+class SequencesPage extends StatelessWidget {
 
-  @override
-  State<SequencesPage> createState() => _SequencesPageState();
-}
-
-class _SequencesPageState extends State<SequencesPage> {
-  bool _isAddingOrder = false;
   List<Map<String, dynamic>> orders = [
     {
       'name': 'Job A',
@@ -81,171 +74,125 @@ class _SequencesPageState extends State<SequencesPage> {
 
     return Scaffold(
       appBar: getAppBar(),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: BlocBuilder<MachineTypesBloc, MachineTypeState>(
-                      builder: (context, state) {
-                        Widget widget = switch (state) {
-                          (MachineTypeInitial _) => const SizedBox(),
-                          (MachineTypesRetrieving _) =>
-                            const Center(child: CircularProgressIndicator()),
-                          (MachineTypesRetrievingError _) =>
-                            const Center(child: Text("Error fetching")),
-                          (MachineTypesRetrievingSuccess _) => MachinesList(
-                              machineTypes: state.machineTypes!,
-                              onSelectMachine: (machine) {
-                                setState(() {
-                                  selectedMachines.add(machine);
-                                  print(
-                                      'Máquinas seleccionadas ahora: $selectedMachines');
-                                });
-                              },
-                            ),
-                          (MachineTypesAddingSuccess _) => MachinesList(
-                              machineTypes: state.machineTypes!,
-                              onSelectMachine: (machine) {
-                                setState(() {
-                                  selectedMachines.add(machine);
-                                  print(
-                                      'Máquinas seleccionadas ahora: $selectedMachines');
-                                });
-                              },
-                            ),
-                          (MachineTypesAddingError _) => MachinesList(
-                              machineTypes: state.machineTypes!,
-                              onSelectMachine: (machine) {
-                                setState(() {
-                                  selectedMachines.add(machine);
-                                  print(
-                                      'Máquinas seleccionadas ahora: $selectedMachines');
-                                });
-                              },
-                            ),
-                          (MachineTypeDeletionError _) => MachinesList(
-                              machineTypes: state.machineTypes!,
-                              onSelectMachine: (machine) {
-                                setState(() {
-                                  selectedMachines.add(machine);
-                                  print(
-                                      'Máquinas seleccionadas ahora: $selectedMachines');
-                                });
-                              },
-                            ),
-                          (MachineTypeDeletionSuccess _) => MachinesList(
-                              machineTypes: state.machineTypes!,
-                              onSelectMachine: (machine) {
-                                setState(() {
-                                  selectedMachines.add(machine);
-                                  print(
-                                      'Máquinas seleccionadas ahora: $selectedMachines');
-                                });
-                              },
-                            ),
-                        };
+      body: BlocBuilder<SequencesBloc, SequencesState>(
+        builder: (context, state) {
+          Widget machinesContent = const Center(child: CircularProgressIndicator());
 
-                        if (state is MachineTypeInitial) {
-                          BlocProvider.of<MachineTypesBloc>(context)
-                              .add(OnMachineTypeRetrieving());
-                        }
+          //HANDLERS BASED ON CURRENT STATE, HERE WE SPECIFY ALL THAT IS DYNAMIC DEPENDING ON STATE
+          if(state is SequencesInitialState) BlocProvider.of<SequencesBloc>(context).add(OnSequencesMachineRetrieve());
+          if(state is SequencesMachineFailure)machinesContent = const Center(child: Text("Error fetching"));
+          if(state is SequencesMachinesSuccess){  
+            machinesContent = MachinesList(
+                                  machineTypes: state.machines,
+                                  onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
+            );
+          }
+          final machinesList = Container(
+            padding: const EdgeInsets.all(16.0),
+            child: machinesContent,
+          );
 
-                        return Container(
-                          padding: const EdgeInsets.all(16.0),
-                          child: widget,
-                        );
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Boton crear trabajo
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _isAddingOrder = true;
-                            });
-                          },
-                          label: Text(
-                            "Agregar trabajo",
-                            style: TextStyle(color: primaryColor, fontSize: 18),
-                          ),
-                          icon: Icon(
-                            Icons.upload,
-                            color: onSecondaryContainer,
-                          ),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer,
-                            minimumSize: const Size(200, 60),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 30, vertical: 20),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+          final Widget board;
+          if(state.isNewOrder){
+            print("order form");
+            board = AddOrderForm(selectedMachines: selectedMachines, onSave: _onSaveOrder);
+          }else{
+            print("order list");
+            board = OrderList(orders: orders);
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child:Container(
+                              padding: const EdgeInsets.all(16.0),
+                              child: machinesList,
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        // Boton ver trabajos
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _isAddingOrder = false;
-                            });
-                          },
-                          label: Text(
-                            "Ver trabajos",
-                            style: TextStyle(color: primaryColor, fontSize: 18),
-                          ),
-                          icon: Icon(
-                            Icons.upload,
-                            color: onSecondaryContainer,
-                          ),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer,
-                            minimumSize: const Size(200, 60),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 46, vertical: 20),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Boton crear trabajo
+                            TextButton.icon(
+                              onPressed: ()  => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)),
+                              label: Text(
+                                "Agregar trabajo",
+                                style: TextStyle(color: primaryColor, fontSize: 18),
+                              ),
+                              icon: Icon(
+                                Icons.upload,
+                                color: onSecondaryContainer,
+                              ),
+                              style: TextButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .secondaryContainer,
+                                minimumSize: const Size(200, 60),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 30, vertical: 20),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 20),
+                            // Boton ver trabajos
+                            TextButton.icon(
+                              onPressed: () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)),
+                              label: Text(
+                                "Ver trabajos",
+                                style: TextStyle(color: primaryColor, fontSize: 18),
+                              ),
+                              icon: Icon(
+                                Icons.upload,
+                                color: onSecondaryContainer,
+                              ),
+                              style: TextButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .secondaryContainer,
+                                minimumSize: const Size(200, 60),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 46, vertical: 20),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: _isAddingOrder
-                ? AddOrderForm(
-                    selectedMachines: selectedMachines, onSave: _onSaveOrder)
-                : OrderList(orders: orders),
-          ),
-        ],
+              Expanded(
+                flex: 2,
+                child: board
+              ),
+            ],
+          );
+        }
       ),
     );
   }
 
   void _onSaveOrder(String name, List<MachineTypeEntity> selectedMachines) {
-    print(
-        'Máquinas seleccionadas al guardar: ${selectedMachines.map((m) => m.toString()).toList()}');
 
+    //LOGGING PURPOSES
+    print('Máquinas seleccionadas al guardar: ${selectedMachines.map((m) => m.toString()).toList()}');
+    //LOGGING PURPOSES
+
+  /*
     setState(() {
       final process = ProcessEntity(
         machines: selectedMachines,
@@ -260,8 +207,10 @@ class _SequencesPageState extends State<SequencesPage> {
 
       _isAddingOrder = false;
       selectedMachines.clear();
-    });
+    });*/
 
+
+    //LOGGING PURPOSES
     print('Órdenes después de agregar: ${orders.map((o) => {
           'name': o['name'],
           'process': {

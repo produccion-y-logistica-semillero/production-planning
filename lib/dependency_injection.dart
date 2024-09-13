@@ -80,6 +80,7 @@ Future<void> initDependencies() async {
     depIn.registerFactory<SequencesBloc>(
       ()=> SequencesBloc(
         depIn.get<GetMachineTypesUseCase>(),
+        depIn.get<AddSequenceUseCase>()
       )
     );
 

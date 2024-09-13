@@ -14,3 +14,22 @@ class OnSelectMachine implements SequencesEvent{
 }
 
 class OnSequencesMachineRetrieve implements SequencesEvent{}
+
+class OnSequencesSaveProcess implements SequencesEvent{
+  final String processName;
+
+  OnSequencesSaveProcess(this.processName);
+}
+
+class OnMachinesModalChanged implements SequencesEvent{
+  final bool isVisible;
+
+  OnMachinesModalChanged(this.isVisible);
+
+}
+
+class OnMachinesSuccessModalChanged implements SequencesEvent{
+  final bool isVisible;
+
+  OnMachinesSuccessModalChanged(this.isVisible);
+}

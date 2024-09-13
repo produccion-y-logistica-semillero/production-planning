@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/add_machines_successful.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
 
-class AddOrderForm extends StatefulWidget {
-  final List<MachineTypeEntity> selectedMachines;
-  final void Function(String, List<MachineTypeEntity>) onSave;
 
-  const AddOrderForm({
+class AddOrderForm extends StatelessWidget {
+
+
+  final TextEditingController _nameOrder = TextEditingController();
+  final List<MachineTypeEntity> selectedMachines;
+  final void Function(String name) onSave;
+  final SequencesState state;
+
+  AddOrderForm({
     super.key,
     required this.selectedMachines,
     required this.onSave,
+    required this.state
   });
-
-  @override
-  AddOrderFormState createState() => AddOrderFormState();
-}
-
-class AddOrderFormState extends State<AddOrderForm> {
-  final TextEditingController _nameOrder = TextEditingController();
-  bool _isNoMachinesModalVisible = false;
-  bool _isSuccessModalVisible = false;
 
   @override
   Widget build(BuildContext context) {
@@ -64,12 +65,20 @@ class AddOrderFormState extends State<AddOrderForm> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2), 
+                      spreadRadius: 2,  // how much the shadow spreads
+                      blurRadius: 7,   // the blur effect
+                      offset: Offset(0, 3),  // the position of the shadow (x, y)
+                    ),
+                  ],
                 ),
+                //LATER WILL CHANGE TO APPLY GESTURE DETECTOR SO IT CAN BE SCROLLED WITHOUT SHIFT
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _buildMachineList(
-                        widget.selectedMachines, primaryColor),
+                    children: _buildMachineList(state.selectedMachines, primaryColor),
                   ),
                 ),
               ),
@@ -80,7 +89,7 @@ class AddOrderFormState extends State<AddOrderForm> {
                 children: [
                   TextButton.icon(
                     onPressed: () {
-                      _saveOrder(_nameOrder.text, widget.selectedMachines);
+                      _saveOrder(_nameOrder.text, selectedMachines, context);
                     },
                     label: const Text(
                       "Guardar",
@@ -107,37 +116,30 @@ class AddOrderFormState extends State<AddOrderForm> {
             ],
           ),
         ),
-        if (_isNoMachinesModalVisible)
+        if (state.isNoMachinesModalVisible)
           _buildOverlay(
             NoMachinesSelectedModal(
-              onClose: () {
-                setState(() {
-                  _isNoMachinesModalVisible = false; // Cerrar el modal
-                });
-              },
+              onClose: () => BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(false)),
             ),
+            context
           ),
-        if (_isSuccessModalVisible)
+        if (state.isSuccessModalVisible)
           _buildOverlay(
             SuccessModal(
-              onClose: () {
-                setState(() {
-                  _isSuccessModalVisible = false; // Cerrar el modal
-                });
-              },
+              onClose: () =>  BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false)),
             ),
+            context
           ),
       ],
     );
   }
 
   // Función para construir la lista de máquinas con flechas intercaladas
-  List<Widget> _buildMachineList(
-      List<MachineTypeEntity> machines, Color primaryColor) {
+  List<Widget> _buildMachineList(List<MachineTypeEntity>? machines, Color primaryColor) {
     List<Widget> machineWidgets = [];
 
     // Si no hay máquinas seleccionadas, muestra un contenedor vacío
-    if (machines.isEmpty) {
+    if (machines == null) {
       machineWidgets.add(
         const SizedBox(
           height: 500,
@@ -203,30 +205,23 @@ class AddOrderFormState extends State<AddOrderForm> {
   }
 
   // Función para guardar la orden
-  _saveOrder(String name, List<MachineTypeEntity> selectedMachines) {
-    if (name.isNotEmpty && selectedMachines.isNotEmpty) {
-      widget.onSave(name, selectedMachines);
-      setState(() {
-        _isSuccessModalVisible = true;
-      });
+  _saveOrder(String name, List<MachineTypeEntity> selectedMachines, BuildContext context) {
+    if (name.isNotEmpty) {
+      onSave(name);
     } else {
-      setState(() {
-        _isNoMachinesModalVisible = true;
-      });
+      BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(true));
     }
   }
 
   // Función para mostrar los modales sobre toda la pantalla
-  Widget _buildOverlay(Widget modal) {
+  Widget _buildOverlay(Widget modal, BuildContext context) {
     return Positioned.fill(
       child: Stack(
         children: [
           GestureDetector(
             onTap: () {
-              setState(() {
-                _isNoMachinesModalVisible = false;
-                _isSuccessModalVisible = false;
-              });
+              BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(false));
+              BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false));
             },
             child: const SizedBox(
               width: double.infinity,

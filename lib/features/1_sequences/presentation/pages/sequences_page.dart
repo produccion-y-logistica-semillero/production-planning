@@ -69,9 +69,6 @@ class SequencesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color onSecondaryContainer =
-        Theme.of(context).colorScheme.onSecondaryContainer;
-    Color primaryColor = Theme.of(context).colorScheme.primaryContainer;
 
     return Scaffold(
       appBar: getAppBar(),
@@ -84,7 +81,7 @@ class SequencesPage extends StatelessWidget {
           if(state is SequencesMachineFailure)machinesContent = const Center(child: Text("Error fetching"));
           if(state.machines != null){  
             machinesContent = MachinesList(
-             machineTypes: state.machines!!,
+             machineTypes: state.machines!,
              onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
             );
           }
@@ -95,10 +92,8 @@ class SequencesPage extends StatelessWidget {
 
           final Widget board;
           if(state.isNewOrder){
-            print("order form");
-            board = AddOrderForm(selectedMachines: selectedMachines, onSave: _onSaveOrder);
+            board = AddOrderForm(selectedMachines: selectedMachines, onSave: (name)=>_onSaveOrder(context, name), state: state,);
           }else{
-            print("order list");
             board = OrderList(orders: orders);
           }
 
@@ -155,38 +150,7 @@ class SequencesPage extends StatelessWidget {
     );
   }
 
-  void _onSaveOrder(String name, List<MachineTypeEntity> selectedMachines) {
-
-    //LOGGING PURPOSES
-    print('Máquinas seleccionadas al guardar: ${selectedMachines.map((m) => m.toString()).toList()}');
-    //LOGGING PURPOSES
-
-  /*
-    setState(() {
-      final process = ProcessEntity(
-        machines: selectedMachines,
-        durations:
-            List.filled(selectedMachines.length, const Duration(hours: 1)),
-      );
-
-      orders.add({
-        'name': name,
-        'process': process,
-      });
-
-      _isAddingOrder = false;
-      selectedMachines.clear();
-    });*/
-
-
-    //LOGGING PURPOSES
-    print('Órdenes después de agregar: ${orders.map((o) => {
-          'name': o['name'],
-          'process': {
-            'machines': o['process'].machines.map((m) => m.toString()).toList(),
-            'durations':
-                o['process'].durations.map((d) => '${d.inHours}h').toList(),
-          },
-        }).toList()}');
+  void _onSaveOrder(BuildContext context, String name) {    
+    BlocProvider.of<SequencesBloc>(context).add(OnSequencesSaveProcess(name));
   }
 }

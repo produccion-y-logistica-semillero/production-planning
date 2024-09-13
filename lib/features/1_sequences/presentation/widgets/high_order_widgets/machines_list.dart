@@ -5,8 +5,7 @@ import 'package:production_planning/features/0_machines/domain/entities/machine_
 
 class MachinesList extends StatelessWidget {
   final List<MachineTypeEntity> machineTypes;
-  final Function(MachineTypeEntity)
-      onSelectMachine; // Callback para manejar la selección
+  final Function(MachineTypeEntity)onSelectMachine; // Callback para manejar la selección
 
   const MachinesList({
     super.key,

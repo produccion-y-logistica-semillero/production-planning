@@ -8,6 +8,7 @@ import 'package:production_planning/features/1_sequences/presentation/bloc/seque
 import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
+import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/button_mode.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/machines_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
@@ -81,10 +82,10 @@ class SequencesPage extends StatelessWidget {
           //HANDLERS BASED ON CURRENT STATE, HERE WE SPECIFY ALL THAT IS DYNAMIC DEPENDING ON STATE
           if(state is SequencesInitialState) BlocProvider.of<SequencesBloc>(context).add(OnSequencesMachineRetrieve());
           if(state is SequencesMachineFailure)machinesContent = const Center(child: Text("Error fetching"));
-          if(state is SequencesMachinesSuccess){  
+          if(state.machines != null){  
             machinesContent = MachinesList(
-                                  machineTypes: state.machines,
-                                  onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
+             machineTypes: state.machines!!,
+             onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
             );
           }
           final machinesList = Container(
@@ -122,51 +123,19 @@ class SequencesPage extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             // Boton crear trabajo
-                            TextButton.icon(
-                              onPressed: ()  => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)),
-                              label: Text(
-                                "Agregar trabajo",
-                                style: TextStyle(color: primaryColor, fontSize: 18),
-                              ),
-                              icon: Icon(
-                                Icons.upload,
-                                color: onSecondaryContainer,
-                              ),
-                              style: TextButton.styleFrom(
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .secondaryContainer,
-                                minimumSize: const Size(200, 60),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 30, vertical: 20),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                            ButtonMode(
+                              callback: ()  => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)), 
+                              labelText: "Agregar trabajo", 
+                              icon: Icons.upload, 
+                              horizontalPadding: 30
                             ),
                             const SizedBox(height: 20),
                             // Boton ver trabajos
-                            TextButton.icon(
-                              onPressed: () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)),
-                              label: Text(
-                                "Ver trabajos",
-                                style: TextStyle(color: primaryColor, fontSize: 18),
-                              ),
-                              icon: Icon(
-                                Icons.upload,
-                                color: onSecondaryContainer,
-                              ),
-                              style: TextButton.styleFrom(
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .secondaryContainer,
-                                minimumSize: const Size(200, 60),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 46, vertical: 20),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                            ButtonMode(
+                              callback: () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)), 
+                              labelText: "Ver trabajos", 
+                              icon:  Icons.upload,
+                              horizontalPadding: 46
                             ),
                           ],
                         ),

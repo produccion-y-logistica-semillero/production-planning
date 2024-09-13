@@ -10,16 +10,16 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
 
   SequencesBloc(
     this._getMachineTypesUseCase
-  ): super(SequencesInitialState()){
+  ): super(SequencesInitialState(false, null)){
 
     on<OnSequencesMachineRetrieve>(
       (event, emit) async {
-        emit(SequencesRetrievingMachines());
+        emit(SequencesRetrievingMachines(state.isNewOrder, null));
         final response = await _getMachineTypesUseCase();
 
         response.fold(
-          (f) => emit(SequencesMachineFailure()),
-          (machines) => emit(SequencesMachinesSuccess(machines)) 
+          (f) => emit(SequencesMachineFailure(state.isNewOrder, null)),
+          (machines) => emit(SequencesMachinesSuccess(state.isNewOrder,machines)) 
           );
       },
     );
@@ -34,10 +34,7 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
     //to change to emita new instance and trigger re rendering
     on<OnUseModeEvent>(
       (event, emit){
-        print(state.isNewOrder);
-        state.isNewOrder = event.isNewOrder;
-        print(state.isNewOrder);
-        emit(state);
+        emit(SequencesModeChanged(event.isNewOrder, state.machines));
       }
     );
 

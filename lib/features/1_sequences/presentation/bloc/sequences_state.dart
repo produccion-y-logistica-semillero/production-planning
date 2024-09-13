@@ -1,20 +1,32 @@
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 
 abstract class SequencesState{
-  bool isNewOrder = false;
+  bool isNewOrder;
+  List<MachineTypeEntity>? machines;
+
+  SequencesState(this.isNewOrder, this.machines);
+
 }
 
-class SequencesInitialState extends SequencesState{}
+class SequencesInitialState extends SequencesState{
+  SequencesInitialState(super.isNewOrder, super.machines);
+}
 
 
-class SequencesRetrievingMachines extends SequencesState{}
+class SequencesRetrievingMachines extends SequencesState{
+  SequencesRetrievingMachines(super.isNewOrder, super.machines);
+}
 
 
 class SequencesMachinesSuccess extends SequencesState{
-  List<MachineTypeEntity> machines;
-
-  SequencesMachinesSuccess(this.machines);
+  SequencesMachinesSuccess(super.isNewOrder, super.machines);
 }
 
 
-class SequencesMachineFailure extends SequencesState{}
+class SequencesMachineFailure extends SequencesState{
+  SequencesMachineFailure(super.isNewOrder, super.machines);
+}
+
+class SequencesModeChanged extends SequencesState{
+  SequencesModeChanged(super.isNewOrder, super.machines);
+}

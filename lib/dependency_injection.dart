@@ -1,4 +1,4 @@
-import 'dart:io';
+// import 'dart:io';
 
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/factories/factory.dart';
@@ -22,11 +22,10 @@ import 'package:production_planning/features/2_orders/presentation/bloc/new_orde
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
-
 final depIn = GetIt.instance;
 
-Future<void> initDependencies() async{
-  try{
+Future<void> initDependencies() async {
+  try {
     // Initialize the sqflite FFI loader for desktop platforms
     sqflite_ffi.sqfliteFfiInit();
     // Set the database factory to FFI
@@ -95,6 +94,6 @@ Future<void> initDependencies() async{
 }
 
 void logMessage(String message) {
-  final logFile = File('log.txt');
-  logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
+  // final logFile = File('log.txt');
+  // logFile.writeAsStringSync(message + '\n', mode: FileMode.append);
 }

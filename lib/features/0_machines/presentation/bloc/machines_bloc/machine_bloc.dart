@@ -5,8 +5,7 @@ import 'package:production_planning/features/0_machines/domain/use_cases/get_mac
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machines_event.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machines_state.dart';
 
-class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
-
+class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
   final GetMachinesUseCase _getMachinesUseCase;
   final DeleteMachineUseCase _deleteMachineUseCase;
 
@@ -18,20 +17,37 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
         //emit so it shows loading
         emit(MachinesRetrieving(null));
 
-        List<MachineEntity> machines = [
-          MachineEntity(status: "Disponible", processingTime: Duration(), preparationTime: Duration(), restTime: Duration(), continueCapacity: 5, id:10),
-          MachineEntity(status: "Disponible", processingTime: Duration(), preparationTime: Duration(), restTime: Duration(), continueCapacity: 5, id:12),
-          MachineEntity(status: "Disponible", processingTime: Duration(), preparationTime: Duration(), restTime: Duration(), continueCapacity: 5, id:13),
-        ];
-        emit(MachinesRetrievingSuccess(machines));
-        /*final response  = await _getMachinesUseCase(p:event.typeId);
+      List<MachineEntity> machines = [
+        MachineEntity(
+            status: "Disponible",
+            processingTime: Duration(),
+            preparationTime: Duration(),
+            restTime: Duration(),
+            continueCapacity: 5,
+            id: 10),
+        MachineEntity(
+            status: "Disponible",
+            processingTime: Duration(),
+            preparationTime: Duration(),
+            restTime: Duration(),
+            continueCapacity: 5,
+            id: 12),
+        MachineEntity(
+            status: "Disponible",
+            processingTime: Duration(),
+            preparationTime: Duration(),
+            restTime: Duration(),
+            continueCapacity: 5,
+            id: 13),
+      ];
+      emit(MachinesRetrievingSuccess(machines));
+      /*final response  = await _getMachinesUseCase(p:event.typeId);
 
         response.fold(
           (failure)=>emit(MachinesRetrievingError()), 
           (machines)=>emit(MachinesRetrievingSuccess(machines))
         );*/
-      }
-    );
+    });
 
     on<OnNewMachine>(
       (event, emit) async{
@@ -52,11 +68,17 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
         final continueCap = int.parse(event.continueCapacity);
         //here we should call domain and get as response the machine entity to add
 
-        machines.add(MachineEntity(id: 100, status: "Disponible", processingTime: capacity, preparationTime: preparation, restTime: rest, continueCapacity: continueCap));
 
-        emit(MachinesRetrievingSuccess(machines));
-      }
-    );
+      machines.add(MachineEntity(
+          id: 100,
+          status: "Disponible",
+          processingTime: capacity,
+          preparationTime: preparation,
+          restTime: rest,
+          continueCapacity: continueCap));
+
+      emit(MachinesRetrievingSuccess(machines));
+    });
 
     on<OnDeleteMachine>(
       (event, emit) async{
@@ -82,5 +104,4 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState>{
       }
     );
   }
-
 }

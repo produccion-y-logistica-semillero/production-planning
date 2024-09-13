@@ -7,35 +7,33 @@ import 'package:production_planning/features/0_machines/domain/entities/machine_
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
 
-class MachineRepositoryImpl implements MachineRepository{
-
+class MachineRepositoryImpl implements MachineRepository {
   final MachineTypeDao machineTypeDao;
   final MachineDao machineDao;
 
-  MachineRepositoryImpl({required this.machineTypeDao, required this.machineDao});
+  MachineRepositoryImpl(
+      {required this.machineTypeDao, required this.machineDao});
 
   @override
   Future<Either<Failure, List<MachineTypeEntity>>> getAllMachineTypes() async {
-    try{
-      return Right(
-        (await machineTypeDao.getAllMachines())
-          .map((model)=> model.toEntity())
-          .toList()
-      );
-    }
-    on Failure catch(failure) {
+    try {
+      return Right((await machineTypeDao.getAllMachines())
+          .map((model) => model.toEntity())
+          .toList());
+    } on Failure catch (failure) {
       return Left(failure);
     }
   }
 
   //need to check if it's good to get only the ID or if it could be better to get the entire entry
   @override
-  Future<Either<Failure, int>> insertMachineType(MachineTypeEntity machine) async {
-    try{
-      int id = await machineTypeDao.insertMachine(MachineTypeModel.fromEntity(machine));
+  Future<Either<Failure, int>> insertMachineType(
+      MachineTypeEntity machine) async {
+    try {
+      int id = await machineTypeDao
+          .insertMachine(MachineTypeModel.fromEntity(machine));
       return Right(id);
-    }
-    on Failure catch(failure){
+    } on Failure catch (failure) {
       return Left(failure);
     }
   }
@@ -53,7 +51,8 @@ class MachineRepositoryImpl implements MachineRepository{
   }
 
   @override
-  Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(int machineTypeId) {
+  Future<Either<Failure, List<MachineEntity>>> getAllMachinesFromType(
+      int machineTypeId) {
     // TODO: implement getAllMachinesFromType
     throw UnimplementedError();
   }

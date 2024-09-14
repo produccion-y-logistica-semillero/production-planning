@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class NewMachineInputField extends StatelessWidget{
+class InputFieldCustom extends StatelessWidget{
 
   final double sizedBoxWidth;
   final int maxLines;
@@ -8,7 +8,7 @@ class NewMachineInputField extends StatelessWidget{
   final String hintText;
   final TextEditingController controller;
 
-  const NewMachineInputField({required this.sizedBoxWidth, required this.maxLines, required this.title, required this.hintText, required this.controller, super.key});
+  const InputFieldCustom({required this.sizedBoxWidth, required this.maxLines, required this.title, required this.hintText, required this.controller, super.key});
 
   @override
   Widget build(BuildContext context) {

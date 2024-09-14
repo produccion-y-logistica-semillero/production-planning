@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/new_machine_input_field.dart';
+import 'package:production_planning/shared/widgets/new_machine_input_field.dart';
 
 class AddMachineTypeDialog extends StatelessWidget{
 
@@ -22,7 +22,7 @@ class AddMachineTypeDialog extends StatelessWidget{
             const SizedBox(height: 15,),
             const Text("Agregar tipo de maquina"),
             const SizedBox(height: 30,),
-            NewMachineInputField(
+            InputFieldCustom(
               sizedBoxWidth: 30,
               title: "Nombre : ",
               hintText: "Nueva maquina",
@@ -30,7 +30,7 @@ class AddMachineTypeDialog extends StatelessWidget{
               controller: _nameController,
             ),
             const SizedBox(height: 30,),
-            NewMachineInputField(
+            InputFieldCustom(
               sizedBoxWidth: 10,
               title: "Descripcion : ",
               hintText: "Descripcion maquina",

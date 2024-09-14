@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/new_machine_hour_field.dart';
+import 'package:production_planning/shared/widgets/hour_field.dart';
 
 class AddMachineDialog extends StatelessWidget{
   final String machineTypeName;
@@ -34,11 +34,11 @@ class AddMachineDialog extends StatelessWidget{
             const SizedBox(height: 10,),
             Text('Nueva maquina de $machineTypeName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),),
             const SizedBox(height: 20,),
-            NewMachineHourField(text: '1 hora de trabajo promedio de $machineTypeName para esta maquina equivale a: ', controller: capacityController,),
+            HourField(text: '1 hora de trabajo promedio de $machineTypeName para esta maquina equivale a: ', controller: capacityController,),
             const SizedBox(height: 30,),
-            NewMachineHourField(text: 'Tiempo de preparacion de la maquina: ', controller: preparationController),
+            HourField(text: 'Tiempo de preparacion de la maquina: ', controller: preparationController),
             const SizedBox(height: 30,),
-            NewMachineHourField(text: 'Tiempo de descanso necesario: ', controller: restTimeController),
+            HourField(text: 'Tiempo de descanso necesario: ', controller: restTimeController),
             const SizedBox(height: 30,),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

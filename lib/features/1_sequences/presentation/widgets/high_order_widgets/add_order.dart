@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
-import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/hour_text_input.dart';
-import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/new_machine_input_field.dart';
+import 'package:production_planning/shared/widgets/hour_text_input.dart';
+import 'package:production_planning/shared/widgets/new_machine_input_field.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
@@ -169,7 +169,7 @@ class AddOrderForm extends StatelessWidget {
                         children: [
                           Text('Maquina ${machines[i].machineName}'),
                           const SizedBox(height: 10,),
-                          NewMachineInputField(
+                          InputFieldCustom(
                             sizedBoxWidth: 30,
                             maxLines: 5,
                             title: "Descripcion",

@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
-import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/hour_text_input.dart';
+import 'package:production_planning/shared/widgets/hour_text_input.dart';
 
-class NewMachineHourField extends StatelessWidget{
+class HourField extends StatelessWidget{
   final String text;
   final TextEditingController controller;
 
-  const NewMachineHourField({super.key, required this.text, required this.controller});
+  const HourField({super.key, required this.text, required this.controller});
 
   @override
   Widget build(BuildContext context) {

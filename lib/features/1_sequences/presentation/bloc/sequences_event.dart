@@ -42,3 +42,9 @@ class OnTaskUpdated implements SequencesEvent{
   
   OnTaskUpdated(this.hour, this.description, this.index);
 }
+
+class OnTaskRemoved implements SequencesEvent{
+  final int index;
+
+  OnTaskRemoved(this.index);
+}

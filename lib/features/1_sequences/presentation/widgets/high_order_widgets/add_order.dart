@@ -21,6 +21,7 @@ class AddOrderForm extends StatelessWidget {
   final SequencesState state;
   final TextEditingController descController = TextEditingController();
   final TextEditingController hourController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   
 
   AddOrderForm({
@@ -33,7 +34,6 @@ class AddOrderForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color onSecondaryColor = Theme.of(context).colorScheme.onSecondaryContainer;
-    Color primaryColor = Theme.of(context).colorScheme.primaryContainer;
 
     return Stack(
       children: [
@@ -82,10 +82,16 @@ class AddOrderForm extends StatelessWidget {
                   ],
                 ),
                 //LATER WILL CHANGE TO APPLY GESTURE DETECTOR SO IT CAN BE SCROLLED WITHOUT SHIFT
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _buildMachineList(state.selectedMachines, context),
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details){
+                    _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+                  },
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: _scrollController,
+                    child: Row(
+                      children: _buildMachineList(state.selectedMachines, context),
+                    ),
                   ),
                 ),
               ),
@@ -155,55 +161,57 @@ class AddOrderForm extends StatelessWidget {
     } else {
       for (int i = 0; i < machines.length; i++) {
         machineWidgets.add(
-          TaskContainer(task: machines[i], number: i+1, callback: 
-            (){
-              showDialog(context: context, 
-              builder: 
-                (dialogContext){
-                  return Dialog(
-                    child: SizedBox(
-                      height: 350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
-                      width:  MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('Maquina ${machines[i].machineName}'),
-                          const SizedBox(height: 10,),
-                          InputFieldCustom(
-                            sizedBoxWidth: 30,
-                            maxLines: 5,
-                            title: "Descripcion",
-                            hintText: "",
-                            controller: descController,
-                          ),
-                          const SizedBox(height: 10,),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text("Tiempo: "),
-                              HourTextInput(controller: hourController)
-                            ],
-                          ),
-                          const SizedBox(height: 10,),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              TextButton(onPressed: ()=> Navigator.of(dialogContext).pop(), child: Text("Cancelar")),
-                              TextButton(onPressed: (){
-                                BlocProvider.of<SequencesBloc>(context).add(OnTaskUpdated(hourController.text, descController.text, i));
-                                hourController.clear();
-                                descController.clear();
-                                Navigator.of(dialogContext).pop();
-                              }, child: Text("Guardar")),
-                            ],
-                          )
-                        ],
+          TaskContainer(task: machines[i], number: i+1, 
+            onDeleteCallback: ()=> BlocProvider.of<SequencesBloc>(context).add(OnTaskRemoved(i)),
+            callback: 
+              (){
+                showDialog(context: context, 
+                builder: 
+                  (dialogContext){
+                    return Dialog(
+                      child: SizedBox(
+                        height: 350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
+                        width:  MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Maquina ${machines[i].machineName}'),
+                            const SizedBox(height: 10,),
+                            InputFieldCustom(
+                              sizedBoxWidth: 30,
+                              maxLines: 5,
+                              title: "Descripcion",
+                              hintText: "",
+                              controller: descController,
+                            ),
+                            const SizedBox(height: 10,),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text("Tiempo: "),
+                                HourTextInput(controller: hourController)
+                              ],
+                            ),
+                            const SizedBox(height: 10,),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                TextButton(onPressed: ()=> Navigator.of(dialogContext).pop(), child: Text("Cancelar")),
+                                TextButton(onPressed: (){
+                                  BlocProvider.of<SequencesBloc>(context).add(OnTaskUpdated(hourController.text, descController.text, i));
+                                  hourController.clear();
+                                  descController.clear();
+                                  Navigator.of(dialogContext).pop();
+                                }, child: Text("Guardar")),
+                              ],
+                            )
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                }
-              );
-            }
+                    );
+                  }
+                );
+              }
           )
         );
 

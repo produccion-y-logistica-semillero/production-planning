@@ -93,6 +93,13 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
       }
     );
 
+    on<OnTaskRemoved>(
+      (event, emit){
+        state.selectedMachines!.removeAt(event.index);
+        emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines));
+      }
+    );
+
   }
   
 }

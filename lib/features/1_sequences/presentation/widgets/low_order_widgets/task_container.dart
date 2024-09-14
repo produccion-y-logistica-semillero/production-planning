@@ -6,11 +6,13 @@ class TaskContainer extends StatelessWidget{
   final NewTaskModel task;
   final int number;
   final void Function() callback;
+  final void Function() onDeleteCallback;
 
   TaskContainer({
     required this.task,
     required this.number,
     required this.callback,
+    required this.onDeleteCallback
   });
 
   @override
@@ -27,6 +29,7 @@ class TaskContainer extends StatelessWidget{
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  IconButton(onPressed: ()=>onDeleteCallback(), icon: Icon(Icons.delete, color: Colors.red,)),
                   Text(
                     'Tarea ${number}',
                     style: const TextStyle(

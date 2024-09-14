@@ -1,11 +1,12 @@
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 
 abstract class SequencesState{
   bool isNewOrder;
   List<MachineTypeEntity>? machines;
   bool isSuccessModalVisible;
   bool isNoMachinesModalVisible;
-  List<MachineTypeEntity>? selectedMachines;
+  List<NewTaskModel>? selectedMachines;
 
 
   SequencesState(this.isNewOrder, this.machines, this.isSuccessModalVisible, this.isNoMachinesModalVisible, this.selectedMachines);

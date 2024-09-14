@@ -1,0 +1,68 @@
+import 'package:flutter/material.dart';
+import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
+
+class TaskContainer extends StatelessWidget{
+
+  final NewTaskModel task;
+  final int number;
+  final void Function() callback;
+
+  TaskContainer({
+    required this.task,
+    required this.number,
+    required this.callback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onDoubleTap: ()=>callback(),
+      child: Container(
+              width: 200,
+              margin: const EdgeInsets.symmetric(vertical: 80, horizontal: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Tarea ${number}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    task.machineName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Tiempo: ${task.processingUnit.hour}:${task.processingUnit.minute}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    task.description,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
+                  )
+                ],
+              ),
+            ),
+    );
+  }
+}

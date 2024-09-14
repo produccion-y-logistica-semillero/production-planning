@@ -1,4 +1,5 @@
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
+import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 
 abstract class SequencesEvent{}
 
@@ -32,4 +33,12 @@ class OnMachinesSuccessModalChanged implements SequencesEvent{
   final bool isVisible;
 
   OnMachinesSuccessModalChanged(this.isVisible);
+}
+
+class OnTaskUpdated implements SequencesEvent{
+  final String hour;
+  final String description;
+  final int index;
+  
+  OnTaskUpdated(this.hour, this.description, this.index);
 }

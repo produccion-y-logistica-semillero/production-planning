@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_type_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
@@ -35,9 +34,11 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
     on<OnSelectMachine>(
       (event, emit){
         //emit the state with the new machine selected
-        List<MachineTypeEntity> selectedMachines = [];
+        List<NewTaskModel> selectedMachines = [];
         if(state.selectedMachines != null) selectedMachines = state.selectedMachines!;
-        emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(event.machine)));
+        MachineTypeEntity m = event.machine;
+        final newTask = NewTaskModel(m.id!, TimeOfDay(hour: 1, minute: 0), "", 0, m.name);
+        emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(newTask)));
       }
     );
 
@@ -52,13 +53,12 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
       (event, emit) async{
 
         List<dynamic> parameters = [event.processName];
-        List<NewTaskModel> machines = [];
 
-        for(int i = 0; i < state.machines!.length; i++){
-          MachineTypeEntity m = state.machines![i];
-          machines.add(NewTaskModel(m.id!, TimeOfDay(hour: 1, minute: 10), "empty by now", i+1));
+        for(int i = 0; i < state.selectedMachines!.length; i++){
+          state.selectedMachines![i].execOrder = i+1;
         }
-        parameters.add(machines);
+        parameters.add(state.selectedMachines);
+
         final response = await _addSequenceUseCase(p: parameters);
         response.fold((f){
           add(OnMachinesModalChanged(true));
@@ -79,6 +79,17 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
     on<OnMachinesSuccessModalChanged>(
       (event, emit){
         emit(SequencesMinimumStateChange(state.isNewOrder, state.machines, event.isVisible, state.isNoMachinesModalVisible, state.selectedMachines));
+      }
+    );
+
+    on<OnTaskUpdated>(
+      (event, emit){
+        state.selectedMachines![event.index].description = event.description;
+        state.selectedMachines![event.index].processingUnit = TimeOfDay(
+          hour: int.parse(event.hour.substring(0,2) ), 
+          minute:int.parse(event.hour.substring(3,5) ), 
+        );
+        emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines));
       }
     );
 

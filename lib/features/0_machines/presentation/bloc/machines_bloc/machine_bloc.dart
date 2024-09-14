@@ -41,12 +41,6 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
             id: 13),
       ];
       emit(MachinesRetrievingSuccess(machines));
-      /*final response  = await _getMachinesUseCase(p:event.typeId);
-
-        response.fold(
-          (failure)=>emit(MachinesRetrievingError()), 
-          (machines)=>emit(MachinesRetrievingSuccess(machines))
-        );*/
     });
 
     on<OnNewMachine>(

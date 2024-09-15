@@ -4,9 +4,9 @@ import 'package:production_planning/features/0_machines/domain/entities/machine_
 import 'package:production_planning/shared/widgets/hour_text_input.dart';
 import 'package:production_planning/shared/widgets/new_machine_input_field.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/add_machines_successful.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/task_container.dart';

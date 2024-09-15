@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/features/1_sequences/domain/entities/sequence_entity.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_event.dart';
 
 class OrderProcess extends StatelessWidget {
-  final ProcessEntity process;
+  final SequenceEntity process;
+  final ScrollController _scrollController = ScrollController();
 
-  const OrderProcess({super.key, required this.process});
+  OrderProcess({super.key, required this.process});
 
   @override
   Widget build(BuildContext context) {
     Color onSecondaryColor = Theme.of(context).colorScheme.onSecondaryContainer;
     Color primaryColor = Theme.of(context).colorScheme.primaryContainer;
-    final machineCount =
-        process.machines.isNotEmpty ? process.machines.length : 0;
+    final machineCount = process.tasks!.length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -26,72 +29,84 @@ class OrderProcess extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2), 
+                      spreadRadius: 2,  // how much the shadow spreads
+                      blurRadius: 7,   // the blur effect
+                      offset: Offset(0, 3),  // the position of the shadow (x, y)
+                    ),
+                  ],
             ),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: machineCount > 0 ? machineCount * 2 - 1 : 0,
-              itemBuilder: (context, index) {
-                if (index % 2 == 1) {
-                  return const Center(
-                    child: Icon(
-                      Icons.arrow_forward,
-                      size: 30,
-                      color: Colors.grey,
+            child: GestureDetector(
+              onHorizontalDragUpdate: (details){
+                    _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+                },
+              child: ListView.builder(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                itemCount: machineCount > 0 ? machineCount * 2 - 1 : 0,
+                itemBuilder: (context, index) {
+                  if (index % 2 == 1) {
+                    return const Center(
+                      child: Icon(
+                        Icons.arrow_forward,
+                        size: 30,
+                        color: Colors.grey,
+                      ),
+                    );
+                  }
+              
+                  final machineIndex = index ~/ 2;
+                  if (machineIndex >= process.tasks!.length) {
+                    return Container();
+                  }
+              
+                  final duration = process.tasks![machineIndex].processingUnits;
+              
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Container(
+                      width: 200,
+                      margin: const EdgeInsets.symmetric(vertical: 80),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Tarea ${process.tasks![machineIndex].execOrder}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            process.tasks![machineIndex].machineName!,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Duración: ${duration.hour}:${duration.minute}', // Mostrar la duración tal cual
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
                   );
-                }
-
-                final machineIndex = index ~/ 2;
-                if (machineIndex >= process.machines.length) {
-                  return Container();
-                }
-
-                final machine = process.machines[machineIndex];
-                final duration = process.durations[machineIndex];
-                final taskNumber = machineIndex + 1;
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Container(
-                    width: 200,
-                    margin: const EdgeInsets.symmetric(vertical: 80),
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Tarea $taskNumber',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          machine.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Duración: ${duration.toString().split(".").first}', // Mostrar la duración tal cual
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                },
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -99,9 +114,9 @@ class OrderProcess extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton.icon(
-                onPressed: () {},
+                onPressed: () => BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!)),
                 label: const Text(
-                  "Editar",
+                  "Eliminar",
                   style: TextStyle(color: Colors.white, fontSize: 15),
                 ),
                 icon: Icon(
@@ -110,7 +125,7 @@ class OrderProcess extends StatelessWidget {
                 ),
                 style: ButtonStyle(
                   backgroundColor: WidgetStateProperty.all(
-                    Theme.of(context).colorScheme.primaryContainer,
+                    Theme.of(context).colorScheme.onError,
                   ),
                   minimumSize: WidgetStateProperty.all(const Size(120, 50)),
                   shape: WidgetStateProperty.all(RoundedRectangleBorder(

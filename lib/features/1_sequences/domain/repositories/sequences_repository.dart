@@ -6,4 +6,5 @@ abstract class SequencesRepository{
   Future<Either<Failure, bool>> createSequence(SequenceEntity sequence);
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences();
   Future<Either<Failure, SequenceEntity?>> getFullSequence(int id);
+  Future<Either<Failure, bool>> deleteSequence(int id);
 }

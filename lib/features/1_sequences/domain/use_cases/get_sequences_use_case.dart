@@ -11,7 +11,7 @@ class GetSequencesUseCase implements UseCase<List<SequenceEntity>,void>{
   GetSequencesUseCase(this.repository);
 
   @override
-  Future<Either<Failure, List<SequenceEntity>>> call({required p}) {
+  Future<Either<Failure, List<SequenceEntity>>> call({p}) {
     return repository.getBasicSequences();
   }
   

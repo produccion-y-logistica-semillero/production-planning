@@ -5,8 +5,8 @@ import 'package:production_planning/features/0_machines/domain/use_cases/get_mac
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/add_sequence_use_case.dart';
 
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
 
 class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
 

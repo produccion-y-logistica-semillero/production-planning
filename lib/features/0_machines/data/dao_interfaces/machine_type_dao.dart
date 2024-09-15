@@ -12,6 +12,7 @@ abstract class MachineTypeDao{
   Future<List<MachineTypeModel>> getAllMachines() ;
   Future<int> insertMachine(MachineTypeModel model);
   Future<bool> deleteMachine(int id);
+  Future<String> getMachineName(int id);
 
   
 }

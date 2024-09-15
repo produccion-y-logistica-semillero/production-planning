@@ -21,7 +21,8 @@ class AddSequenceUseCase implements UseCase<bool, List<dynamic>>{
               execOrder: t.execOrder, 
               processingUnits: t.processingUnit, 
               description: t.description, 
-              machineTypeId: t.machineTypeId)
+              machineTypeId: t.machineTypeId,
+              machineName: null)
           ).toList();
           
     final SequenceEntity seq = SequenceEntity(null, tasks, p[0] as String);

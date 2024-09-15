@@ -23,7 +23,9 @@ class TasksDaoSqllite implements TasksDao{
   Future<List<TaskModel>> getTasksBySequenceId(int id) async{
     try{
       return (await db.query('TASKS', where: 'sequence_id = ?', whereArgs: [id]))
-      .map((json) => TaskModel.fromJson(json))
+      .map((json) { 
+        return TaskModel.fromJson(json);
+      })
       .toList();
     }catch(error){
       throw LocalStorageFailure();

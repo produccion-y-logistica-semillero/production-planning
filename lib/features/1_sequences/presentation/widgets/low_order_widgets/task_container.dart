@@ -8,7 +8,8 @@ class TaskContainer extends StatelessWidget{
   final void Function() callback;
   final void Function() onDeleteCallback;
 
-  TaskContainer({
+  const TaskContainer({
+    super.key,
     required this.task,
     required this.number,
     required this.callback,

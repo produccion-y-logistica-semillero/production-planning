@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_event.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_state.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/button_mode.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
@@ -67,6 +67,8 @@ class SequencesPage extends StatelessWidget {
 
   String? newOrderName;
 
+  SequencesPage({super.key});
+
   @override
   Widget build(BuildContext context) {
 
@@ -94,7 +96,7 @@ class SequencesPage extends StatelessWidget {
           if(state.isNewOrder){
             board = AddOrderForm(selectedMachines: selectedMachines, onSave: (name)=>_onSaveOrder(context, name), state: state,);
           }else{
-            board = OrderList(orders: orders);
+            board = OrderList();
           }
 
           return Row(
@@ -105,13 +107,13 @@ class SequencesPage extends StatelessWidget {
                   padding: const EdgeInsets.all(10),
                   child: Column(
                     children: [
-                      Expanded(
-                        flex: 2,
-                        child:Container(
-                              padding: const EdgeInsets.all(16.0),
-                              child: machinesList,
-                            ),
-                      ),
+                      if (state.isNewOrder)Expanded(
+                          flex: 2,
+                          child:Container(
+                                padding: const EdgeInsets.all(16.0),
+                                child: machinesList,
+                              ),
+                        ),
                       Expanded(
                         flex: 1,
                         child: Column(

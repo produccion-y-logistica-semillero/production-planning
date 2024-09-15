@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_type_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/sequences_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
 import 'package:production_planning/features/1_sequences/data/models/sequence_model.dart';
@@ -11,8 +12,9 @@ import 'package:production_planning/features/1_sequences/domain/repositories/seq
 class SequencesRepositoryImpl implements SequencesRepository{
   final SequencesDao sequencesDao;
   final TasksDao tasksDao;
+  final MachineTypeDao machineTypeDao;
 
-  SequencesRepositoryImpl({required this.sequencesDao, required this.tasksDao});
+  SequencesRepositoryImpl({required this.sequencesDao, required this.tasksDao, required this.machineTypeDao});
 
   @override
   Future<Either<Failure, bool>> createSequence(SequenceEntity sequence) async {
@@ -48,9 +50,23 @@ class SequencesRepositoryImpl implements SequencesRepository{
       final SequenceEntity?  seq = (await sequencesDao.getSequenceById(id))?.toEntity();
       if(seq != null){
         seq.tasks = (await tasksDao.getTasksBySequenceId(id)).map((model) => model.toEntity()).toList();
+
+        for(TaskEntity t in seq.tasks!){
+          t.machineName = await machineTypeDao.getMachineName(t.machineTypeId);
+        }
         return Right(seq);
       }
       return const Right(null);
+    }
+    on LocalStorageFailure catch(f){
+      return Left(f);
+    }
+  }
+  
+  @override
+  Future<Either<Failure, bool>> deleteSequence(int id) async {
+    try{
+      tasksDao.
     }
     on LocalStorageFailure catch(f){
       return Left(f);

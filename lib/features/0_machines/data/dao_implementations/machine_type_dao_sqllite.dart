@@ -54,5 +54,16 @@ class MachineTypeDaoSQLlite implements MachineTypeDao{
       throw LocalStorageFailure();
     }
   }
+  
+  @override
+  Future<String> getMachineName(int id) async {
+    try{
+      final response = await db.query('MACHINE_TYPES', where: 'machine_type_id = ?', whereArgs: [id]);
+      return response[0]["name"].toString();
+    }
+    catch(error){
+      throw LocalStorageFailure();
+    }
+  }
 
 }

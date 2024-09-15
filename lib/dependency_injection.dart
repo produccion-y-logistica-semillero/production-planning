@@ -17,7 +17,8 @@ import 'package:production_planning/features/1_sequences/domain/repositories/seq
 import 'package:production_planning/features/1_sequences/domain/use_cases/add_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
@@ -47,7 +48,8 @@ Future<void> initDependencies() async {
     //Sequences repositories
     depIn.registerLazySingleton<SequencesRepository>(()=> SequencesRepositoryImpl(
       sequencesDao: daoFactory.getSequenceDao(), 
-      tasksDao: daoFactory.getTaskDao()
+      tasksDao: daoFactory.getTaskDao(),
+      machineTypeDao: daoFactory.getMachineTypeDao()
     ));
 
     //Machine use cases
@@ -81,6 +83,12 @@ Future<void> initDependencies() async {
       ()=> SequencesBloc(
         depIn.get<GetMachineTypesUseCase>(),
         depIn.get<AddSequenceUseCase>()
+      )
+    );
+    depIn.registerFactory<SeeProcessBloc>(
+      ()=> SeeProcessBloc(
+        depIn.get<GetSequencesUseCase>(),
+        depIn.get<GetSequenceUseCase>()
       )
     );
 

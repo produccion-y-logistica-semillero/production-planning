@@ -66,7 +66,12 @@ class SequencesRepositoryImpl implements SequencesRepository{
   @override
   Future<Either<Failure, bool>> deleteSequence(int id) async {
     try{
-      tasksDao.
+      bool deleted = await tasksDao.deleteTasks(id);
+      if(deleted){
+        deleted = await sequencesDao.deleteSequence(id);
+        return Right(deleted);
+      }
+      return const Right(false);
     }
     on LocalStorageFailure catch(f){
       return Left(f);

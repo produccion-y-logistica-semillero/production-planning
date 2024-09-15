@@ -32,4 +32,14 @@ class TasksDaoSqllite implements TasksDao{
     }
   }
   
+  @override
+  Future<bool> deleteTasks(int id) async{
+    try{
+      int nDeleted = await  db.delete('TASKS', where: 'sequence_id = ?', whereArgs: [id]);
+      return nDeleted > 0;
+    }catch(error){
+      throw LocalStorageFailure();
+    }
+  }
+  
 }

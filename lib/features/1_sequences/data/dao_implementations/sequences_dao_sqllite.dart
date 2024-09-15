@@ -42,4 +42,14 @@ class SequencesDaoSqllite implements SequencesDao{
     }
   }
   
+  @override
+  Future<bool> deleteSequence(int id) async {
+    try{
+      int numberDeleted = await db.delete('SEQUENCES', where: 'sequence_id = ? ', whereArgs: [id]);
+      return numberDeleted> 0;
+    }catch(e){
+      throw LocalStorageFailure();
+    }
+  }
+  
 }

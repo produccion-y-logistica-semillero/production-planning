@@ -114,7 +114,31 @@ class OrderProcess extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton.icon(
-                onPressed: () => BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!)),
+                onPressed: () {
+                  showDialog(
+                    context: context, 
+                    builder: (dialogContext){
+                      return AlertDialog(
+                        title: Text("Estas seguro de eliminar?"),
+                        content: Row(
+                          children: [
+                            TextButton(
+                              onPressed: ()=> Navigator.of(dialogContext).pop(), 
+                              child: Text("Cancelar"),
+                            ),
+                            TextButton(
+                              onPressed: (){
+                                BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!));
+                                Navigator.of(dialogContext).pop();
+                              }, 
+                              child: Text("Eliminar"),
+                            ),
+                          ],
+                        )
+                      );
+                    }
+                  );
+                },
                 label: const Text(
                   "Eliminar",
                   style: TextStyle(color: Colors.white, fontSize: 15),
@@ -125,7 +149,7 @@ class OrderProcess extends StatelessWidget {
                 ),
                 style: ButtonStyle(
                   backgroundColor: WidgetStateProperty.all(
-                    Theme.of(context).colorScheme.onError,
+                    Colors.red,
                   ),
                   minimumSize: WidgetStateProperty.all(const Size(120, 50)),
                   shape: WidgetStateProperty.all(RoundedRectangleBorder(

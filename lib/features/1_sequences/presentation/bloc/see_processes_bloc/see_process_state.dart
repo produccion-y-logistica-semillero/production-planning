@@ -27,3 +27,11 @@ class SequenceRetrieveFailure extends SeeProcessState{
 class SequenceRetrieveSuccess extends SeeProcessState{
   SequenceRetrieveSuccess(super.sequences, super.selectedProcess, super.process);
 }
+
+class SequenceDeletedFailure extends SeeProcessState{
+  SequenceDeletedFailure(super.sequences, super.selectedProcess, super.process);
+}
+
+class SequenceDeletedSuccess extends SeeProcessState{
+  SequenceDeletedSuccess(super.sequences, super.selectedProcess, super.process);
+}

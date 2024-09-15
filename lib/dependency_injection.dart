@@ -15,6 +15,7 @@ import 'package:production_planning/features/0_machines/presentation/bloc/machin
 import 'package:production_planning/features/1_sequences/data/repositories/sequences_repository_impl.dart';
 import 'package:production_planning/features/1_sequences/domain/repositories/sequences_repository.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/add_sequence_use_case.dart';
+import 'package:production_planning/features/1_sequences/domain/use_cases/delete_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
@@ -63,6 +64,7 @@ Future<void> initDependencies() async {
     depIn.registerLazySingleton<AddSequenceUseCase>(()=> AddSequenceUseCase(depIn.get<SequencesRepository>()));
     depIn.registerLazySingleton<GetSequenceUseCase>(()=> GetSequenceUseCase(depIn.get<SequencesRepository>()));
     depIn.registerLazySingleton<GetSequencesUseCase>(()=> GetSequencesUseCase(depIn.get<SequencesRepository>()));
+    depIn.registerLazySingleton<DeleteSequenceUseCase>(()=> DeleteSequenceUseCase(depIn.get<SequencesRepository>()));
     
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
@@ -88,7 +90,8 @@ Future<void> initDependencies() async {
     depIn.registerFactory<SeeProcessBloc>(
       ()=> SeeProcessBloc(
         depIn.get<GetSequencesUseCase>(),
-        depIn.get<GetSequenceUseCase>()
+        depIn.get<GetSequenceUseCase>(),
+        depIn.get<DeleteSequenceUseCase>()
       )
     );
 

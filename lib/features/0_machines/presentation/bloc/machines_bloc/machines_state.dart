@@ -2,29 +2,34 @@ import 'package:production_planning/features/0_machines/domain/entities/machine_
 
 sealed class MachinesState{
   final List<MachineEntity>? machines;
-  MachinesState(this.machines);
+  final int? typeId;
+  MachinesState(this.machines, this.typeId);
 }
 
 class MachinesStateInitial extends MachinesState{
-  MachinesStateInitial(super.machines);
+  MachinesStateInitial(super.machines, super.typeId);
 }
 
 class MachinesRetrieving extends MachinesState{
-  MachinesRetrieving(super.machines);
+  MachinesRetrieving(super.machines,  super.typeId);
 }
 
 class MachinesRetrievingSuccess extends MachinesState{
-  MachinesRetrievingSuccess(super.machines);
+  MachinesRetrievingSuccess(super.machines,  super.typeId);
 }
 
 class MachinesRetrievingError extends MachinesState{
-  MachinesRetrievingError(super.machines);
+  MachinesRetrievingError(super.machines,  super.typeId);
 }
 
 class MachineDeletionError extends MachinesState{
-  MachineDeletionError(super.machines);
+  MachineDeletionError(super.machines,  super.typeId);
 }
 
 class MachineDeletionSuccess extends MachinesState{
-  MachineDeletionSuccess(super.machines);
+  MachineDeletionSuccess(super.machines,  super.typeId);
+}
+
+class MachineTypeIdSet extends MachinesState{
+  MachineTypeIdSet(super.machines,  super.typeId);
 }

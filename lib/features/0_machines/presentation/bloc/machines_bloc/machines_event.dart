@@ -15,12 +15,19 @@ class OnNewMachine implements MachinesEvent{
   final String preapartion;
   final String rest;
   final String continueCapacity;
+  final int typeId;
 
-  OnNewMachine(this.capacity, this.preapartion, this.rest, this.continueCapacity);
+  OnNewMachine(this.capacity, this.preapartion, this.rest, this.continueCapacity, this.typeId);
 }
 
 class OnDeleteMachine implements MachinesEvent{
   final int machineID;
   
   OnDeleteMachine(this.machineID);
+}
+
+class OnMachinesSetType implements MachinesEvent{
+  final int typeId;
+  
+  OnMachinesSetType(this.typeId);
 }

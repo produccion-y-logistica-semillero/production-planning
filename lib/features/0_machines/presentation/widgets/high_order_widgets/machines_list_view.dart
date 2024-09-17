@@ -44,7 +44,6 @@ class MachinesListView extends StatelessWidget{
                     create: (context)=>GetIt.instance.get<MachineBloc>(),
                     child: BlocBuilder<MachineBloc,MachinesState> (
                       builder: (context, state) {
-                        //inside the container we will display in a row the expansion tile and the action buttons
                         return Row(
                           children: 
                             [
@@ -90,6 +89,12 @@ class MachinesListView extends StatelessWidget{
                                             ()=>_deleteMachine(context, machine.id!)
                                         )).toList(),
                                         MachinesStateInitial()=>[const ListTile(title: Text(""),)],
+                                        // TODO: Handle this case.
+                                        MachineTypeIdSet() => state.machines!.map(
+                                          (machine)=> MachineDisplayTile(
+                                            machine,
+                                            ()=>_deleteMachine(context, machine.id!)
+                                        )).toList(),
                                       }
                                   ),
                                 ),
@@ -210,7 +215,7 @@ class MachinesListView extends StatelessWidget{
             }
             //else if to check if the inputs are correct, for instance, no 12:85
             else {
-              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text));
+              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text, machineId));
               Navigator.of(dialogContext).pop();
             }
           },

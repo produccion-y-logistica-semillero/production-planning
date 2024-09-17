@@ -29,7 +29,6 @@ class TaskModel{
   }
 
   factory TaskModel.fromJson(Map<String, dynamic> map){
-    print(map["n_proc_units"].toString());
     return TaskModel(
       taskId: map["task_id"],
       execOrder: map["exec_order"], 

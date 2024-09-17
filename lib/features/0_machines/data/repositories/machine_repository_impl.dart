@@ -83,7 +83,7 @@ class MachineRepositoryImpl implements MachineRepository {
   @override
   Future<Either<Failure, int>> insertMachine(MachineEntity machine) async{
      try{
-      int id = await machineDao.insertMachine(machineEntityToJson(machine));
+      int id = await machineDao.insertMachine(await machineEntityToJson(machine));
       return Right(id);
     }
     on Failure catch(failure){
@@ -91,15 +91,16 @@ class MachineRepositoryImpl implements MachineRepository {
     }
   }
 
-   Map<String, dynamic> machineEntityToJson(MachineEntity entity){
+   Future<Map<String, dynamic>> machineEntityToJson(MachineEntity entity)async {
+    final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${entity.processingTime.inMinutes.toString().padLeft(2, '0')}:00';
+    final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${entity.preparationTime!.inMinutes.toString().padLeft(2, '0')}:00': null; 
+    final rest = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${entity.preparationTime!.inMinutes.toString().padLeft(2, '0')}:00': null; 
     return {
-      if(entity.id != null) 
-      "machine_id"        : entity.id,
       "machine_type_id"   : entity.machineTypeId,
-      "status_id"         : statusDao.getIdByName(entity.status),
-      "processing_time"   : entity.processingTime,
-      "preparation_time"  : entity.preparationTime,
-      "rest_time"         : entity.restTime,
+      "status_id"         : entity.status != null ? await statusDao.getIdByName(entity.status) : await statusDao.getDefaultStatusId(),
+      "processing_time"   : '1970-01-01 $proccesing',
+      "preparation_time"  : preparation != null ? '1970-01-01 $preparation' : null,
+      "rest_time"         : rest != null ? '1970-01-01 $rest' : null,
       "continue_capacity" : entity.continueCapacity
     };
   }

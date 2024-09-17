@@ -52,11 +52,13 @@ class MachineDaoSqllite implements MachineDao{
   @override
   Future<int> insertMachine(Map<String, dynamic> machineJson) async{
     try{
+      print("machine is");
+      print(machineJson);
       int id = await db.insert('MACHINES', machineJson);
       return id;
     }
     catch(error){
-      print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
+      print("ERORR FROM INSERTING MACHINE DAO ${error.toString()}");
       throw LocalStorageFailure();
     }
   }

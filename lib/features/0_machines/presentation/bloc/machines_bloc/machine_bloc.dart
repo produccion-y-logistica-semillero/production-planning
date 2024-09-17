@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/0_machines/domain/use_cases/add_machine_use_case.dart';
 import 'package:production_planning/features/0_machines/domain/use_cases/delete_machine_id_use_case.dart';
 import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_use_case.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machines_event.dart';
@@ -8,19 +9,20 @@ import 'package:production_planning/features/0_machines/presentation/bloc/machin
 class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
   final GetMachinesUseCase _getMachinesUseCase;
   final DeleteMachineUseCase _deleteMachineUseCase;
+  final AddMachineUseCase _addMachineUseCase;
 
-  MachineBloc(this._getMachinesUseCase, this._deleteMachineUseCase)
-  :super(MachinesStateInitial(null)){
+  MachineBloc(this._getMachinesUseCase, this._deleteMachineUseCase, this._addMachineUseCase)
+  :super(MachinesStateInitial(null, null)){
     //event for when we at first seek the machines
     on<OnMachinesRetrieving>(
       (event, emit)async {
         //emit so it shows loading
-        emit(MachinesRetrieving(null));
+        emit(MachinesRetrieving(null, state.typeId));
 
         final response = await _getMachinesUseCase(p: event.typeId);
         response.fold( 
-          (f)=> emit(MachinesRetrievingError(null)),
-          (machines)=> emit(MachinesRetrievingSuccess(machines))
+          (f)=> emit(MachinesRetrievingError(null, state.typeId)),
+          (machines)=> emit(MachinesRetrievingSuccess(machines, state.typeId))
         );
     });
 
@@ -43,16 +45,21 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
         final continueCap = int.parse(event.continueCapacity);
         //here we should call domain and get as response the machine entity to add
 
+        final response = await _addMachineUseCase(p: {
+          "status": null,
+          "machine_type_id" : event.typeId,
+          "processing_time": capacity,
+          "preparation_time" : preparation,
+          "rest_time" : rest,
+          "continue_capacity" : continueCap
+        });
 
-      machines.add(MachineEntity(
-          id: 100,
-          status: "Disponible",
-          processingTime: capacity,
-          preparationTime: preparation,
-          restTime: rest,
-          continueCapacity: continueCap));
-
-      emit(MachinesRetrievingSuccess(machines));
+      response.fold(
+        (f)=> MachinesRetrievingSuccess(machines, state.typeId), 
+        (mac){
+          //NEED TO CHECK BECAUSE WHEN ADDING THE NEW MACHINE IT SAYS ID IS NULL EVEN TOUGH IS NOT
+          emit(MachinesRetrievingSuccess(machines, state.typeId));
+        });
     });
 
     on<OnDeleteMachine>(
@@ -62,11 +69,11 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
         final response = await _deleteMachineUseCase(p:event.machineID);
 
         response.fold(
-          (failure) => emit(MachineDeletionError(machines)),
+          (failure) => emit(MachineDeletionError(machines, state.typeId)),
           (boolean){
             if(boolean){
               machines.removeWhere((machine) => machine.id == event.machineID);
-              emit(MachineDeletionSuccess(machines));
+              emit(MachineDeletionSuccess(machines, state.typeId));
             }
           }
         );
@@ -75,7 +82,13 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
 
     on<OnMachinesExpansionCollpased>(
       (event, emit){
-        emit(MachinesStateInitial(null));
+        emit(MachinesStateInitial(null, state.typeId));
+      }
+    );
+
+    on<OnMachinesSetType>(
+      (event, emit){
+        emit(MachineTypeIdSet(state.machines, event.typeId));
       }
     );
   }

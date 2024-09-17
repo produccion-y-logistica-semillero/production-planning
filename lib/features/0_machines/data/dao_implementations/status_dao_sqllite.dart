@@ -13,7 +13,7 @@ class StatusDaoSqllite implements StatusDao{
       return table[0]['status'];
     }
     catch(error){
-      print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
+      print("ERORR FROM GET NAME BY ID STATUS ${error.toString()}");
       throw LocalStorageFailure();
     }
   }
@@ -25,7 +25,18 @@ class StatusDaoSqllite implements StatusDao{
       return table[0]['status_id'];
     }
     catch(error){
-      print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
+      print("ERORR FROM GETIDBYNAME STATUS ${error.toString()}");
+      throw LocalStorageFailure();
+    }
+  }
+  
+  @override
+  Future<int> getDefaultStatusId() async {
+    try{
+      return 1;
+    }
+    catch(error){
+      print("ERORR FROM GETDEFAULT STATUS ID FROM STATUS ${error.toString()}");
       throw LocalStorageFailure();
     }
   }

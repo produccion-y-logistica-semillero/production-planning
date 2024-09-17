@@ -1,5 +1,4 @@
-import 'package:production_planning/features/machines/data/models/machine_model.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 
 abstract class MachineDao{
   Future<bool> delete(int id);

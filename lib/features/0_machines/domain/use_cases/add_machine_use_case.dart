@@ -1,8 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/core/use_cases/use_case.dart';
-import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
-import 'package:production_planning/features/machines/domain/repositories/machine_repository.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
 
 class AddMachineUseCase implements UseCase<MachineEntity, Map<String, dynamic>> {
   final MachineRepository repository;

@@ -17,7 +17,7 @@ class SQLLiteDatabaseProvider{
       version: 1,
       onCreate: (Database db, int version) async {
         await db.execute('''
-          CREATE TABLE status (
+          CREATE TABLE STATUS (
               status_id INTEGER PRIMARY KEY AUTOINCREMENT,
               status VARCHAR(100) NOT NULL
           );

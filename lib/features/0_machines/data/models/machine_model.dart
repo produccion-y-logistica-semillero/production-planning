@@ -1,5 +1,5 @@
 
-import 'package:production_planning/features/machines/domain/entities/machine_entity.dart';
+import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 
 class MachineModel {
   int? id;

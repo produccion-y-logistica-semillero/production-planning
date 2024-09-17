@@ -41,7 +41,8 @@ Future<void> initDependencies() async {
     //Machine repositories
     depIn.registerLazySingleton<MachineRepository>(()=>MachineRepositoryImpl(
       machineTypeDao: daoFactory.getMachineTypeDao(),
-      machineDao:  daoFactory.getMachineDao()
+      machineDao:  daoFactory.getMachineDao(),
+      statusDao: daoFactory.getStatusDao()
     ));
     
     //Sequences repositories

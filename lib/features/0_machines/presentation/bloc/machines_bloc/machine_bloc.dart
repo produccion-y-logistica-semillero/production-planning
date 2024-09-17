@@ -17,30 +17,11 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
         //emit so it shows loading
         emit(MachinesRetrieving(null));
 
-      List<MachineEntity> machines = [
-        MachineEntity(
-            status: "Disponible",
-            processingTime: Duration(),
-            preparationTime: Duration(),
-            restTime: Duration(),
-            continueCapacity: 5,
-            id: 10),
-        MachineEntity(
-            status: "Disponible",
-            processingTime: Duration(),
-            preparationTime: Duration(),
-            restTime: Duration(),
-            continueCapacity: 5,
-            id: 12),
-        MachineEntity(
-            status: "Disponible",
-            processingTime: Duration(),
-            preparationTime: Duration(),
-            restTime: Duration(),
-            continueCapacity: 5,
-            id: 13),
-      ];
-      emit(MachinesRetrievingSuccess(machines));
+        final response = await _getMachinesUseCase(p: event.typeId);
+        response.fold( 
+          (f)=> emit(MachinesRetrievingError(null)),
+          (machines)=> emit(MachinesRetrievingSuccess(machines))
+        );
     });
 
     on<OnNewMachine>(

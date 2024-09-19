@@ -22,8 +22,6 @@ class JobModel {
   }
 
   JobEntity toEntity() {
-    // Aquí deberías tener un método para obtener la `SequenceEntity`
-    // a partir del `sequenceId`, por ahora simplemente lo omito para el ejemplo.
     SequenceEntity sequence = SequenceEntity(sequenceId, [], 'Sequence Name');
 
     return JobEntity(

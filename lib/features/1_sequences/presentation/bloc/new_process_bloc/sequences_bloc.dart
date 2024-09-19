@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_type_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
@@ -7,6 +8,8 @@ import 'package:production_planning/features/1_sequences/domain/use_cases/add_se
 
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
+import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_event.dart';
 
 class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
 
@@ -67,6 +70,8 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
           emit(SequencesProcessAdded(true, state.machines, true, false, null));
         }
         );
+
+        GetIt.instance.get<SeeProcessBloc>().add(OnRetrieveSequencesEvent());
       }
     );
 

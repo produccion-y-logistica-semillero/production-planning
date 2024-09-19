@@ -42,7 +42,10 @@ class SeeProcessBloc extends Bloc<SeeProcessEvent, SeeProcessState>{
 
         response.fold(
           (f)=>emit(SequenceDeletedFailure(state.sequences, state.selectedProcess, state.process))
-          , (s)=> emit(SequenceDeletedSuccess(state.sequences, null, null)));
+          , (s){ 
+              state.sequences?.removeWhere((seq)=>seq.id == event.id);
+              emit(SequenceDeletedSuccess(state.sequences, null, null));
+            });
       }
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -8,6 +10,15 @@ class SQLLiteDatabaseProvider{
     final databasePath = await getDatabasesPath();
     final path = join(databasePath, 'database.db');
 
+
+     // Get the directory of the current executable (.exe)
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+
+    // Create a text file in the same directory as the .exe
+    final logFile = File(join(exeDir, 'database_path_log.txt'));
+
+    // Write the database path to the text file
+    await logFile.writeAsString('Database path: $path');
     //I'm using this to manually locate my database and deleting it when I need new creation, it's not
     //the best way, but anyways, it works for me at the moment, can comment the line while we don't need it
     print(path);

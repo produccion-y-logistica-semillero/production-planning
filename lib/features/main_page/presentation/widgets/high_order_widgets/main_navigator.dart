@@ -24,16 +24,10 @@ class MainNavigator extends StatelessWidget{
                 WidgetBuilder builder;
                 switch (settings.name) {
                   case '/sequences':
-                    builder = (BuildContext _) => MultiBlocProvider(
-                      providers: [
+                    builder = (BuildContext _) => 
                         BlocProvider<SequencesBloc> (
                           create: (context) => GetIt.instance.get<SequencesBloc>(),
-                        ),
-                        BlocProvider<SeeProcessBloc> (
-                          create: (context) => GetIt.instance.get<SeeProcessBloc>(),
-                        ),
-                      ],
-                      child: SequencesPage()
+                          child: SequencesPage()
                     );
                     break;
                   case '/orders':

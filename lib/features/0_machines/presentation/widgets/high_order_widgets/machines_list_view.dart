@@ -183,12 +183,14 @@ class MachinesListView extends StatelessWidget{
     final TextEditingController controllerPreparation = TextEditingController();
     final TextEditingController controllerRestTime = TextEditingController();
     final TextEditingController controllerContinue = TextEditingController();
+    final TextEditingController nameController = TextEditingController();
 
     await showDialog(
       context: context, 
       builder: (dialogContext){
         return AddMachineDialog(
           machineTypeName,
+          nameController: nameController,
           capacityController: controllerCapacity,
           preparationController: controllerPreparation,
           restTimeController: controllerRestTime,
@@ -198,6 +200,7 @@ class MachinesListView extends StatelessWidget{
               controllerCapacity.text.length != 5 || 
               controllerPreparation.text.length != 5 || 
               controllerRestTime.text.length != 5 || 
+              nameController.text.isEmpty ||
               controllerContinue.text.isEmpty
             ){
               //if not all the fields have been added then we show another dialog showing the message
@@ -215,7 +218,7 @@ class MachinesListView extends StatelessWidget{
             }
             //else if to check if the inputs are correct, for instance, no 12:85
             else {
-              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text, machineId));
+              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text, machineId, nameController.text));
               Navigator.of(dialogContext).pop();
             }
           },

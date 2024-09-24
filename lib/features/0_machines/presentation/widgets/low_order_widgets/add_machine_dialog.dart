@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:production_planning/shared/widgets/hour_field.dart';
+import 'package:production_planning/shared/widgets/input_field_custom.dart';
 
 class AddMachineDialog extends StatelessWidget{
   final String machineTypeName;
@@ -8,12 +9,14 @@ class AddMachineDialog extends StatelessWidget{
   final TextEditingController preparationController;
   final TextEditingController restTimeController;
   final TextEditingController continueController;
+  final TextEditingController nameController;
   final void Function() addMachineHandle;
 
   const AddMachineDialog(
     this.machineTypeName,
     {
       super.key,
+      required this.nameController,
       required this.capacityController,
       required this.preparationController,
       required this.restTimeController,
@@ -27,12 +30,20 @@ class AddMachineDialog extends StatelessWidget{
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(20),
-        height: 450, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
+        height: 500, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
         width:  800,//MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
         child: Column(
           children: [
             const SizedBox(height: 10,),
             Text('Nueva maquina de $machineTypeName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),),
+            const SizedBox(height: 20,),
+            InputFieldCustom(
+              sizedBoxWidth: 50, 
+              maxLines: 1, 
+              title: 'Nombre maquina', 
+              hintText: 'Nombre', 
+              controller: nameController
+            ),
             const SizedBox(height: 20,),
             HourField(text: '1 hora de trabajo promedio de $machineTypeName para esta maquina equivale a: ', controller: capacityController,),
             const SizedBox(height: 30,),

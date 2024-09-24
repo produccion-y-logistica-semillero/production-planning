@@ -13,6 +13,7 @@ class AddMachineUseCase implements UseCase<MachineEntity, Map<String, dynamic>> 
   Future<Either<Failure, MachineEntity>> call({required Map<String, dynamic> p}) async{
     final machine = MachineEntity(
       machineTypeId: p["machine_type_id"],
+      name:    p["machine_name"],
       status          : p["status"], 
       processingTime  : p["processing_time"], 
       preparationTime : p["preparation_time"], 

@@ -43,6 +43,7 @@ class SQLLiteDatabaseProvider{
         await db.execute('''
           CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              machine_name VARCHAR(100) NOT NULL,
               machine_type_id INTEGER NOT NULL,
               status_id INTEGER NOT NULL,
               processing_time DATETIME NOT NULL,
@@ -103,14 +104,14 @@ class SQLLiteDatabaseProvider{
           INSERT INTO machine_types (name, description) VALUES ('Type C', 'High capacity machine type C');
 
           -- Insert default machines
-          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (1, 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5);
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (1,'type A 1', 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5);
 
-          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (2, 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3);
+          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (2, 'type B 1', 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3);
 
-          INSERT INTO machines (machine_type_id, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (3, 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7);
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
+          VALUES (3,'type C 1', 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7);
 
           -- Insert default sequences
           INSERT INTO sequences (name) VALUES ('Sequence Alpha');

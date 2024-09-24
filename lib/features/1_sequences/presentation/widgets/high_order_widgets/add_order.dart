@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/shared/widgets/hour_text_input.dart';
-import 'package:production_planning/shared/widgets/new_machine_input_field.dart';
+import 'package:production_planning/shared/widgets/input_field_custom.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';

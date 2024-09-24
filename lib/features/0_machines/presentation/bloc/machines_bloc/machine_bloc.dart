@@ -47,6 +47,7 @@ class MachineBloc extends Bloc<MachinesEvent, MachinesState> {
 
         final response = await _addMachineUseCase(p: {
           "status": null,
+          "machine_name" : event.machineName,
           "machine_type_id" : event.typeId,
           "processing_time": capacity,
           "preparation_time" : preparation,

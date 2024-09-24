@@ -17,7 +17,7 @@ class MachineDisplayTile extends StatelessWidget{
         children: [
           SizedBox(
             width: 100,
-            child: Text(machine.id!.toString())
+            child: Text(machine.name)
           ),
           SizedBox(
             width: 100,

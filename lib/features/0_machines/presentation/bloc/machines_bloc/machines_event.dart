@@ -15,9 +15,10 @@ class OnNewMachine implements MachinesEvent{
   final String preapartion;
   final String rest;
   final String continueCapacity;
+  final String machineName;
   final int typeId;
 
-  OnNewMachine(this.capacity, this.preapartion, this.rest, this.continueCapacity, this.typeId);
+  OnNewMachine(this.capacity, this.preapartion, this.rest, this.continueCapacity, this.typeId, this.machineName);
 }
 
 class OnDeleteMachine implements MachinesEvent{

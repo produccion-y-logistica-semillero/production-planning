@@ -92,11 +92,12 @@ class MachineRepositoryImpl implements MachineRepository {
   }
 
    Future<Map<String, dynamic>> machineEntityToJson(MachineEntity entity)async {
-    final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${entity.processingTime.inMinutes.toString().padLeft(2, '0')}:00';
-    final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${entity.preparationTime!.inMinutes.toString().padLeft(2, '0')}:00': null; 
-    final rest = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${entity.preparationTime!.inMinutes.toString().padLeft(2, '0')}:00': null; 
+    final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${(entity.processingTime.inMinutes - (entity.processingTime.inHours*60)).toString().padLeft(2, '0')}:00';
+    final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${(entity.preparationTime!.inMinutes- (entity.preparationTime!.inHours*60)).toString().padLeft(2, '0')}:00': null; 
+    final rest = entity.restTime != null ? '${entity.restTime!.inHours.toString().padLeft(2, '0')}:${(entity.restTime!.inMinutes - (entity.restTime!.inHours*60)).toString().padLeft(2, '0')}:00': null; 
     return {
       "machine_type_id"   : entity.machineTypeId,
+      "machine_name" : entity.name,
       "status_id"         : entity.status != null ? await statusDao.getIdByName(entity.status) : await statusDao.getDefaultStatusId(),
       "processing_time"   : '1970-01-01 $proccesing',
       "preparation_time"  : preparation != null ? '1970-01-01 $preparation' : null,
@@ -121,7 +122,8 @@ class MachineRepositoryImpl implements MachineRepository {
         hours: int.parse(map["rest_time"].toString().substring(11, 13)), 
         minutes: int.parse(map["rest_time"].toString().substring(14, 16))
       ) : null, 
-      continueCapacity: map["continue_capacity"]
+      continueCapacity: map["continue_capacity"],
+      name: map["machine_name"]
     );
   }
 

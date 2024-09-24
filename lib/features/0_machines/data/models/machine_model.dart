@@ -9,10 +9,12 @@ class MachineModel {
   Duration preparationTime;
   Duration restTime;
   int continueCapacity;
+  String name;
 
   MachineModel({
   required this.id, 
   this.machineTypeId,
+  required this.name,
   required this.status, 
   required this.processingTime,
   required this.preparationTime,
@@ -23,6 +25,7 @@ class MachineModel {
   factory MachineModel.fromJson(Map<String, dynamic> data){
     return MachineModel(
       id: data["machine_id"],
+      name: data["machine_name"],
       machineTypeId: data["machine_type_id"],
       status: data["status_id"],
       processingTime: data["processing_time"],
@@ -36,6 +39,7 @@ class MachineModel {
     return MachineEntity(
       machineTypeId: machineTypeId,
       status: status, 
+      name: name,
       processingTime: processingTime, 
       preparationTime: preparationTime, 
       restTime: restTime, 

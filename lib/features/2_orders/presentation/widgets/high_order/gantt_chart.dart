@@ -24,6 +24,7 @@ class GanttChart extends StatefulWidget {
 class _GanttChartState extends State<GanttChart> {
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
+  final ScrollController _vertical2ScrollController = ScrollController();
   double _currentHorizontalValue = 1;
   double _currentVerticalValue = 1;
   double hourWidth = 0;
@@ -66,8 +67,7 @@ class _GanttChartState extends State<GanttChart> {
     double chartHeight = MediaQuery.of(context).size.height * 0.7;
     double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentHorizontalValue; // The width depends on the user's selected zoom level
     hourWidth = (chartWidth / totalDays) / 24;
-    double stackHeight = ((widget.machines.length+1) * (40.0*_currentVerticalValue));
-    print("rerenderizando porque?");
+    double stackHeight = ((widget.machines.length+1) * (45.0*_currentVerticalValue));
     return Column(
       children: [
         // Date range selector
@@ -121,30 +121,56 @@ class _GanttChartState extends State<GanttChart> {
               ),
             ),
             // Gesture detector for horizontal drag and scroll
-            Expanded(
+            Container(
+              height: chartHeight,
+              width: 200,
+              margin: EdgeInsets.only(top: 70),
+              child: SingleChildScrollView(
+                controller: _vertical2ScrollController,
+                physics: const NeverScrollableScrollPhysics(),
+                scrollDirection: Axis.vertical,
+                child: SizedBox(
+                  height: stackHeight,
+                  width: 100,
+                  child: Stack(
+                    children: getMachines(widget.machines, context),
+                  ),
+                )
+              ),
+            ),
+            Container(
+              width: MediaQuery.of(context).size.width*0.67,
+              margin: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(width: 4)
+              ),
               child: GestureDetector(
                 onPanUpdate: (details) {
                   _horizontalScrollController.jumpTo(_horizontalScrollController.offset - details.delta.dx);
                   _verticalScrollController.jumpTo(_verticalScrollController.offset - details.delta.dy);
+                  _vertical2ScrollController.jumpTo(_vertical2ScrollController.offset - details.delta.dy);
                 },
                 child: SingleChildScrollView(
                   controller: _horizontalScrollController,
                   scrollDirection: Axis.horizontal,
                   child: Container(
-                    width: chartWidth,
+                    width: chartWidth+50,
+                    color: Theme.of(context).colorScheme.surfaceContainer,
                     padding: const EdgeInsets.all(8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Days and hours headers
                         _buildChartHeaders(chartWidth),
-                        const SizedBox(height: 8.0),
+                        const SizedBox(height: 1.0),
                   
                         // Gantt chart
                         Container(
                           height: chartHeight,
                           child: SingleChildScrollView(
                             controller: _verticalScrollController,
+                            physics: const NeverScrollableScrollPhysics(),
                             scrollDirection: Axis.vertical ,
                             child: SizedBox(
                               height: stackHeight,
@@ -165,6 +191,32 @@ class _GanttChartState extends State<GanttChart> {
         )
       ],
     );
+  }
+
+  List<Widget> getMachines(List<GanttMachineDTO> machines, BuildContext context){
+    List<Widget> machineWidgets = [];
+
+    for(int index = 0; index < machines.length; index++)
+    {
+      machineWidgets.add(
+        Positioned(
+          left: 5,
+          top: (index * (40.0*_currentVerticalValue)) + (5*index),
+          child: Container(
+            height: 40.0 * _currentVerticalValue,
+            width: 190,
+            padding: EdgeInsets.all( 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.tertiaryContainer,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(machines[index].machineName, style: TextStyle(color: Colors.white),),
+          )
+        )
+      );
+    }
+
+    return machineWidgets;
   }
 
   List<Widget> getTasks(List<GanttMachineDTO> machines, double chartWidth){
@@ -190,7 +242,7 @@ class _GanttChartState extends State<GanttChart> {
         final Color taskColor = processColor['${task.sequenceId}${task.numberProcess}']!;
         // Task bar on the Gantt chart
         final item = Positioned(
-          top: (index * (40.0*_currentVerticalValue)) + 20,
+          top: (index * (40.0*_currentVerticalValue)) + (5*index),
           left: taskStartPosition,
           child: Container(
             width: taskEndPosition - taskStartPosition,
@@ -232,18 +284,18 @@ class _GanttChartState extends State<GanttChart> {
 
       List<SizedBox> hoursRow = [];
       // Display hours only if the day width is large enough
-      if (dayWidth > 800) {
         int numberHours = (i < (totalDays - 1)) ? 23 : 24;
         for (int i = 0; i <= numberHours; i++) {
           List<Widget> column = [];
-          column.add(SizedBox(height: 10, child: VerticalDivider(width: 2)));
-
-          column.add(
-            Text(
-              '${i}:00',
-              style: const TextStyle(fontSize: 12),
-            ),
-          );
+          column.add(SizedBox(height: dayWidth > 800 ? 10: 15, child: VerticalDivider(width: 2)));
+          if (dayWidth > 800) {
+            column.add(
+              Text(
+                '${i}:00',
+                style: const TextStyle(fontSize: 12),
+              ),
+            );
+          }
           hoursRow.add(
             SizedBox(
               width: hourWidth,
@@ -253,21 +305,23 @@ class _GanttChartState extends State<GanttChart> {
             ),
           );
         }
-      }
 
       // Add the day and hour rows to the list of columns
       days.add(
         SizedBox(
           width: dayWidth,
-          child: Column(
-            children: [
-              dayRow,
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: hoursRow,
-              ),
-              const Divider(),
-            ],
+          child: SizedBox(
+            height: 70,
+            child: Column(
+              children: [
+                dayRow,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: hoursRow,
+                ),
+                const Divider(),
+              ],
+            ),
           ),
         ),
       );

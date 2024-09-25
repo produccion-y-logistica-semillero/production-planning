@@ -1,13 +1,17 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:production_planning/features/2_orders/presentation/dtos/gantt_machine_dto.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
 import 'package:intl/intl.dart';  // For formatting dates
 
 class GanttChart extends StatefulWidget {
-  final List<GanttTask> tasks;
+  final List<GanttMachineDTO> machines;
 
   GanttChart({
     super.key,
-    required this.tasks,
+    required this.machines,
   });
 
   @override
@@ -18,9 +22,12 @@ class GanttChart extends StatefulWidget {
 }
 
 class _GanttChartState extends State<GanttChart> {
-  final ScrollController _scrollController = ScrollController();
-  double _currentValue = 1;
+  final ScrollController _horizontalScrollController = ScrollController();
+  final ScrollController _verticalScrollController = ScrollController();
+  double _currentHorizontalValue = 1;
+  double _currentVerticalValue = 1;
   double hourWidth = 0;
+  Map<String, Color> processColor = {};
 
   DateTime startDate;
   DateTime endDate;
@@ -56,10 +63,11 @@ class _GanttChartState extends State<GanttChart> {
 
   @override
   Widget build(BuildContext context) {
-    double chartHeight = MediaQuery.of(context).size.height * 0.5;
-    double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentValue; // The width depends on the user's selected zoom level
+    double chartHeight = MediaQuery.of(context).size.height * 0.7;
+    double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentHorizontalValue; // The width depends on the user's selected zoom level
     hourWidth = (chartWidth / totalDays) / 24;
-
+    double stackHeight = ((widget.machines.length+1) * (40.0*_currentVerticalValue));
+    print("rerenderizando porque?");
     return Column(
       children: [
         // Date range selector
@@ -81,81 +89,129 @@ class _GanttChartState extends State<GanttChart> {
 
         // Slider to select the horizontal zoom
         Slider(
-          value: _currentValue,
+          value: _currentHorizontalValue,
           min: 1,
-          max: 10,
-          divisions: 10,
-          label: _currentValue.toStringAsFixed(1),
+          max: 20,
+          divisions: 20,
+          label: _currentHorizontalValue.toStringAsFixed(1),
           onChanged: (val) {
             setState(() {
-              _currentValue = val;
+              _currentHorizontalValue = val;
             });
           },
         ),
-
-        // Gesture detector for horizontal drag and scroll
-        GestureDetector(
-          onHorizontalDragUpdate: (details) {
-            _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
-          },
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            child: Container(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Days and hours headers
-                  _buildChartHeaders(chartWidth),
-                  const SizedBox(height: 8.0),
-
-                  // Gantt chart
-                  Container(
+        Row(
+          children: [
+            SizedBox(
+              height: chartHeight + 8.0,
+              child: RotatedBox(
+                quarterTurns: 1,
+                child: Slider(
+                  value: _currentVerticalValue, 
+                  min: 1,
+                  max: 20,
+                  divisions: 20,
+                  label: _currentVerticalValue.toStringAsFixed(1),
+                  onChanged: (val){
+                    setState(() {
+                      _currentVerticalValue = val;
+                    });
+                  }
+                ),
+              ),
+            ),
+            // Gesture detector for horizontal drag and scroll
+            Expanded(
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  _horizontalScrollController.jumpTo(_horizontalScrollController.offset - details.delta.dx);
+                  _verticalScrollController.jumpTo(_verticalScrollController.offset - details.delta.dy);
+                },
+                child: SingleChildScrollView(
+                  controller: _horizontalScrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Container(
                     width: chartWidth,
-                    height: chartHeight,
-                    child: Stack(
-                      children: widget.tasks.asMap().entries.map((entry) {
-                        int index = entry.key;
-                        GanttTask task = entry.value;
-                        double taskStartPosition =
-                            _calculatePosition(task.startDate, chartWidth);
-                        double taskEndPosition =
-                            _calculatePosition(task.endDate, chartWidth);
-
-                        if (taskEndPosition > chartWidth) {
-                          taskEndPosition = chartWidth; // Maintain the curvature
-                        }
-
-                        // Task bar on the Gantt chart
-                        return Positioned(
-                          top: index * 50.0,
-                          left: taskStartPosition,
-                          child: Container(
-                            width: taskEndPosition - taskStartPosition,
-                            height: 40.0,
-                            decoration: BoxDecoration(
-                              color: task.color,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Center(
-                              child: Text(
-                                task.name,
-                                style: const TextStyle(color: Colors.white),
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Days and hours headers
+                        _buildChartHeaders(chartWidth),
+                        const SizedBox(height: 8.0),
+                  
+                        // Gantt chart
+                        Container(
+                          height: chartHeight,
+                          child: SingleChildScrollView(
+                            controller: _verticalScrollController,
+                            scrollDirection: Axis.vertical ,
+                            child: SizedBox(
+                              height: stackHeight,
+                              width: chartWidth,
+                              child: Stack(
+                                children: getTasks(widget.machines, chartWidth),
                               ),
                             ),
                           ),
-                        );
-                      }).toList(),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+              ),
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  List<Widget> getTasks(List<GanttMachineDTO> machines, double chartWidth){
+    List<Widget> ganttItems = [];
+
+    for(int index = 0; index < machines.length; index++){
+      for(final task in machines[index].tasks){
+        double taskStartPosition = _calculatePosition(task.startDate, chartWidth);
+        double taskEndPosition = _calculatePosition(task.endDate, chartWidth);
+        if (taskEndPosition > chartWidth) {
+          taskEndPosition = chartWidth; // Maintain the curvature
+        }
+
+        if(!processColor.containsKey('${task.sequenceId}${task.numberProcess}')){
+          final random = Random();
+          processColor['${task.sequenceId}${task.numberProcess}'] = Color.fromARGB(
+            255, // Alpha value (opacity)
+            random.nextInt(256), // Red value
+            random.nextInt(256), // Green value
+            random.nextInt(256), // Blue value
+          );
+        }
+        final Color taskColor = processColor['${task.sequenceId}${task.numberProcess}']!;
+        // Task bar on the Gantt chart
+        final item = Positioned(
+          top: (index * (40.0*_currentVerticalValue)) + 20,
+          left: taskStartPosition,
+          child: Container(
+            width: taskEndPosition - taskStartPosition,
+            height: 40.0 * _currentVerticalValue,
+            decoration: BoxDecoration(
+              color: taskColor,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Center(
+              child: Text(
+                '${task.sequenceName} ${task.numberProcess}',
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ),
-        ),
-      ],
-    );
+        );
+        ganttItems.add(item);
+      }
+    }
+    print(ganttItems);
+    return ganttItems;
   }
 
   Widget _buildChartHeaders(double totalWidth) {

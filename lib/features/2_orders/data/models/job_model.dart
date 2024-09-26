@@ -22,11 +22,9 @@ class JobModel {
   }
 
   JobEntity toEntity() {
-    SequenceEntity sequence = SequenceEntity(sequenceId, [], 'Sequence Name');
-
     return JobEntity(
       jobId,
-      sequence,
+      null,
       amount,
       dueDate,
       priority,

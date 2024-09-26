@@ -6,7 +6,7 @@ import 'package:production_planning/features/1_sequences/domain/entities/sequenc
 
 class JobEntity{
   int? jobId;
-  final SequenceEntity sequence;
+  final SequenceEntity? sequence;
   final int amount;
   final DateTime dueDate;
   final int priority;

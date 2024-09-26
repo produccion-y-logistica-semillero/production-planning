@@ -1,11 +1,11 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/core/use_cases/use_case.dart';
-import 'package:production_planning/features/2_orders/data/repositories/order_repository_impl.dart';
 import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
+import 'package:production_planning/features/2_orders/domain/repositories/order_repository.dart';
 
 class GetOrdersUseCase implements UseCase<List<OrderEntity>, void> {
-  final OrderRepositoryImpl repository;
+  final OrderRepository repository;
 
   GetOrdersUseCase({required this.repository});
 

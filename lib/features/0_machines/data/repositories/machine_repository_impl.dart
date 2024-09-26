@@ -126,5 +126,11 @@ class MachineRepositoryImpl implements MachineRepository {
       name: map["machine_name"]
     );
   }
+  
+  @override
+  Future<Either<Failure, int>> countMachinesOf(int machineTypeId) {
+    // TODO: implement countMachinesOf
+    throw UnimplementedError();
+  }
 
 }

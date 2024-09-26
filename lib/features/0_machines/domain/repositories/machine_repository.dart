@@ -17,5 +17,7 @@ abstract class MachineRepository{
   Future<Either<Failure, bool>> deleteMachine(int id);
 
   Future<Either<Failure, int>> insertMachine(MachineEntity machine);
+
+  Future<Either<Failure, int>> countMachinesOf(int machineTypeId);
   
 }

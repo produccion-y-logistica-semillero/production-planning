@@ -232,14 +232,14 @@ class _GanttChartState extends State<GanttChart> {
 
         if(!processColor.containsKey('${task.sequenceId}-${task.numberProcess}')){
           final random = Random();
-          processColor['${task.sequenceId}${task.numberProcess}'] = Color.fromARGB(
+          processColor['${task.sequenceId}-${task.numberProcess}'] = Color.fromARGB(
             255, // Alpha value (opacity)
             random.nextInt(256), // Red value
             random.nextInt(256), // Green value
             random.nextInt(256), // Blue value
           );
         }
-        final Color taskColor = processColor['${task.sequenceId}${task.numberProcess}']!;
+        final Color taskColor = processColor['${task.sequenceId}-${task.numberProcess}']!;
         // Task bar on the Gantt chart
         final item = Positioned(
           top: (index * (40.0*_currentVerticalValue)) + (5*index),
@@ -262,7 +262,6 @@ class _GanttChartState extends State<GanttChart> {
         ganttItems.add(item);
       }
     }
-    print(ganttItems);
     return ganttItems;
   }
 

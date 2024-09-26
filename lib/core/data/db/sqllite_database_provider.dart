@@ -72,15 +72,40 @@ class SQLLiteDatabaseProvider{
               FOREIGN KEY (machine_type_id) REFERENCES machineTypes(machine_types_id)
           );
         ''');
+
+        await db.execute('''
+          CREATE TABLE environments (
+              environment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name VARCHAR(100) NOT NULL
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE dispatch_rules (
+              dispatch_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name VARCHAR(100) NOT NULL
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE typs_x_rules (
+              type_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              environment_id INTEGER NOT NULL,
+              dispatch_rule_id INTEGER NOT NULL,
+              FOREIGN KEY (environment_id) REFERENCES sequences(order_types),
+              FOREIGN KEY (dispatch_rule_id) REFERENCES sequences(dispatch_rules),
+          );
+        ''');
+
         await db.execute('''
           CREATE TABLE orders (
               order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              reg_date DATE NOT NULL
+              reg_date DATE NOT NULL,
           );
         ''');
         await db.execute('''
-          CREATE TABLE sequence_x_orders (
-              sequence_x_order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          CREATE TABLE jobs (
+              job_id INTEGER PRIMARY KEY AUTOINCREMENT,
               sequence_id INTEGER NOT NULL,
               order_id INTEGER NOT NULL,
               amount INTEGER NOT NULL,
@@ -127,6 +152,28 @@ class SQLLiteDatabaseProvider{
 
           INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
           VALUES (3, '2024-09-08 11:00:00', 'Task 3 description', 3, 3);
+
+          ---------------------------------------------------------------------------------------------------------------------------
+          --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
+          ---------------------------------------------------------------------------------------------------------------------------
+          -- Insert environments
+          INSERT INTO environments (name) VALUES('SINGLE MACHINE');
+          INSERT INTO environments (name) VALUES('PARALLEL MACHINES');
+          INSERT INTO environments (name) VALUES('FLOW SHOP');
+          INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');
+          INSERT INTO environments (name) VALUES('JOB SHOP');
+          INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');
+
+          -- Insert dispatch rules
+          INSERT INTO dispatch_rules (name) VALUES('JHONSON');
+
+          --Insert types_x_rules
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
+
+          ---------------------------------------------------------------------------------------------------------------------------
+          ---------------------------------------------------------------------------------------------------------------------------
+
+
 
           -- Insert default orders
           INSERT INTO orders (reg_date) VALUES ('2024-09-08');

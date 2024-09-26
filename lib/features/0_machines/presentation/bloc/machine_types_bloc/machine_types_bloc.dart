@@ -44,7 +44,6 @@ class MachineTypesBloc extends Bloc<MachineTypeEvent, MachineTypeState>{
           (failure) => emit(MachineTypesAddingError(machineTypes)), 
           (newMach){
             machineTypes.add(newMach);
-            print(machineTypes);
             emit(MachineTypesAddingSuccess(machineTypes));
           }
         );

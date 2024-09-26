@@ -13,7 +13,6 @@ class SideMenuProvider extends ChangeNotifier{
   }
 
   void changeExpansion(){
-    print('changed to ${!expanded}');
     this.expanded = !expanded;
     notifyListeners();
   }

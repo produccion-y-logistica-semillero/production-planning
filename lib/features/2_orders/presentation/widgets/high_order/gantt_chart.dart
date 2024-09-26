@@ -91,8 +91,8 @@ class _GanttChartState extends State<GanttChart> {
         Slider(
           value: _currentHorizontalValue,
           min: 1,
-          max: 20,
-          divisions: 20,
+          max: 10,
+          divisions: 40,
           label: _currentHorizontalValue.toStringAsFixed(1),
           onChanged: (val) {
             setState(() {
@@ -109,8 +109,8 @@ class _GanttChartState extends State<GanttChart> {
                 child: Slider(
                   value: _currentVerticalValue, 
                   min: 1,
-                  max: 20,
-                  divisions: 20,
+                  max: 10,
+                  divisions: 40,
                   label: _currentVerticalValue.toStringAsFixed(1),
                   onChanged: (val){
                     setState(() {
@@ -230,7 +230,7 @@ class _GanttChartState extends State<GanttChart> {
           taskEndPosition = chartWidth; // Maintain the curvature
         }
 
-        if(!processColor.containsKey('${task.sequenceId}${task.numberProcess}')){
+        if(!processColor.containsKey('${task.sequenceId}-${task.numberProcess}')){
           final random = Random();
           processColor['${task.sequenceId}${task.numberProcess}'] = Color.fromARGB(
             255, // Alpha value (opacity)
@@ -287,9 +287,11 @@ class _GanttChartState extends State<GanttChart> {
         int numberHours = (i < (totalDays - 1)) ? 23 : 24;
         for (int i = 0; i <= numberHours; i++) {
           List<Widget> column = [];
-          column.add(SizedBox(height: dayWidth > 800 ? 10: 15, child: VerticalDivider(width: 2)));
+          double height =  dayWidth > 800 ? 10: 15;
+          if(i == 0) height = 30;
+          column.add(SizedBox(height: height, child: VerticalDivider(thickness: i == 0?4: 1, width: 2)));
           if (dayWidth > 800) {
-            column.add(
+            if(i != 0) column.add(
               Text(
                 '${i}:00',
                 style: const TextStyle(fontSize: 12),

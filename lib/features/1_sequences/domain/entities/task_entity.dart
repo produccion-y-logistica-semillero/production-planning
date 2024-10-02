@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 
 class TaskEntity{
   int? id;

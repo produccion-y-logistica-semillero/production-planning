@@ -13,24 +13,27 @@ class GanttBloc extends Bloc<GanttEvent, GanttState>{
   GanttBloc(
     this._getOrderEnvironment,
     this._scheduleOrderUseCase,
-  ):super(GanttInitialState(null, null))
+  ):super(GanttInitialState(null, null, null))
   {
     on<AssignOrderId>(
       (event, emit)async {
         final response = await _getOrderEnvironment(p: event.id);
         response.fold(
-          (f)=> emit(GanttOrderRetrieveError(null, null))
-          ,(env)=> emit(GanttOrderRetrieved(event.id, env)));
+          (f)=> emit(GanttOrderRetrieveError(null, null, null))
+          ,(env)=> emit(GanttOrderRetrieved(event.id, env, null)));
       }
     );
 
     on<SelectRule>((event, emit) async{
-      emit(GanttPlanningLoading(state.orderId, state.enviroment));
+      emit(GanttPlanningLoading(state.orderId, state.enviroment, event.id));
 
       final response = await _scheduleOrderUseCase(p: Tuple3(state.orderId!, event.id, state.enviroment!.environmentId));
 
-      response.fold((f)=>emit(GanttPlanningError(state.orderId, state.enviroment)), 
-      (plan)=> emit(GanttPlanningSuccess(state.orderId, state.enviroment, plan)));
+      //to imitate work
+      await Future.delayed(Duration(milliseconds: 1000));
+
+      response.fold((f)=>emit(GanttPlanningError(state.orderId, state.enviroment, state.selectedRule)), 
+      (plan)=> emit(GanttPlanningSuccess(state.orderId, state.enviroment, plan, state.selectedRule)));
       
     },);
   }

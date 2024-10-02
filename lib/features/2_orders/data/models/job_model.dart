@@ -1,4 +1,3 @@
-import 'package:production_planning/features/1_sequences/domain/entities/sequence_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
 
 class JobModel {

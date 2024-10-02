@@ -1,7 +1,4 @@
-import 'package:dartz/dartz.dart';
-
 abstract class GanttEvent{
-  
 }
 
 class AssignOrderId extends GanttEvent{

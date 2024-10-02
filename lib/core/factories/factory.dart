@@ -3,6 +3,8 @@ import 'package:production_planning/features/0_machines/data/dao_interfaces/mach
 import 'package:production_planning/features/0_machines/data/dao_interfaces/status_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/sequences_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/job_dao.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/order_dao.dart';
 
 abstract class Factory{
   MachineTypeDao getMachineTypeDao();
@@ -10,5 +12,7 @@ abstract class Factory{
   SequencesDao getSequenceDao();
   TasksDao getTaskDao();
   StatusDao getStatusDao();
+  OrderDao getOrderDao();
+  JobDao getJobDao();
   void closeDatabase();
 }

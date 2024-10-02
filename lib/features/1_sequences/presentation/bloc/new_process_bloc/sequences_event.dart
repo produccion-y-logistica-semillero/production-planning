@@ -1,5 +1,4 @@
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
-import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 
 abstract class SequencesEvent{}
 

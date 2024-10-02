@@ -16,11 +16,11 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
   @override
   //being p the orders id
   Future<Either<Failure, EnvironmentEntity>> call({required int p}) async {
-    final response = await orderRepo.getFullOrder(p);
+    /*final response = await orderRepo.getFullOrder(p);
     Failure? fail = null;
     OrderEntity? order = null;
     response.fold((f)=> fail = f, (s) => order = s);
-    if( fail != null) return Left(fail!);
+    if( fail != null) return Left(fail!);*/
 
     //
     //LOGIC OF CHECKING TWHAT WOULD BE THE ORDER'S ENVIRONMENT
@@ -28,7 +28,15 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
 
 
     //BY NOW I JUST WRITE IT
-    return orderRepo.getEnvironmentByName('SINGLE MACHINE');
+    //return orderRepo.getEnvironmentByName('SINGLE MACHINE');
+
+    return Right(
+      EnvironmentEntity(1, "SINGLE MACHINE", [
+        Tuple2(1, "JOHNSON"),
+        Tuple2(2, "STATIC"),
+        Tuple2(3, "DYNAMIC"),
+      ])
+    );
 
   }
 

@@ -19,6 +19,12 @@ import 'package:production_planning/features/1_sequences/domain/use_cases/get_se
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
+import 'package:production_planning/features/2_orders/data/repositories/order_repository_impl.dart';
+import 'package:production_planning/features/2_orders/domain/repositories/order_repository.dart';
+import 'package:production_planning/features/2_orders/domain/use_cases/add_order_use_case.dart';
+import 'package:production_planning/features/2_orders/domain/use_cases/get_order_environment.dart';
+import 'package:production_planning/features/2_orders/domain/use_cases/get_orders_use_case.dart';
+import 'package:production_planning/features/2_orders/domain/use_cases/schedule_order_use_case.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
@@ -53,6 +59,12 @@ Future<void> initDependencies() async {
       machineTypeDao: daoFactory.getMachineTypeDao()
     ));
 
+    //Orders repositories
+    depIn.registerLazySingleton<OrderRepository>(()=> OrderRepositoryImpl(
+      orderDao: daoFactory.getOrderDao(), 
+      jobDao: daoFactory.getJobDao()
+    ));
+
     //Machine use cases
     depIn.registerLazySingleton<AddMachineTypeUseCase>(() => AddMachineTypeUseCase(repository: depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetMachineTypesUseCase>(() => GetMachineTypesUseCase(repository: depIn.get<MachineRepository>()));
@@ -66,6 +78,12 @@ Future<void> initDependencies() async {
     depIn.registerLazySingleton<GetSequenceUseCase>(()=> GetSequenceUseCase(depIn.get<SequencesRepository>()));
     depIn.registerLazySingleton<GetSequencesUseCase>(()=> GetSequencesUseCase(depIn.get<SequencesRepository>()));
     depIn.registerLazySingleton<DeleteSequenceUseCase>(()=> DeleteSequenceUseCase(depIn.get<SequencesRepository>()));
+
+    //Orders use cases
+    depIn.registerLazySingleton<AddOrderUseCase>(()=> AddOrderUseCase());
+    depIn.registerLazySingleton<GetOrderEnvironment>(()=> GetOrderEnvironment(depIn.get<OrderRepository>(), depIn.get<MachineRepository>()));
+    depIn.registerLazySingleton<GetOrdersUseCase>(()=> GetOrdersUseCase(repository: depIn.get<OrderRepository>()));
+    depIn.registerLazySingleton<ScheduleOrderUseCase>(()=> ScheduleOrderUseCase());
     
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
@@ -105,7 +123,10 @@ Future<void> initDependencies() async {
       ()=> NewOrderBloc()
     );
     depIn.registerFactory<GanttBloc>(
-      ()=> GanttBloc()
+      ()=> GanttBloc(
+        depIn.get<GetOrderEnvironment>(),
+        depIn.get<ScheduleOrderUseCase>()
+      )
     );
   }
   catch(e){

@@ -1,23 +1,31 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
-import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
-import 'package:intl/intl.dart';  // For formatting dates
+import 'package:intl/intl.dart';
+import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
+import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';  // For formatting dates
 
 class GanttChart extends StatefulWidget {
   final List<PlanningMachineEntity> machines;
+  int? selectedRule;
+  List<DropdownMenuItem<int>> items;
+  
 
   GanttChart({
     super.key,
     required this.machines,
+    required this.selectedRule,
+    required this.items,
   });
 
   @override
   State<GanttChart> createState() => _GanttChartState(
     startDate: DateTime(2023, 9, 1),
     endDate: DateTime(2023, 9, 7),
+    selectedRule: selectedRule,
+    items: items,
   );
 }
 
@@ -34,9 +42,14 @@ class _GanttChartState extends State<GanttChart> {
   DateTime endDate;
   int totalDays;
 
+  int? selectedRule;
+  List<DropdownMenuItem<int>> items;
+
   _GanttChartState({
     required this.startDate,
     required this.endDate,
+    required this.selectedRule,
+    required this.items,
   }) : totalDays = endDate.difference(startDate).inDays;
 
   double _calculatePosition(DateTime date, double totalWidth) {
@@ -64,16 +77,33 @@ class _GanttChartState extends State<GanttChart> {
 
   @override
   Widget build(BuildContext context) {
-    double chartHeight = MediaQuery.of(context).size.height * 0.7;
+    double staticChartWidth = ((MediaQuery.of(context).size.width- 380) * 0.85) ; 
+    double staticChartHeight =(MediaQuery.of(context).size.height-220) * 0.85;
     double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentHorizontalValue; // The width depends on the user's selected zoom level
     hourWidth = (chartWidth / totalDays) / 24;
-    double stackHeight = ((widget.machines.length+1) * (45.0*_currentVerticalValue));
+    double chartHeight = ((widget.machines.length+1) * (45.0*_currentVerticalValue));
     return Column(
       children: [
         // Date range selector
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            DropdownButton<int>(
+                value: selectedRule,
+                hint: Text('Selecciona una opción'),
+                icon: Icon(Icons.arrow_downward),
+                iconSize: 24,
+                elevation: 16,
+                style: TextStyle(color: Colors.deepPurple),
+                underline: Container(
+                  height: 2,
+                  color: Colors.deepPurpleAccent,
+                ),
+                onChanged: (int? id) {
+                  if(id != null) BlocProvider.of<GanttBloc>(context).add(SelectRule(id));
+                },
+                items: items,
+              ),
             Text('Inicio: ${DateFormat('yyyy-MM-dd').format(startDate)}'),
             const SizedBox(width: 16),
             Text('Final: ${DateFormat('yyyy-MM-dd').format(endDate)}'),
@@ -103,7 +133,7 @@ class _GanttChartState extends State<GanttChart> {
         Row(
           children: [
             SizedBox(
-              height: chartHeight + 8.0,
+              height: staticChartHeight + 8.0,
               child: RotatedBox(
                 quarterTurns: 1,
                 child: Slider(
@@ -122,7 +152,7 @@ class _GanttChartState extends State<GanttChart> {
             ),
             // Gesture detector for horizontal drag and scroll
             Container(
-              height: chartHeight,
+              height: staticChartHeight,
               width: 200,
               margin: EdgeInsets.only(top: 70),
               child: SingleChildScrollView(
@@ -130,7 +160,7 @@ class _GanttChartState extends State<GanttChart> {
                 physics: const NeverScrollableScrollPhysics(),
                 scrollDirection: Axis.vertical,
                 child: SizedBox(
-                  height: stackHeight,
+                  height: chartHeight,
                   width: 100,
                   child: Stack(
                     children: getMachines(widget.machines, context),
@@ -139,7 +169,7 @@ class _GanttChartState extends State<GanttChart> {
               ),
             ),
             Container(
-              width: MediaQuery.of(context).size.width*0.67,
+              width: staticChartWidth,  
               margin: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
@@ -167,13 +197,13 @@ class _GanttChartState extends State<GanttChart> {
                   
                         // Gantt chart
                         Container(
-                          height: chartHeight,
+                          height: staticChartHeight,
                           child: SingleChildScrollView(
                             controller: _verticalScrollController,
                             physics: const NeverScrollableScrollPhysics(),
                             scrollDirection: Axis.vertical ,
                             child: SizedBox(
-                              height: stackHeight,
+                              height: chartHeight,
                               width: chartWidth,
                               child: Stack(
                                 children: getTasks(widget.machines, chartWidth),

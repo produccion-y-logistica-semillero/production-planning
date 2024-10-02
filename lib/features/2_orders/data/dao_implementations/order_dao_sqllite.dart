@@ -2,10 +2,10 @@ import 'package:production_planning/features/2_orders/data/dao_interfaces/order_
 import 'package:sqflite/sqflite.dart';
 import 'package:production_planning/features/2_orders/data/models/order_model.dart';
 
-class OrderDaoSqflite implements OrderDao {
+class OrderDaoSqlLite implements OrderDao {
   final Database db;
 
-  OrderDaoSqflite(this.db);
+  OrderDaoSqlLite(this.db);
 
   @override
   Future<List<OrderModel>> getAllOrders() async {

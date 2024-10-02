@@ -69,7 +69,7 @@ class SQLLiteDatabaseProvider{
               sequence_id INTEGER NOT NULL,
               machine_type_id INTEGER NOT NULL,
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
-              FOREIGN KEY (machine_type_id) REFERENCES machineTypes(machine_types_id)
+              FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id)
           );
         ''');
 
@@ -88,19 +88,19 @@ class SQLLiteDatabaseProvider{
         ''');
 
         await db.execute('''
-          CREATE TABLE typs_x_rules (
+          CREATE TABLE types_x_rules (
               type_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
               environment_id INTEGER NOT NULL,
               dispatch_rule_id INTEGER NOT NULL,
-              FOREIGN KEY (environment_id) REFERENCES sequences(order_types),
-              FOREIGN KEY (dispatch_rule_id) REFERENCES sequences(dispatch_rules),
+              FOREIGN KEY (environment_id) REFERENCES environments(environment_id),
+              FOREIGN KEY (dispatch_rule_id) REFERENCES dispatch_rules(dispatch_rules)
           );
         ''');
 
         await db.execute('''
           CREATE TABLE orders (
               order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              reg_date DATE NOT NULL,
+              reg_date DATE NOT NULL
           );
         ''');
         await db.execute('''
@@ -180,14 +180,14 @@ class SQLLiteDatabaseProvider{
           INSERT INTO orders (reg_date) VALUES ('2024-09-07');
           INSERT INTO orders (reg_date) VALUES ('2024-09-06');
 
-          -- Insert default sequence_x_orders (associating sequences with orders)
-          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          -- Insert default jobs (associating sequences with orders)
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
           VALUES (1, 1, 100, '2024-09-10', 1);
 
-          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
           VALUES (2, 2, 200, '2024-09-11', 2);
 
-          INSERT INTO sequence_x_orders (sequence_id, order_id, amount, due_date, priority)
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
           VALUES (3, 3, 150, '2024-09-12', 3);
         ''');
       }

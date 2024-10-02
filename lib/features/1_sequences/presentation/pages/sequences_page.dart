@@ -16,6 +16,7 @@ import 'package:production_planning/features/1_sequences/presentation/widgets/hi
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
 
 class SequencesPage extends StatelessWidget {
+
   List<Map<String, dynamic>> orders = [
     {
       'name': 'Job A',

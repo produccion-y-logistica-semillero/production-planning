@@ -38,11 +38,8 @@ class OrdersPage extends StatelessWidget{
                 MaterialPageRoute(
                   builder: (context) => 
                     BlocProvider<GanttBloc>(
-                      create: (context) {
-                        GetIt.instance.get<GanttBloc>().add(AssignOrderId(1));
-                        return GetIt.instance.get<GanttBloc>();
-                      },
-                      child: GanttPage(),
+                      create: (context) => GetIt.instance.get<GanttBloc>(),
+                      child: GanttPage(orderId: 1,),
                     )
                 )
               );

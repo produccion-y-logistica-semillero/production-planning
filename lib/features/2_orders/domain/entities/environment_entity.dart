@@ -1,7 +1,9 @@
+import 'package:dartz/dartz.dart';
+
 class EnvironmentEntity{
   final int environmentId;
   final String name;
-  Map<int, String> rules;
+  List<Tuple2<int, String>> rules;
 
   EnvironmentEntity(
     this.environmentId,

@@ -2,12 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'package:production_planning/features/2_orders/presentation/dtos/gantt_machine_dto.dart';
+import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
 import 'package:intl/intl.dart';  // For formatting dates
 
 class GanttChart extends StatefulWidget {
-  final List<GanttMachineDTO> machines;
+  final List<PlanningMachineEntity> machines;
 
   GanttChart({
     super.key,
@@ -193,7 +193,7 @@ class _GanttChartState extends State<GanttChart> {
     );
   }
 
-  List<Widget> getMachines(List<GanttMachineDTO> machines, BuildContext context){
+  List<Widget> getMachines(List<PlanningMachineEntity> machines, BuildContext context){
     List<Widget> machineWidgets = [];
 
     for(int index = 0; index < machines.length; index++)
@@ -219,7 +219,7 @@ class _GanttChartState extends State<GanttChart> {
     return machineWidgets;
   }
 
-  List<Widget> getTasks(List<GanttMachineDTO> machines, double chartWidth){
+  List<Widget> getTasks(List<PlanningMachineEntity> machines, double chartWidth){
     List<Widget> ganttItems = [];
 
     for(int index = 0; index < machines.length; index++){

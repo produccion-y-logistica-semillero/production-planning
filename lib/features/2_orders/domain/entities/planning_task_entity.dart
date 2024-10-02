@@ -1,4 +1,4 @@
-class GanttTaskDTO{
+class PlanningTaskEntity{
   final int sequenceId;
   final String sequenceName;
   final int taskId;
@@ -6,7 +6,7 @@ class GanttTaskDTO{
   final DateTime startDate;
   final DateTime endDate;
 
-  GanttTaskDTO({
+  PlanningTaskEntity({
     required this.sequenceId,
     required this.sequenceName,
     required this.taskId,

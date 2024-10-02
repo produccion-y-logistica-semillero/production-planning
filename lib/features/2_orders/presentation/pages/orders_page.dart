@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
+import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/new_order_page.dart';
@@ -37,7 +38,10 @@ class OrdersPage extends StatelessWidget{
                 MaterialPageRoute(
                   builder: (context) => 
                     BlocProvider<GanttBloc>(
-                      create: (context) => GetIt.instance.get<GanttBloc>(),
+                      create: (context) {
+                        GetIt.instance.get<GanttBloc>().add(AssignOrderId(1));
+                        return GetIt.instance.get<GanttBloc>();
+                      },
                       child: GanttPage(),
                     )
                 )

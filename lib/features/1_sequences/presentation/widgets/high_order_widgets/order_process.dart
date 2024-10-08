@@ -94,7 +94,7 @@ class OrderProcess extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Duración: ${duration.hour}:${duration.minute}', // Mostrar la duración tal cual
+                            'Duración: ${duration.inHours.toString().padLeft(2, '0')}:${(duration.inMinutes - duration.inHours*60).toString().padLeft(2, '0')}', // Mostrar la duración tal cual
                             style: const TextStyle(
                               fontSize: 14,
                               color: Colors.white,

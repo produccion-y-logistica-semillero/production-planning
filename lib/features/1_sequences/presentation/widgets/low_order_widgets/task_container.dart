@@ -49,7 +49,7 @@ class TaskContainer extends StatelessWidget{
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Tiempo: ${task.processingUnit.hour}:${task.processingUnit.minute}',
+                    'Duración: ${task.processingUnit.inHours.toString().padLeft(2, '0')}:${(task.processingUnit.inMinutes - task.processingUnit.inHours*60).toString().padLeft(2, '0')}',
                     style: const TextStyle(
                       fontSize: 18,
                       color: Colors.white,

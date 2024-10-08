@@ -27,7 +27,13 @@ class GanttBloc extends Bloc<GanttEvent, GanttState>{
     on<SelectRule>((event, emit) async{
       emit(GanttPlanningLoading(state.orderId, state.enviroment, event.id));
 
-      final response = await _scheduleOrderUseCase(p: Tuple3(state.orderId!, event.id, state.enviroment!.environmentId));
+      final response = await _scheduleOrderUseCase(
+        p: Tuple3(
+          state.orderId!, 
+          state.enviroment!.rules.where((rule)=> rule.value1 == event.id).first.value2, 
+          state.enviroment!.name
+        )
+      );
 
       //to imitate work
       await Future.delayed(Duration(milliseconds: 1000));

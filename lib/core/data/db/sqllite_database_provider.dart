@@ -210,7 +210,7 @@ class SQLLiteDatabaseProvider{
           VALUES (1, '2024-09-08 04:30:00', 'Coser pantalon', 4, 4);
 
           INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (1, '2024-09-08 04:30:00', 'Coser pantalon', 4, 5);
+          VALUES (1, '2024-09-08 04:30:00', 'Coser camiseta', 5, 4);
 
           INSERT INTO orders (reg_date) VALUES ('2024-10-08');  --order ID = 4
 

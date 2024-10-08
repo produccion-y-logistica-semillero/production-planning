@@ -4,7 +4,7 @@ import 'package:production_planning/features/1_sequences/domain/entities/task_en
 class TaskModel{
   int? taskId;
   final int execOrder;
-  final TimeOfDay nProcUnits;
+  final Duration nProcUnits;
   final String description;
   final int sequenceId;
   final int machineTypeId;
@@ -32,9 +32,9 @@ class TaskModel{
     return TaskModel(
       taskId: map["task_id"],
       execOrder: map["exec_order"], 
-      nProcUnits: TimeOfDay(
-        hour: int.parse(map["n_proc_units"].toString().substring(11, 13)), 
-        minute: int.parse(map["n_proc_units"].toString().substring(14, 16))
+      nProcUnits: Duration(
+        hours: int.parse(map["n_proc_units"].toString().substring(11, 13)), 
+        minutes: int.parse(map["n_proc_units"].toString().substring(14, 16))
       ), 
       description: map["description"], 
       sequenceId: map["sequence_id"], 
@@ -43,7 +43,7 @@ class TaskModel{
   }
 
   Map<String, dynamic> toJson(){
-    String timeStamp = '${nProcUnits.hour.toString().padLeft(2, '0')}:${nProcUnits.minute.toString().padLeft(2, '0')}:00'; 
+    String timeStamp = '${nProcUnits.inHours.toString().padLeft(2, '0')}:${(nProcUnits.inMinutes- nProcUnits.inHours*60).toString().padLeft(2, '0')}:00'; 
     return {
       "sequence_id": sequenceId,
       "machine_type_id" : machineTypeId,

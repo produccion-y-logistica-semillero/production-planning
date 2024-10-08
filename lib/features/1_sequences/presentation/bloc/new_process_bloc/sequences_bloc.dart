@@ -40,7 +40,7 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
         List<NewTaskModel> selectedMachines = [];
         if(state.selectedMachines != null) selectedMachines = state.selectedMachines!;
         MachineTypeEntity m = event.machine;
-        final newTask = NewTaskModel(m.id!, TimeOfDay(hour: 1, minute: 0), "", 0, m.name);
+        final newTask = NewTaskModel(m.id!, Duration(hours: 1, minutes: 0), "", 0, m.name);
         emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(newTask)));
       }
     );
@@ -90,9 +90,9 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
     on<OnTaskUpdated>(
       (event, emit){
         state.selectedMachines![event.index].description = event.description;
-        state.selectedMachines![event.index].processingUnit = TimeOfDay(
-          hour: int.parse(event.hour.substring(0,2) ), 
-          minute:int.parse(event.hour.substring(3,5) ), 
+        state.selectedMachines![event.index].processingUnit = Duration(
+          hours: int.parse(event.hour.substring(0,2) ), 
+          minutes:int.parse(event.hour.substring(3,5) ), 
         );
         emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines));
       }

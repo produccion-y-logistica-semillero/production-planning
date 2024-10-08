@@ -19,5 +19,7 @@ abstract class MachineRepository{
   Future<Either<Failure, int>> insertMachine(MachineEntity machine);
 
   Future<Either<Failure, int>> countMachinesOf(int machineTypeId);
+
+  Future<Either<Failure, String>> getMachineTypeName(int machineTypeId);
   
 }

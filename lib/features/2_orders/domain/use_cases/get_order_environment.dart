@@ -36,6 +36,7 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
     bool differentMachine = false;
     int max = 0;
     for (var row in machineTypesId) {
+      print('dist: ${row.length}');
       if(row.length > max) max = row.length;
     }
     List<int> commonMachinesId = [];
@@ -83,6 +84,10 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
     else if(!differentMachine && max > 1 && allOne) enviroment = 'FLOW SHOP';
     else if(!differentMachine && max == 1 && !allOne) enviroment = 'PARALLEL MACHINES';
     else enviroment = 'SINGLE MACHINE';
+
+    print(enviroment);
+    print(max);
+    print(allOne);
 
     return orderRepo.getEnvironmentByName(enviroment);
   }

@@ -30,5 +30,6 @@ class GanttPlanningError extends GanttState{
 
 class GanttPlanningSuccess extends GanttState{
   List<PlanningMachineEntity> planningMachines;
+  
   GanttPlanningSuccess(super.orderId, super.enviroment, this.planningMachines, super.selectedRule);
 }

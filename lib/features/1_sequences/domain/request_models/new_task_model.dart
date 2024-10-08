@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class NewTaskModel{
   final int machineTypeId;
-  TimeOfDay processingUnit;
+  Duration processingUnit;
   String description;
   int execOrder;
   final String machineName;

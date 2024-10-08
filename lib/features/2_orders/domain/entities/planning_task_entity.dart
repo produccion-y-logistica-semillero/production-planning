@@ -4,6 +4,7 @@ class PlanningTaskEntity{
   final int taskId;
   final int numberProcess;  //this is for instance, if in the order we put 2 items of sequence x, then there would be x1 and x2
   final DateTime startDate;
+  final bool retarded; //if the termination is after due date
   final DateTime endDate;
 
   PlanningTaskEntity({
@@ -13,5 +14,6 @@ class PlanningTaskEntity{
     required this.numberProcess,
     required this.startDate, 
     required this.endDate,
+    required this.retarded
   });
 }

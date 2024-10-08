@@ -87,7 +87,7 @@ Future<void> initDependencies() async {
     depIn.registerLazySingleton<AddOrderUseCase>(()=> AddOrderUseCase());
     depIn.registerLazySingleton<GetOrderEnvironment>(()=> GetOrderEnvironment(depIn.get<OrderRepository>(), depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetOrdersUseCase>(()=> GetOrdersUseCase(repository: depIn.get<OrderRepository>()));
-    depIn.registerLazySingleton<ScheduleOrderUseCase>(()=> ScheduleOrderUseCase());
+    depIn.registerLazySingleton<ScheduleOrderUseCase>(()=> ScheduleOrderUseCase(orderRepository: depIn.get<OrderRepository>(), machineRepository: depIn.get<MachineRepository>()));
     
     //Bloc machine
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton

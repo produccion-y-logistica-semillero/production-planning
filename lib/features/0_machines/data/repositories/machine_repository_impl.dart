@@ -101,6 +101,17 @@ class MachineRepositoryImpl implements MachineRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, String>> getMachineTypeName(int machineTypeId)async {
+    try{
+      String name = await machineTypeDao.getMachineName(machineTypeId);
+      return Right(name);
+    }
+    on Failure catch(failure){
+      return Left(failure);
+    }
+  }
+
    Future<Map<String, dynamic>> machineEntityToJson(MachineEntity entity)async {
     final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${(entity.processingTime.inMinutes - (entity.processingTime.inHours*60)).toString().padLeft(2, '0')}:00';
     final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${(entity.preparationTime!.inMinutes- (entity.preparationTime!.inHours*60)).toString().padLeft(2, '0')}:00': null; 
@@ -136,6 +147,7 @@ class MachineRepositoryImpl implements MachineRepository {
       name: map["machine_name"]
     );
   }
+  
   
 
 }

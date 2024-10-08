@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class TaskEntity{
   int? id;
   final int execOrder;
-  final TimeOfDay processingUnits;
+  final Duration processingUnits;
   final String description;
   final int machineTypeId;
   String? machineName;

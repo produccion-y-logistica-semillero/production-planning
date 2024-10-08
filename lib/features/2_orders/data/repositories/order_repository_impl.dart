@@ -34,4 +34,8 @@ class OrderRepositoryImpl {
       return Left(error);
     }
   }
+
+  Future<Either<Failure, OrderEntity>> createOrder(OrderEntity order) async {
+    throw UnimplementedError();
+  }
 }

@@ -36,6 +36,22 @@ class OrderRepositoryImpl {
   }
 
   Future<Either<Failure, OrderEntity>> createOrder(OrderEntity order) async {
-    throw UnimplementedError();
+    try {
+      //insert order in data base and get orderId to create job
+      final int orderId = await orderDao.insertOrder(order);
+
+      if (order.orderJobs != null) {
+        // insert each job from the orderJobs (list) on data base
+        for (var job in order.orderJobs!) {
+          job.orderId = orderId;
+          // insert job in data base
+          await jobDao.insertJob(job);
+        }
+      }
+      // return if order created sucessfully.
+      return Right(OrderEntity(orderId, order.regDate, order.orderJobs));
+    } on Failure catch (error) {
+      return Left(error);
+    }
   }
 }

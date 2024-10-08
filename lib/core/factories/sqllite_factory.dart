@@ -10,8 +10,12 @@ import 'package:production_planning/features/1_sequences/data/dao_implementation
 import 'package:production_planning/features/1_sequences/data/dao_implementations/tasks_dao_sqllite.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/sequences_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
+import 'package:production_planning/features/2_orders/data/dao_implementations/dispatch_rules_dao_sqllite.dart';
+import 'package:production_planning/features/2_orders/data/dao_implementations/enviroment_dao_sqllite.dart';
 import 'package:production_planning/features/2_orders/data/dao_implementations/job_dao_sqllite.dart';
 import 'package:production_planning/features/2_orders/data/dao_implementations/order_dao_sqllite.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/dispatch_rules_dao.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/enviroment_dao.dart';
 import 'package:production_planning/features/2_orders/data/dao_interfaces/job_dao.dart';
 import 'package:production_planning/features/2_orders/data/dao_interfaces/order_dao.dart';
 import 'package:sqflite/sqflite.dart';
@@ -26,6 +30,8 @@ class SqlLiteFactory implements Factory{
   StatusDaoSqllite? statusDaoSqllite;
   OrderDaoSqlLite? orderDaoSqlLite;
   JobDaoSQLlite? jobDaoSQLlite;
+  DispatchRulesDao? dispatchRulesDao;
+  EnviromentDao? enviromentDao;
 
   //static factory constructor to perform async operation
   static Future<SqlLiteFactory> create() async{
@@ -67,6 +73,16 @@ class SqlLiteFactory implements Factory{
   @override
   OrderDao getOrderDao() {
     return orderDaoSqlLite ??= OrderDaoSqlLite(db);
+  }
+  
+  @override
+  DispatchRulesDao getDispatchRulesDao() {
+    return dispatchRulesDao ??= DispatchRulesDaoSqllite(db);
+  }
+  
+  @override
+  EnviromentDao getEnviromentDao() {
+    return enviromentDao ??= EnviromentDaoSqllite(db);
   }
 
   @override

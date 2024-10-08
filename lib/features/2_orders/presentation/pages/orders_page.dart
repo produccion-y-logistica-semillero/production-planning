@@ -8,6 +8,8 @@ import 'package:production_planning/features/2_orders/presentation/pages/new_ord
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class OrdersPage extends StatelessWidget{
+  const OrdersPage({super.key});
+
 
   @override
   Widget build(BuildContext context) {

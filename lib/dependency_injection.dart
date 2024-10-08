@@ -62,7 +62,11 @@ Future<void> initDependencies() async {
     //Orders repositories
     depIn.registerLazySingleton<OrderRepository>(()=> OrderRepositoryImpl(
       orderDao: daoFactory.getOrderDao(), 
-      jobDao: daoFactory.getJobDao()
+      jobDao: daoFactory.getJobDao(),
+      enviromentDao: daoFactory.getEnviromentDao(),
+      dispatchRulesDao: daoFactory.getDispatchRulesDao(),
+      sequencesDao: daoFactory.getSequenceDao(),
+      tasksDao: daoFactory.getTaskDao()
     ));
 
     //Machine use cases

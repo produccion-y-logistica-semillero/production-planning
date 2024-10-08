@@ -21,22 +21,22 @@ class GanttPage extends StatelessWidget {
       body: BlocBuilder<GanttBloc, GanttState>(
         builder: (context, state) {
           if(state is GanttOrderRetrieveError){
-            return Text("Hubo un error encontrando la orden");
+            return const Text("Hubo un error encontrando la orden");
           }
           if(state.orderId == null){
             BlocProvider.of<GanttBloc>(context).add(AssignOrderId(orderId));
-            return Text("Loading");
+            return const CircularProgressIndicator();
           }
           List<Widget> content = [];
 
-          if(state.enviroment != null && !(state is GanttPlanningSuccess)){
+          if(state.enviroment != null && state is! GanttPlanningSuccess){
             content.add(DropdownButton<int>(
                 value: state.selectedRule,
-                hint: Text('Selecciona una opción'),
-                icon: Icon(Icons.arrow_downward),
+                hint: const Text('Selecciona una opción'),
+                icon: const Icon(Icons.arrow_downward),
                 iconSize: 24,
                 elevation: 16,
-                style: TextStyle(color: Colors.deepPurple),
+                style: const TextStyle(color: Colors.deepPurple),
                 underline: Container(
                   height: 2,
                   color: Colors.deepPurpleAccent,
@@ -53,10 +53,10 @@ class GanttPage extends StatelessWidget {
             );
           }
           if(state is GanttPlanningLoading){
-             content.add(Center(child: Text("Planficando orden")));
+             content.add(const Center(child: Text("Planficando orden")));
           }
           if(state is GanttPlanningError){
-            content.add(Center(child: Text("Hubo problemas planificando la orden")));
+            content.add(const Center(child: Text("Hubo problemas planificando la orden")));
           }
           if(state is GanttPlanningSuccess){
             content.add(GanttChart(machines: state.planningMachines, selectedRule: state.selectedRule, items: state.enviroment!.rules.map((value) => DropdownMenuItem(

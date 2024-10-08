@@ -1,7 +1,10 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/dispatch_rules_dao.dart';
+import 'package:production_planning/features/2_orders/data/dao_interfaces/enviroment_dao.dart';
 import 'package:production_planning/features/2_orders/data/dao_interfaces/order_dao.dart';
 import 'package:production_planning/features/2_orders/data/dao_interfaces/job_dao.dart';
+import 'package:production_planning/features/2_orders/data/models/enviroment_model.dart';
 import 'package:production_planning/features/2_orders/domain/entities/environment_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
@@ -10,8 +13,10 @@ import 'package:production_planning/features/2_orders/domain/repositories/order_
 class OrderRepositoryImpl implements OrderRepository{
   final OrderDao orderDao;
   final JobDao jobDao;
+  final EnviromentDao enviromentDao;
+  final DispatchRulesDao dispatchRulesDao;
 
-  OrderRepositoryImpl({required this.orderDao, required this.jobDao});
+  OrderRepositoryImpl({required this.orderDao, required this.jobDao, required this.enviromentDao, required this.dispatchRulesDao});
 
   @override
   Future<Either<Failure, List<OrderEntity>>> getAllOrders() async {
@@ -39,9 +44,16 @@ class OrderRepositoryImpl implements OrderRepository{
   }
 
   @override
-  Future<Either<Failure, EnvironmentEntity>> getEnvironmentByName(String name) {
-    // TODO: implement getEnvironmentByName
-    throw UnimplementedError();
+  Future<Either<Failure, EnvironmentEntity>> getEnvironmentByName(String name) async {
+    try{
+      final EnviromentModel env = await enviromentDao.getEnviromentByName(name);
+      final dispatchRules = await dispatchRulesDao.getDispatchRules(env.id);
+      return Right(EnvironmentEntity(env.id, env.name, dispatchRules));
+
+    }
+    on Failure catch(error){
+      return Left(error);
+    }
   }
 
   @override

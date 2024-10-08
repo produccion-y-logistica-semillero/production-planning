@@ -1,5 +1,4 @@
 import 'package:dartz/dartz.dart';
-import 'package:flutter/material.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_dao.dart';
 import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_type_dao.dart';
@@ -91,6 +90,17 @@ class MachineRepositoryImpl implements MachineRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, int>> countMachinesOf(int machineTypeId) async{
+    try{
+      int amount = await machineDao.getMachinesCount(machineTypeId);
+      return Right(amount);
+    }
+    on Failure catch(failure){
+      return Left(failure);
+    }
+  }
+
    Future<Map<String, dynamic>> machineEntityToJson(MachineEntity entity)async {
     final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${(entity.processingTime.inMinutes - (entity.processingTime.inHours*60)).toString().padLeft(2, '0')}:00';
     final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${(entity.preparationTime!.inMinutes- (entity.preparationTime!.inHours*60)).toString().padLeft(2, '0')}:00': null; 
@@ -127,10 +137,5 @@ class MachineRepositoryImpl implements MachineRepository {
     );
   }
   
-  @override
-  Future<Either<Failure, int>> countMachinesOf(int machineTypeId) {
-    // TODO: implement countMachinesOf
-    throw UnimplementedError();
-  }
 
 }

@@ -15,9 +15,10 @@ import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/machines_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
 
+
 class SequencesPage extends StatelessWidget {
 
-  List<Map<String, dynamic>> orders = [
+  final List<Map<String, dynamic>> orders = [
     {
       'name': 'Job A',
       'process': ProcessEntity(
@@ -51,9 +52,8 @@ class SequencesPage extends StatelessWidget {
       ),
     },
   ];
-  List<MachineTypeEntity> selectedMachines = [];
+  final List<MachineTypeEntity> selectedMachines = [];
 
-  String? newOrderName;
 
   SequencesPage({super.key});
 

@@ -9,11 +9,11 @@ import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bl
 
 class GanttChart extends StatefulWidget {
   final List<PlanningMachineEntity> machines;
-  int? selectedRule;
-  List<DropdownMenuItem<int>> items;
+  final int? selectedRule;
+  final List<DropdownMenuItem<int>> items;
   
 
-  GanttChart({
+  const GanttChart({
     super.key,
     required this.machines,
     required this.selectedRule,

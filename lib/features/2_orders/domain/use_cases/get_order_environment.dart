@@ -86,14 +86,13 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
 
     return orderRepo.getEnvironmentByName(enviroment);
 
-    return Right(
+    /*return Right(
       EnvironmentEntity(1, "SINGLE MACHINE", [
         Tuple2(1, "JOHNSON"),
         Tuple2(2, "STATIC"),
         Tuple2(3, "DYNAMIC"),
       ])
-    );
-
+    );*/
   }
 
 }

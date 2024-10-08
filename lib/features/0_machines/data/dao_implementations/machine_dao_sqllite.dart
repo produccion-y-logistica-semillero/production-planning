@@ -60,4 +60,14 @@ class MachineDaoSqllite implements MachineDao{
       throw LocalStorageFailure();
     }
   }
+  
+  @override
+  Future<int> getMachinesCount(int machineTypeId) async{
+    try{
+      int amount = int.parse((await db.rawQuery('SELECT COUNT(*) as conteo FROM MACHINES WHERE machine_type_id = ?', [machineTypeId]))[0]['conteo'].toString());
+      return amount;
+    }catch(error){
+      throw LocalStorageFailure();
+    }
+  }
 }

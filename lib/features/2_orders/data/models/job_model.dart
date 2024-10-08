@@ -5,10 +5,11 @@ class JobModel {
   final int sequenceId;
   final int amount;
   final DateTime dueDate;
+  final DateTime availableDate;
   final int priority;
 
   JobModel(
-      this.jobId, this.sequenceId, this.amount, this.dueDate, this.priority);
+      this.jobId, this.sequenceId, this.amount, this.dueDate, this.priority, this.availableDate);
 
   factory JobModel.fromJson(Map<String, dynamic> json) {
     return JobModel(
@@ -17,6 +18,7 @@ class JobModel {
       json['amount'],
       DateTime.parse(json['due_date']),
       json['priority'],
+      DateTime.parse(json['available_date'])
     );
   }
 
@@ -27,6 +29,7 @@ class JobModel {
       amount,
       dueDate,
       priority,
+      availableDate
     );
   }
 }

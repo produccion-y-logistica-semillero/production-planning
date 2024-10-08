@@ -110,6 +110,7 @@ class SQLLiteDatabaseProvider{
               order_id INTEGER NOT NULL,
               amount INTEGER NOT NULL,
               due_date DATE NOT NULL,
+              available_date DATE NOT NULL,
               priority INTEGER NOT NULL,
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
               FOREIGN KEY (order_id) REFERENCES orders(order_id)
@@ -181,14 +182,14 @@ class SQLLiteDatabaseProvider{
           INSERT INTO orders (reg_date) VALUES ('2024-09-06');
 
           -- Insert default jobs (associating sequences with orders)
-          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
-          VALUES (1, 1, 100, '2024-09-10', 1);
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
+          VALUES (1, 1, 100, '2024-09-10', 1, '2024-09-10');
 
-          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
-          VALUES (2, 2, 200, '2024-09-11', 2);
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
+          VALUES (2, 2, 200, '2024-09-11', 2, '2024-09-10' );
 
-          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority)
-          VALUES (3, 3, 150, '2024-09-12', 3);
+          INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
+          VALUES (3, 3, 150, '2024-09-12', 3, '2024-09-10');
         ''');
       }
     );

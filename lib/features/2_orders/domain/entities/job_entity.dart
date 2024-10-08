@@ -8,8 +8,9 @@ class JobEntity{
   int? jobId;
   final SequenceEntity? sequence;
   final int amount;
+  final DateTime availableDate;
   final DateTime dueDate;
   final int priority;
 
-  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority);
+  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority, this.availableDate);
 }

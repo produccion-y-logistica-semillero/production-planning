@@ -22,8 +22,6 @@ class GanttChart extends StatefulWidget {
 
   @override
   State<GanttChart> createState() => _GanttChartState(
-    startDate: DateTime(2023, 9, 1),
-    endDate: DateTime(2023, 9, 7),
     selectedRule: selectedRule,
     items: items,
   );
@@ -46,11 +44,22 @@ class _GanttChartState extends State<GanttChart> {
   List<DropdownMenuItem<int>> items;
 
   _GanttChartState({
-    required this.startDate,
-    required this.endDate,
     required this.selectedRule,
     required this.items,
-  }) : totalDays = endDate.difference(startDate).inDays;
+  }) : startDate = DateTime.now(), endDate = DateTime.now().add(const Duration(hours: 10)), totalDays = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    for(final machine in widget.machines){
+      for(final task in machine.tasks){
+        if(task.startDate.isBefore(startDate)) startDate = task.startDate;
+        if(task.endDate.isAfter(endDate)) endDate = task.endDate;
+      }
+    }
+    totalDays = endDate.difference(startDate).inDays;
+    
+  }
 
   double _calculatePosition(DateTime date, double totalWidth) {
     int totalMinutes = totalDays * 24 * 60; // Total minutes of the chart

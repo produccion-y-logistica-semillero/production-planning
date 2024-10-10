@@ -40,7 +40,7 @@ class OrdersPage extends StatelessWidget{
                   builder: (context) => 
                     BlocProvider<GanttBloc>(
                       create: (context) => GetIt.instance.get<GanttBloc>(),
-                      child: GanttPage(orderId: 4,),
+                      child: const GanttPage(orderId: 4,),
                     )
                 )
               );

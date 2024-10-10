@@ -77,7 +77,7 @@ class AddOrderForm extends StatelessWidget {
                       color: Colors.black.withOpacity(0.2), 
                       spreadRadius: 2,  // how much the shadow spreads
                       blurRadius: 7,   // the blur effect
-                      offset: Offset(0, 3),  // the position of the shadow (x, y)
+                      offset: const Offset(0, 3),  // the position of the shadow (x, y)
                     ),
                   ],
                 ),
@@ -196,13 +196,13 @@ class AddOrderForm extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                TextButton(onPressed: ()=> Navigator.of(dialogContext).pop(), child: Text("Cancelar")),
+                                TextButton(onPressed: ()=> Navigator.of(dialogContext).pop(), child: const Text("Cancelar")),
                                 TextButton(onPressed: (){
                                   BlocProvider.of<SequencesBloc>(context).add(OnTaskUpdated(hourController.text, descController.text, i));
                                   hourController.clear();
                                   descController.clear();
                                   Navigator.of(dialogContext).pop();
-                                }, child: Text("Guardar")),
+                                }, child: const Text("Guardar")),
                               ],
                             )
                           ],

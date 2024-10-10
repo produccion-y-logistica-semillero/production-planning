@@ -36,7 +36,7 @@ class GanttBloc extends Bloc<GanttEvent, GanttState>{
       );
 
       //to imitate work
-      await Future.delayed(Duration(milliseconds: 1000));
+      await Future.delayed(const Duration(milliseconds: 1000));
 
       response.fold((f)=>emit(GanttPlanningError(state.orderId, state.enviroment, state.selectedRule)), 
       (plan)=> emit(GanttPlanningSuccess(state.orderId, state.enviroment, plan, state.selectedRule)));

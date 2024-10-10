@@ -35,7 +35,7 @@ class SingleMachine {
   
   void jhonson2(){
     
-    Duration accumulator = Duration();
+    Duration accumulator = const Duration();
     for(int i = input.length-1; i >= 0; i--){
       //logica, llamadas a fucniones
       if(i != input.length-1){
@@ -52,7 +52,7 @@ class SingleMachine {
         workStartDate,
         workStartDate.add(input[i].value2),
         input[i].value3,
-        Duration(hours:0)
+        const Duration(hours:0)
       ));
     }
   }

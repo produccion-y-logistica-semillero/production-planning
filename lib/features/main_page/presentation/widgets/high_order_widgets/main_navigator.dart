@@ -32,7 +32,7 @@ class MainNavigator extends StatelessWidget{
                   case '/orders':
                     builder = (BuildContext _) => BlocProvider(
                         create: (context) => GetIt.instance.get<OrdersBloc>(),
-                        child: OrdersPage(),
+                        child: const OrdersPage(),
                     );
                     break;
                   case '/machines':

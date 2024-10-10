@@ -40,7 +40,7 @@ class SequencesBloc extends Bloc<SequencesEvent, SequencesState>{
         List<NewTaskModel> selectedMachines = [];
         if(state.selectedMachines != null) selectedMachines = state.selectedMachines!;
         MachineTypeEntity m = event.machine;
-        final newTask = NewTaskModel(m.id!, Duration(hours: 1, minutes: 0), "", 0, m.name);
+        final newTask = NewTaskModel(m.id!, const Duration(hours: 1, minutes: 0), "", 0, m.name);
         emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(newTask)));
       }
     );

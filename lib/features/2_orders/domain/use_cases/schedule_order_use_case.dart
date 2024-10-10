@@ -123,7 +123,7 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
     //TO DO LATER, SCHEDULE SHOULD BE TAKEN FROM CONFIGURATION IN DATABASE, FOR NOW WE WILL IMAGINE THE TYPICAL 8-5
     final tasks = SingleMachine(
       order!.regDate,
-      Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
+      const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
       input,
       rule
     ).output.map((out)=>PlanningTaskEntity(

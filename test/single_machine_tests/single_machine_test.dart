@@ -12,7 +12,7 @@ void main(){
     DateTime startDate = DateTime.now();
     final workingSchedule = Tuple2<TimeOfDay, TimeOfDay>(
       TimeOfDay.now(),
-      TimeOfDay(hour: 22, minute: 60)
+      const TimeOfDay(hour: 22, minute: 60)
     );
 
     //expectation

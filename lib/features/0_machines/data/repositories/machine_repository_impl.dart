@@ -69,6 +69,7 @@ class MachineRepositoryImpl implements MachineRepository {
 
   //Machines Specific Implementations
 
+  @override
   Future<Either<Failure, bool>> deleteMachine(int id) async{
     try{
       bool res = await machineDao.delete(id);

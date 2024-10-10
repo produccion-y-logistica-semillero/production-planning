@@ -1,2 +1,4 @@
-abstract class OrdersEvent{
-}
+abstract class OrdersEvent {}
+
+class FetchOrdersEvent extends OrdersEvent {}
+  

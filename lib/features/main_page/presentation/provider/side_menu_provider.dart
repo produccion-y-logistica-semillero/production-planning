@@ -8,12 +8,12 @@ class SideMenuProvider extends ChangeNotifier{
   bool expanded = true;
 
   void changeOption(int index){
-    this.selectedOption = index;
+    selectedOption = index;
     notifyListeners();
   }
 
   void changeExpansion(){
-    this.expanded = !expanded;
+    expanded = !expanded;
     notifyListeners();
   }
 }

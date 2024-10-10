@@ -6,7 +6,7 @@ class MachineDisplayTile extends StatelessWidget{
   final MachineEntity machine;
   final void Function() deleteHandler;
 
-  const MachineDisplayTile(this.machine, this.deleteHandler);
+  const MachineDisplayTile(this.machine, this.deleteHandler, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class MachineDisplayTile extends StatelessWidget{
           ),
           IconButton(
             onPressed: deleteHandler,
-            icon: Icon(Icons.delete, color: Colors.red,)
+            icon: const Icon(Icons.delete, color: Colors.red,)
           )
         ],
       ),

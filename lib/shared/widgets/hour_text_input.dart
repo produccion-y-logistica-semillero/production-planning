@@ -40,7 +40,7 @@ class TimeInputFormatter extends TextInputFormatter{
     //then it adds the ':' in between
     if(text.length > 2 &&  !text.contains(':') ){
       return TextEditingValue(
-        text: text.substring(0, 2) + ':' +  text.substring(2),
+        text: '${text.substring(0, 2)}:${text.substring(2)}',
         selection:  TextSelection.collapsed(offset: text.length +1)
       );
     }

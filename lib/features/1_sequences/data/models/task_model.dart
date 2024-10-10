@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:production_planning/features/1_sequences/domain/entities/task_entity.dart';
 
 class TaskModel{

@@ -85,10 +85,6 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
     else if(!differentMachine && max == 1 && !allOne) enviroment = 'PARALLEL MACHINES';
     else enviroment = 'SINGLE MACHINE';
 
-    print(enviroment);
-    print(max);
-    print(allOne);
-
     return orderRepo.getEnvironmentByName(enviroment);
   }
 

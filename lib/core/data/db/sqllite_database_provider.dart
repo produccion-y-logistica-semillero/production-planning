@@ -93,7 +93,7 @@ class SQLLiteDatabaseProvider{
               environment_id INTEGER NOT NULL,
               dispatch_rule_id INTEGER NOT NULL,
               FOREIGN KEY (environment_id) REFERENCES environments(environment_id),
-              FOREIGN KEY (dispatch_rule_id) REFERENCES dispatch_rules(dispatch_rules)
+              FOREIGN KEY (dispatch_rule_id) REFERENCES dispatch_rules(dispatch_rule_id)
           );
         ''');
 
@@ -167,9 +167,11 @@ class SQLLiteDatabaseProvider{
 
           -- Insert dispatch rules
           INSERT INTO dispatch_rules (name) VALUES('JHONSON');
+          INSERT INTO dispatch_rules (name) VALUES('esta la cree yo');
 
           --Insert types_x_rules
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------
@@ -203,6 +205,7 @@ class SQLLiteDatabaseProvider{
           INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
           VALUES (4,'Maquina de coser pro', 1, '2024-09-08 01:00:00', '2024-09-08 00:00:00', '2024-09-08 00:00:00', 1);
 
+
           INSERT INTO sequences (name) VALUES ('Coser pantalon'); --sequence ID = 4
           INSERT INTO sequences (name) VALUES ('Coser camiseta'); --sequence ID = 5
 
@@ -210,7 +213,7 @@ class SQLLiteDatabaseProvider{
           VALUES (1, '2024-09-08 04:30:00', 'Coser pantalon', 4, 4);
 
           INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (1, '2024-09-08 04:30:00', 'Coser camiseta', 5, 4);
+          VALUES (1, '2024-09-08 06:30:00', 'Coser camiseta', 5, 4);
 
           INSERT INTO orders (reg_date) VALUES ('2024-10-08');  --order ID = 4
 

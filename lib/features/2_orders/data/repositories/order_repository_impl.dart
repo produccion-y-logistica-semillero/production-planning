@@ -63,6 +63,7 @@ class OrderRepositoryImpl implements OrderRepository{
     try{
       final EnviromentModel env = await enviromentDao.getEnviromentByName(name);
       final dispatchRules = await dispatchRulesDao.getDispatchRules(env.id);
+      print(dispatchRules);
       return Right(EnvironmentEntity(env.id, env.name, dispatchRules));
 
     }

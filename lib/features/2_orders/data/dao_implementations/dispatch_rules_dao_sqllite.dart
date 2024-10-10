@@ -12,7 +12,7 @@ class DispatchRulesDaoSqllite implements DispatchRulesDao{
   Future<List<Tuple2<int, String>>> getDispatchRules(int enviromentId) async{
     try{
       return (await db.rawQuery(
-        'SELECT dr.dispatch_rule_id as id, dr.name as name FROM dispatch_rules dr INNER JOIN types_x_rules tr WHERE tr.environment_id = ?', [enviromentId]
+        'SELECT dr.dispatch_rule_id as id, dr.name as name FROM dispatch_rules dr INNER JOIN types_x_rules tr ON tr.dispatch_rule_id = dr.dispatch_rule_id WHERE tr.environment_id = ?', [enviromentId]
       )).map((json)=> Tuple2<int, String>(int.parse(json['id'].toString()), json['name'].toString())).toList();
     }catch(error){
       throw LocalStorageFailure();

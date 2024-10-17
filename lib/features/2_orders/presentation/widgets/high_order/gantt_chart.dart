@@ -2,13 +2,16 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/features/2_orders/domain/entities/metrics.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 import 'package:intl/intl.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';  // For formatting dates
+import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';
+import 'package:production_planning/features/2_orders/presentation/widgets/high_order/metrics_page.dart';  // For formatting dates
 
 class GanttChart extends StatefulWidget {
   final List<PlanningMachineEntity> machines;
+  final Metrics metrics;
   final int? selectedRule;
   final List<DropdownMenuItem<int>> items;
   
@@ -18,6 +21,7 @@ class GanttChart extends StatefulWidget {
     required this.machines,
     required this.selectedRule,
     required this.items,
+    required this.metrics,
   });
 
   @override
@@ -132,7 +136,7 @@ class _GanttChartState extends State<GanttChart> {
             ),
             const SizedBox(width: 15,),
             TextButton(
-              onPressed: (){}, 
+              onPressed: ()=> showMetrics(widget.metrics, context), 
               child: const Text("Metricas")
             ),
           ],
@@ -241,6 +245,15 @@ class _GanttChartState extends State<GanttChart> {
           ],
         )
       ],
+    );
+  }
+
+  void showMetrics(Metrics metrics, BuildContext context){
+    showDialog(
+      context: context, 
+      builder: (subContext){
+        return  MetricsPage(metrics: metrics);
+      }
     );
   }
 

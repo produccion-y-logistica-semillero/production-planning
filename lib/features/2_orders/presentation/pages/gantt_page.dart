@@ -62,11 +62,18 @@ class GanttPage extends StatelessWidget {
             content.add(const Center(child: Text("Hubo problemas planificando la orden")));
           }
           if(state is GanttPlanningSuccess){
-            content.add(GanttChart(machines: state.planningMachines, selectedRule: state.selectedRule, items: state.enviroment!.rules.map((value) => DropdownMenuItem(
+            content.add(
+              GanttChart(
+                machines: state.planningMachines, 
+                selectedRule: state.selectedRule,
+                metrics:  state.metrics,
+                items: state.enviroment!.rules.map((value) => DropdownMenuItem(
                     value: value.value1,
                     child: Text(value.value2),
                   )
-                ).toList(),));
+                ).toList(),
+              )
+            );
           }
           return Center(
             child: Column(

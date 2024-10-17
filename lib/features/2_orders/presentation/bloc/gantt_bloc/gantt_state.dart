@@ -1,4 +1,5 @@
 import 'package:production_planning/features/2_orders/domain/entities/environment_entity.dart';
+import 'package:production_planning/features/2_orders/domain/entities/metrics.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 
 abstract class GanttState{
@@ -30,6 +31,7 @@ class GanttPlanningError extends GanttState{
 
 class GanttPlanningSuccess extends GanttState{
   List<PlanningMachineEntity> planningMachines;
+  Metrics metrics;
   
-  GanttPlanningSuccess(super.orderId, super.enviroment, this.planningMachines, super.selectedRule);
+  GanttPlanningSuccess(super.orderId, super.enviroment, this.planningMachines, this.metrics, super.selectedRule);
 }

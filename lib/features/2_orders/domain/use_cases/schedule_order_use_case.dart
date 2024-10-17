@@ -12,7 +12,7 @@ import 'package:production_planning/features/2_orders/domain/entities/planning_t
 import 'package:production_planning/features/2_orders/domain/repositories/order_repository.dart';
 import 'package:production_planning/shared/functions/rule_3_duration.dart';
 
-class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple3<int, String, String>>{
+class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>, Metrics>?, Tuple3<int, String, String>>{
 
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
@@ -23,25 +23,25 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
   });
 
   @override
-  Future<Either<Failure, List<PlanningMachineEntity>>> call({required Tuple3<int, String, String> p}) async{  //tuple < orderid, rule name, enviroment name>
+  Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>> call({required Tuple3<int, String, String> p}) async{  //tuple < orderid, rule name, enviroment name>
     return switch(p.value3){
       'SINGLE MACHINE' => Right(await singleMachineAdapter(p.value1, p.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
     };
   }
 
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>> singleMachineAdapter(int orderId, String rule) async{
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> singleMachineAdapter(int orderId, String rule) async{
     OrderEntity? order;
     final responseOrder = await orderRepository.getFullOrder(orderId);
     responseOrder.fold((f){}, (or)=>order = or);
-    if(order == null) return [];
+    if(order == null) return null;
 
     //getting the unique machine
     MachineEntity? machineEntity;
     int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
     final responseMachine = await machineRepository.getAllMachinesFromType(machineTypeid);
     responseMachine.fold((f){}, (m)=> machineEntity = m[0]);
-    if(machineEntity == null) return [];
+    if(machineEntity == null) return null;
 
     //getting machine type for the name
     String machineTypeName = "";
@@ -95,9 +95,15 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
     ];
 
     //get metricts
+    final metrics = getMetricts(
+      machinesResult, 
+      output.map(
+        (out)=> Tuple3(out.value2, out.value3,out.value4)
+      )
+      .toList()
+    );
 
-
-    return Tuple2(machinesResult, Metrics());
+    return Tuple2(machinesResult, metrics);
   }
 
 
@@ -107,7 +113,7 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
     //IDLE METRIC (TIME OF MACHINES NOT BEING USED)
     Duration totalIdle = Duration.zero;
     for(final machine in machines){
-      DateTime? previousEnd = null;
+      DateTime? previousEnd;
       for(final task in machine.tasks){
         if(previousEnd == null){
           previousEnd = task.endDate;
@@ -118,7 +124,7 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
         }
       }
     }
-    final Duration idle = Duration(minutes:  (totalIdle.inMinutes / machines.length).toInt()); 
+    final Duration idle = Duration(minutes:  totalIdle.inMinutes ~/ machines.length); 
 
     /////////other metrics
 
@@ -161,8 +167,8 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
 extension on List<PlanningTaskEntity>{
 
   void orderByStartDate(){
-    for(int i = 0; i < this.length; i++){
-      for(int j = i+1; j < this.length; j++){
+    for(int i = 0; i < length; i++){
+      for(int j = i+1; j < length; j++){
         if(this[i].startDate.isAfter(this[j].startDate)){
           PlanningTaskEntity auxStartDate = this[i];
           this[i] = this[j];

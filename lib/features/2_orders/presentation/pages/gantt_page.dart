@@ -30,6 +30,9 @@ class GanttPage extends StatelessWidget {
           List<Widget> content = [];
 
           if(state.enviroment != null && state is! GanttPlanningSuccess){
+            content.add(
+              Text(state.enviroment!.name)
+            );
             content.add(DropdownButton<int>(
                 value: state.selectedRule,
                 hint: const Text('Selecciona una opción'),
@@ -53,7 +56,7 @@ class GanttPage extends StatelessWidget {
             );
           }
           if(state is GanttPlanningLoading){
-             content.add(const Center(child: Text("Planficando orden")));
+             content.add(const Center(child: CircularProgressIndicator()));
           }
           if(state is GanttPlanningError){
             content.add(const Center(child: Text("Hubo problemas planificando la orden")));
@@ -65,8 +68,10 @@ class GanttPage extends StatelessWidget {
                   )
                 ).toList(),));
           }
-          return Column(
-            children: content
+          return Center(
+            child: Column(
+              children: content
+            ),
           );
         },
       ),

@@ -5,6 +5,7 @@ import 'package:production_planning/core/use_cases/use_case.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
 import 'package:production_planning/features/2_orders/domain/algorithms/single_machine.dart';
+import 'package:production_planning/features/2_orders/domain/entities/metrics.dart';
 import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_task_entity.dart';
@@ -29,7 +30,7 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
     };
   }
 
-  Future<List<PlanningMachineEntity>> singleMachineAdapter(int orderId, String rule) async{
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>> singleMachineAdapter(int orderId, String rule) async{
     OrderEntity? order;
     final responseOrder = await orderRepository.getFullOrder(orderId);
     responseOrder.fold((f){}, (or)=>order = or);
@@ -65,12 +66,16 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
 
 
     //TO DO LATER, SCHEDULE SHOULD BE TAKEN FROM CONFIGURATION IN DATABASE, FOR NOW WE WILL IMAGINE THE TYPICAL 8-5
-    final tasks = SingleMachine(
+    final output = SingleMachine(
       order!.regDate,
       Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
       input,
       rule
-    ).output.map((out)=>PlanningTaskEntity(
+    ).output;
+    
+
+    //get tasks
+    final tasks = output.map((out)=>PlanningTaskEntity(
         sequenceId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.id!,
         sequenceName: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.name,
         taskId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.tasks![0].id!,
@@ -80,11 +85,90 @@ class ScheduleOrderUseCase implements UseCase<List<PlanningMachineEntity>, Tuple
         retarded: !out.value2.isBefore(out.value4)
       )
     ).toList();
-    print(tasks.length);
-    return [PlanningMachineEntity(
-      machineEntity!.id!,
-      machineTypeName,
-      tasks
-    )];
+
+    final machinesResult = [
+      PlanningMachineEntity(
+        machineEntity!.id!,
+        machineTypeName,
+        tasks
+      )
+    ];
+
+    //get metricts
+
+
+    return Tuple2(machinesResult, Metrics());
+  }
+
+
+  Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, DateTime, DateTime>> jobsDates){  //(start date, end date, due date)
+    machines.forEach((machine)=>machine.tasks.orderByStartDate());
+
+    //IDLE METRIC (TIME OF MACHINES NOT BEING USED)
+    Duration totalIdle = Duration.zero;
+    for(final machine in machines){
+      DateTime? previousEnd = null;
+      for(final task in machine.tasks){
+        if(previousEnd == null){
+          previousEnd = task.endDate;
+        }
+        else{
+          final currentIdle = task.startDate.difference(previousEnd);
+          totalIdle = Duration(minutes: (totalIdle.inMinutes + currentIdle.inMinutes));
+        }
+      }
+    }
+    final Duration idle = Duration(minutes:  (totalIdle.inMinutes / machines.length).toInt()); 
+
+    /////////other metrics
+
+    //avarage processing time
+    final avarageProcessingMinutes = jobsDates.map((tuple)=>  tuple.value2.difference(tuple.value1))
+      .reduce((previous, time)=> Duration(minutes: (previous.inMinutes + time.inMinutes)))
+      .inMinutes / jobsDates.length;
+    final avarageProcessingTime = Duration(minutes: avarageProcessingMinutes.toInt());
+
+    // avarage delay
+    final avarageDelayMinutes = jobsDates.map((dates)=> dates.value2.isAfter(dates.value3) ? dates.value2.difference(dates.value3) : Duration.zero)
+      .reduce((previous, delay)=> Duration(minutes: (previous.inMinutes + delay.inMinutes))).inMinutes / jobsDates.length;
+    final avarageDelay = Duration(minutes: avarageDelayMinutes.toInt());
+
+    // max delay
+    final maxDelay =jobsDates.map((dates)=> dates.value2.isAfter(dates.value3) ? dates.value2.difference(dates.value3) : Duration.zero)
+      .reduce((previous, delay)=> delay.inMinutes > previous.inMinutes ? delay : previous);
+    
+    //avarage lateness (can be negative)
+    final avarageLatenessMinutes = jobsDates.map((dates)=> dates.value2.difference(dates.value3))
+      .reduce((previous, delay)=> Duration(minutes: (previous.inMinutes + delay.inMinutes))).inMinutes / jobsDates.length;
+    final avarageLateness = Duration(minutes: avarageLatenessMinutes.toInt());
+
+    //late jobs
+    final delayedJobs = jobsDates.map((dates)=> dates.value2.isAfter(dates.value3) ? 1 : 0).reduce((p, c) => p+c);
+
+    return Metrics(
+      idle: idle, 
+      totalJobs: jobsDates.length, 
+      maxDelay: maxDelay, 
+      avarageProcessingTime: avarageProcessingTime, 
+      avarageDelayTime: avarageDelay, 
+      avarageLatenessTime: avarageLateness, 
+      delayedJobs: delayedJobs
+    );
+
+  }
+}
+
+extension on List<PlanningTaskEntity>{
+
+  void orderByStartDate(){
+    for(int i = 0; i < this.length; i++){
+      for(int j = i+1; j < this.length; j++){
+        if(this[i].startDate.isAfter(this[j].startDate)){
+          PlanningTaskEntity auxStartDate = this[i];
+          this[i] = this[j];
+          this[j] = auxStartDate;
+        }
+      }
+    }
   }
 }

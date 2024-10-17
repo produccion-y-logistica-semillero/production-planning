@@ -4,20 +4,19 @@ import 'package:flutter/material.dart';
 class ParallelMachine {
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; //like 8-17
-  List<Tuple4<int, DateTime, int, DateTime>> inputJobs = [];
+  List<Tuple5<int, DateTime, int, DateTime, List<Duration>>> inputJobs = [];
   //the input comes like a table of type
-  //  job id   |     due date        |       priority  | Available date
-  //  1         |   2024/8/30/6:00    |         1       | 2024/8/30/6:00
-  //  2         |   2024/8/30/6:00    |         3       | 2024/8/30/6:00
-  //  3         |   2024/8/30/6:00    |         2       | 2024/8/30/6:00
+  //  job id   |     due date        |       priority  | Available date   |           Times
+  //  1         |   2024/8/30/6:00    |         1       | 2024/8/30/6:00  |    [10:20, 01:30, 00:45]
+  //  2         |   2024/8/30/6:00    |         3       | 2024/8/30/6:00  |    [10:20, 01:30, 00:45]
+  //  3         |   2024/8/30/6:00    |         2       | 2024/8/30/6:00  |    [10:20, 01:30, 00:45]
 
-  List<int> machinesIds = []; //list of machines id's available for this parallel machine
-  List<List<Duration>> timeMatrix = []; //matrix of time it takes the task in each machine
-  //  The first list (rows) are the indexes of jobs, and the inside list (columns) are the times in each machine
-  //  the indexes in these lists (matrix) point to the same indexes in the list of inputJobs and machineId's
-  //          :   0   |   1   |   2   |   3   |
-  //      0     10:25 | 01:30 | 02:45 | 00:45 |
-  //      1     08:25 | 00:30 | 02:50 | 00:12 |
+  List<Tuple2<int, List<Tuple2<DateTime, DateTime>>>> machines = []; 
+  //list of machines, and each one has its scheduling times, so we can check availability
+  //  machine Id  |                   Scheduling
+  //    1         |  [<2024-10-15-10:30, 2024-10-15-11:30> , <2024-10-15-10:30, 2024-10-15-11:30>]
+  //    2         |  [<2024-10-15-10:30, 2024-10-15-11:30> , <2024-10-15-10:30, 2024-10-15-11:30>]
+  
 
   List<Tuple5<int, DateTime, DateTime, DateTime, Duration>> output = [];
   //the output goes like a table of type
@@ -29,8 +28,7 @@ class ParallelMachine {
     this.startDate,
     this.workingSchedule,
     this.inputJobs,
-    this.machinesIds,
-    this.timeMatrix,
+    this.machines,
     String rule,
   ) {
     switch (rule) {

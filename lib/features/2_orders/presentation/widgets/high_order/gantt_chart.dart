@@ -51,13 +51,20 @@ class _GanttChartState extends State<GanttChart> {
   @override
   void initState() {
     super.initState();
+    endDate = widget.machines[0].tasks[0].endDate;
     for(final machine in widget.machines){
       for(final task in machine.tasks){
         if(task.startDate.isBefore(startDate)) startDate = task.startDate;
         if(task.endDate.isAfter(endDate)) endDate = task.endDate;
       }
     }
+    print(startDate);
+    print(endDate);
     totalDays = endDate.difference(startDate).inDays;
+    if(totalDays == 0){
+      endDate = DateTime(endDate.year, endDate.month, endDate.day+1, endDate.hour, endDate.minute);
+      totalDays++;
+    }
     
   }
 
@@ -86,7 +93,7 @@ class _GanttChartState extends State<GanttChart> {
 
   @override
   Widget build(BuildContext context) {
-    double staticChartWidth = ((MediaQuery.of(context).size.width- 380) * 0.85) ; 
+    double staticChartWidth = ((MediaQuery.of(context).size.width- 500) * 0.85) ; 
     double staticChartHeight =(MediaQuery.of(context).size.height-220) * 0.85;
     double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentHorizontalValue; // The width depends on the user's selected zoom level
     hourWidth = (chartWidth / totalDays) / 24;
@@ -122,6 +129,11 @@ class _GanttChartState extends State<GanttChart> {
             ElevatedButton(
               onPressed: () => _selectDateRange(context),
               child: const Text('Seleccione rango'),
+            ),
+            const SizedBox(width: 15,),
+            TextButton(
+              onPressed: (){}, 
+              child: const Text("Metricas")
             ),
           ],
         ),

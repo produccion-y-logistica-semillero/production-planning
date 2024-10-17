@@ -3,8 +3,8 @@ import 'add_job.dart';
 
 class AddOrder extends StatelessWidget {
 
-  List<TextEditingController> priorityControllers;
-  List<TextEditingController> quantityControllers;
+  List<TextEditingController>? priorityControllers;
+  List<TextEditingController>? quantityControllers;
 
   AddOrder({
     required this.priorityControllers,
@@ -25,13 +25,13 @@ class AddOrder extends StatelessWidget {
               child: ListView(
                 children: [
                   AddJob(
-                    priorityController: priorityControllers[0],
-                    quantityController: quantityControllers[0],
+                    priorityController: null,
+                    quantityController: null,    
                     ), 
                   SizedBox(height: 16),
                   AddJob(
-                    priorityController: priorityControllers[1],
-                    quantityController: quantityControllers[1],
+                    priorityController: null,
+                    quantityController: null,                    
                     ), 
                 ],
               ),

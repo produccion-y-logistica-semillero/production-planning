@@ -3,8 +3,8 @@ import 'package:intl/intl.dart'; // Para manejar fechas
 
 class AddJob extends StatelessWidget {
   final DateTime? selectedDate;
-  final TextEditingController priorityController;
-  final TextEditingController quantityController;
+  final TextEditingController? priorityController;
+  final TextEditingController? quantityController;
 
 
   AddJob({

@@ -7,20 +7,20 @@ import 'package:production_planning/features/2_orders/presentation/bloc/new_orde
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_job.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_order.dart';
 
-class NewOrdersBloc extends Bloc<NewOrdersEvent, NewOrdersState>{
-  final AddOrderUseCase _addOrderUseCase;
-  final AddSequenceUseCase   _addSequenceUseCase;
+class NewOrderBloc extends Bloc<NewOrdersEvent, NewOrdersState>{
+  //final AddOrderUseCase _addOrderUseCase;
+  //final AddSequenceUseCase   _addSequenceUseCase;
 
-  NewOrdersBloc(this._addOrderUseCase, this._addSequenceUseCase)
+  NewOrderBloc(/*this._addOrderUseCase, this._addSequenceUseCase*/)
   :super(NewOrdersInitialState(null)){
     on<OnNewOrder>(
       (event, emit)async{
-        emit(AddOrder(priorityControllers: , quantityControllers: quantityControllers))
+        emit(NewOrdersInitialState(null));
       },
     );
     on<OnNewJob>(
       (event, emit){
-        emit(AddJob(priorityController: priorityController, quantityController: quantityController))
+        emit(NewOrdersInitialState(null));
       }
     );
   }

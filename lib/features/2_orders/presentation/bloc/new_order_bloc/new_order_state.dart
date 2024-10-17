@@ -10,11 +10,4 @@ class NewOrdersInitialState extends NewOrdersState{
     NewOrdersInitialState(super.orders);
 }
 
-class NewOrdersRetrievievingSuccess extends NewOrdersState{
-    NewOrdersRetrievievingSuccess(super.orders);
-}
-
-class NewOrdersError extends NewOrdersState{
-    NewOrdersError(super.orders);
-}
 

@@ -13,7 +13,7 @@ class OrderBloc extends Bloc<OrdersEvent, OrdersState> {
     on<FetchOrdersEvent>((event, emit) async {
       emit(OrdersLoadingState());
 
-      final Either<Failure, List<OrderEntity>> result = await GetOrdersUseCase(p: null);
+      final Either <Failure, List<OrderEntity>> result = await getOrdersUseCase(p: null);
 
       result.fold(
         (failure) => emit(OrdersErrorState("Error al cargar órdenes")),

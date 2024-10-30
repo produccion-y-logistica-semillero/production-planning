@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
+import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_state.dart';
 import 'add_job.dart';
 
 class AddOrder extends StatelessWidget {
@@ -20,6 +23,7 @@ class AddOrder extends StatelessWidget {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+
           children: [
             Expanded(
               child: ListView(

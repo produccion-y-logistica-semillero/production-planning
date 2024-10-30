@@ -124,7 +124,10 @@ Future<void> initDependencies() async {
       ()=> OrdersBloc()
     );
     depIn.registerFactory<NewOrderBloc>(
-      ()=> NewOrderBloc()
+      ()=> NewOrderBloc(
+        depIn.get<AddOrderUseCase>(),
+        depIn.get<AddSequenceUseCase>()
+      )
     );
     depIn.registerFactory<GanttBloc>(
       ()=> GanttBloc(

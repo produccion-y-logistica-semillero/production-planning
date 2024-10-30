@@ -11,7 +11,8 @@ class NewOrderPage extends StatelessWidget{
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: getAppBar(),
-      body: AddOrder(priorityControllers: [], quantityControllers: [],)
+      body: 
+        AddOrder(priorityControllers: [], quantityControllers: [],)
     );
   }
 }

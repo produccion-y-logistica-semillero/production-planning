@@ -1,11 +1,11 @@
 import 'package:production_planning/features/1_sequences/domain/entities/sequence_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
 
-sealed class NewOrdersEvent{
+sealed class NewOrderEvent{
 
 }
 
-class OnNewOrder implements NewOrdersEvent{
+class OnNewOrder implements NewOrderEvent{
   final int? orderId;
   final DateTime regDate;
   final List<JobEntity> orderJobs;
@@ -13,7 +13,7 @@ class OnNewOrder implements NewOrdersEvent{
   OnNewOrder(this.orderId, this.regDate, this.orderJobs);
 }
 
-class OnNewJob implements NewOrdersEvent{
+class OnNewJob implements NewOrderEvent{
   final int? jobId;
   final SequenceEntity? sequence;
   final int amount;

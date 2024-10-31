@@ -2,7 +2,19 @@ import 'package:production_planning/features/1_sequences/domain/entities/sequenc
 import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
 
 sealed class NewOrderEvent{
+}
 
+class OnRetrieveSequences implements NewOrderEvent{}
+
+class OnAddJob implements NewOrderEvent{}
+
+class OnRemoveJob implements NewOrderEvent{
+  final int index;
+  OnRemoveJob(this.index);
+}
+
+class OnSaveOrder implements NewOrderEvent{
+  OnSaveOrder();
 }
 
 class OnNewOrder implements NewOrderEvent{

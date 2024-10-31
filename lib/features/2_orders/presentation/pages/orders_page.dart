@@ -52,6 +52,10 @@ class OrdersPage extends StatelessWidget {
                                   'Jobs: ${order.orderJobs?.map((job) => job.sequence?.name ?? "No sequence").join(", ") ?? "No jobs"}',
                                   style: const TextStyle(fontSize: 16.0),
                                 ),
+                                TextButton(
+                                  onPressed: ()=> planificate(context, state.orders[index].orderId!), 
+                                  child: const Text("Programar")
+                                )
                               ],
                             ),
                           ),
@@ -79,22 +83,21 @@ class OrdersPage extends StatelessWidget {
               },
               child: const Text("nueva orden"),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => BlocProvider<GanttBloc>(
-                      create: (context) => GetIt.instance.get<GanttBloc>(),
-                      child: const GanttPage(orderId: 4),
-                    ),
-                  ),
-                );
-              },
-              child: const Text("ir a Gantt"),
-            ),
           ],
         ),
       ),
     );
+  }
+
+
+  void planificate(BuildContext context, int id){
+    Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => BlocProvider<GanttBloc>(
+                      create: (context) => GetIt.instance.get<GanttBloc>(),
+                      child: GanttPage(orderId: id),
+                    ),
+                  ),
+                );
   }
 }

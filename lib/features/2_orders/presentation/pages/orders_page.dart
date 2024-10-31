@@ -21,6 +21,21 @@ class OrdersPage extends StatelessWidget {
         create: (context) => GetIt.instance.get<OrderBloc>()..add(FetchOrdersEvent()),
         child: Column(
           children: [
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => BlocProvider<NewOrderBloc>(
+                        create: (context) => GetIt.instance.get<NewOrderBloc>(),
+                        child: NewOrderPage(),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text("nueva orden"),
+              ),
+            ),
             Expanded(
               child: BlocBuilder<OrderBloc, OrdersState>(
                 builder: (context, state) {
@@ -68,21 +83,8 @@ class OrdersPage extends StatelessWidget {
                   return const Center(child: Text("No orders available"));
                 },
               ),
-            ),
-            // Botones existentes
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => BlocProvider<NewOrderBloc>(
-                      create: (context) => GetIt.instance.get<NewOrderBloc>(),
-                      child: NewOrderPage(),
-                    ),
-                  ),
-                );
-              },
-              child: const Text("nueva orden"),
-            ),
+            )
+    
           ],
         ),
       ),

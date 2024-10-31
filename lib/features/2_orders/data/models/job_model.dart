@@ -1,3 +1,4 @@
+
 import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
 
 class JobModel {
@@ -11,6 +12,7 @@ class JobModel {
   JobModel(
       this.jobId, this.sequenceId, this.amount, this.dueDate, this.priority, this.availableDate);
 
+
   factory JobModel.fromJson(Map<String, dynamic> json) {
     return JobModel(
       json['job_id'],
@@ -19,6 +21,7 @@ class JobModel {
       DateTime.parse(json['due_date']),
       json['priority'],
       DateTime.parse(json['available_date'])
+
     );
   }
 

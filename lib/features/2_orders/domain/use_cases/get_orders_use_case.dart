@@ -7,6 +7,7 @@ import 'package:production_planning/features/2_orders/domain/repositories/order_
 class GetOrdersUseCase implements UseCase<List<OrderEntity>, void> {
   final OrderRepository repository;
 
+
   GetOrdersUseCase({required this.repository});
 
   @override

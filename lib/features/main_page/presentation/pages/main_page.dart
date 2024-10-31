@@ -81,9 +81,12 @@ class MainPage extends StatelessWidget {
   //Function to navigate
   void _navigateTo(String routeName) async {
     if (!_isNavigating && _navigatorKey.currentState != null) {
-        _isNavigating = true;
-         await _navigatorKey.currentState!.pushNamed(routeName);
-        _isNavigating = false;
+      _isNavigating = true;
+      while(_navigatorKey.currentState?.canPop() ?? false) {
+        _navigatorKey.currentState!.pop();
+      }
+      _navigatorKey.currentState!.pushNamed(routeName);
+      _isNavigating = false;
     }
   }
 

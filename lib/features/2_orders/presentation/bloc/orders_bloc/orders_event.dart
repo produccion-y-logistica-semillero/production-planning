@@ -16,3 +16,8 @@ class FetchOrdersId extends OrdersEvent {
   int orderId;
   FetchOrdersId(this.orderId);
 }
+
+class DeleteOrder extends OrdersEvent{
+  int orderId;
+  DeleteOrder(this.orderId);
+}

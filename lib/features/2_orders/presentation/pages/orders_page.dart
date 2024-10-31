@@ -1,3 +1,4 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -67,9 +68,18 @@ class OrdersPage extends StatelessWidget {
                                   'Jobs: ${order.orderJobs?.map((job) => job.sequence?.name ?? "No sequence").join(", ") ?? "No jobs"}',
                                   style: const TextStyle(fontSize: 16.0),
                                 ),
-                                TextButton(
-                                  onPressed: ()=> planificate(context, state.orders[index].orderId!), 
-                                  child: const Text("Programar")
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    TextButton(
+                                      onPressed: ()=> planificate(context, state.orders[index].orderId!), 
+                                      child: const Text("Programar")
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete, color: Colors.red,),
+                                      onPressed: ()=>BlocProvider.of<OrderBloc>(context).add(DeleteOrder(state.orders[index].orderId!)), 
+                                    ),
+                                  ],
                                 )
                               ],
                             ),

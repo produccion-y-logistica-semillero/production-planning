@@ -7,7 +7,7 @@ class ButtonMode extends StatelessWidget{
   final IconData icon;
   final double horizontalPadding;
 
-  ButtonMode({
+  const ButtonMode({
     super.key,
     required this.callback,
     required this.labelText,

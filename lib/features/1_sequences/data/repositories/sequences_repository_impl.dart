@@ -24,7 +24,7 @@ class SequencesRepositoryImpl implements SequencesRepository{
         await tasksDao.createTask(TaskModel.fromEntity(task, sequenceId));
       }
       //final response = await getBasicSequences();
-      return Right(true);
+      return const Right(true);
     }
     on LocalStorageFailure catch(f){
       return Left(f);

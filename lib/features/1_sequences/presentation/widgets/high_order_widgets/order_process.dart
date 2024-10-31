@@ -34,7 +34,7 @@ class OrderProcess extends StatelessWidget {
                       color: Colors.black.withOpacity(0.2), 
                       spreadRadius: 2,  // how much the shadow spreads
                       blurRadius: 7,   // the blur effect
-                      offset: Offset(0, 3),  // the position of the shadow (x, y)
+                      offset: const Offset(0, 3),  // the position of the shadow (x, y)
                     ),
                   ],
             ),
@@ -119,19 +119,19 @@ class OrderProcess extends StatelessWidget {
                     context: context, 
                     builder: (dialogContext){
                       return AlertDialog(
-                        title: Text("Estas seguro de eliminar?"),
+                        title: const Text("Estas seguro de eliminar?"),
                         content: Row(
                           children: [
                             TextButton(
                               onPressed: ()=> Navigator.of(dialogContext).pop(), 
-                              child: Text("Cancelar"),
+                              child: const Text("Cancelar"),
                             ),
                             TextButton(
                               onPressed: (){
                                 BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!));
                                 Navigator.of(dialogContext).pop();
                               }, 
-                              child: Text("Eliminar"),
+                              child: const Text("Eliminar"),
                             ),
                           ],
                         )

@@ -18,7 +18,7 @@ class MachineDaoSqllite implements MachineDao{
       );
       return n > 1 ? true : false;
     } catch (error) {
-      print("Error deleting machine with id ${id}: ${error.toString()}");
+      print("Error deleting machine with id $id: ${error.toString()}");
       throw LocalStorageFailure();
     }
   }

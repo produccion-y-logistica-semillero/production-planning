@@ -30,9 +30,9 @@ class TaskContainer extends StatelessWidget{
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(onPressed: ()=>onDeleteCallback(), icon: Icon(Icons.delete, color: Colors.red,)),
+                  IconButton(onPressed: ()=>onDeleteCallback(), icon: const Icon(Icons.delete, color: Colors.red,)),
                   Text(
-                    'Tarea ${number}',
+                    'Tarea $number',
                     style: const TextStyle(
                       fontSize: 18,
                       color: Colors.white,

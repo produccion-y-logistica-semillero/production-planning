@@ -78,8 +78,9 @@ class GetOrderEnvironment implements UseCase<EnvironmentEntity, int>{
     String enviroment;
 
 
-    if(differentMachine && !allOne) enviroment = 'FLEXIBLE JOB SHOP';
-    else if(differentMachine && allOne) enviroment = 'JOB SHOP';
+    if(differentMachine && !allOne) {
+      enviroment = 'FLEXIBLE JOB SHOP';
+    } else if(differentMachine && allOne) enviroment = 'JOB SHOP';
     else if(!differentMachine && max > 1 && !allOne) enviroment = 'FLEXIBLE FLOW SHOP';
     else if(!differentMachine && max > 1 && allOne) enviroment = 'FLOW SHOP';
     else if(!differentMachine && max == 1 && !allOne) enviroment = 'PARALLEL MACHINES';

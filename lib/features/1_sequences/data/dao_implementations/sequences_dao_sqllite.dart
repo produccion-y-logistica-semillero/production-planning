@@ -33,7 +33,7 @@ class SequencesDaoSqllite implements SequencesDao{
   Future<SequenceModel?> getSequenceById(int id) async{
     try{
       final sequences = (await db.query('SEQUENCES', where: 'sequence_id = ?', whereArgs: [id]));
-      if(sequences.length > 0){
+      if(sequences.isNotEmpty){
         return  SequenceModel.fromJson(sequences[0]);
       }
       return null;

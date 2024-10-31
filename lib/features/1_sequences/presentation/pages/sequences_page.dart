@@ -88,7 +88,7 @@ class SequencesPage extends StatelessWidget {
         } else {
           board = BlocProvider(
             create: (context) => GetIt.instance.get<SeeProcessBloc>(),
-            child: OrderList(),
+            child: const OrderList(),
           );
         }
 

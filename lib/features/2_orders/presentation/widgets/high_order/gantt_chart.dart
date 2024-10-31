@@ -110,11 +110,11 @@ class _GanttChartState extends State<GanttChart> {
           children: [
             DropdownButton<int>(
                 value: selectedRule,
-                hint: Text('Selecciona una opción'),
-                icon: Icon(Icons.arrow_downward),
+                hint: const Text('Selecciona una opción'),
+                icon: const Icon(Icons.arrow_downward),
                 iconSize: 24,
                 elevation: 16,
-                style: TextStyle(color: Colors.deepPurple),
+                style: const TextStyle(color: Colors.deepPurple),
                 underline: Container(
                   height: 2,
                   color: Colors.deepPurpleAccent,
@@ -179,7 +179,7 @@ class _GanttChartState extends State<GanttChart> {
             Container(
               height: staticChartHeight,
               width: 200,
-              margin: EdgeInsets.only(top: 70),
+              margin: const EdgeInsets.only(top: 70),
               child: SingleChildScrollView(
                 controller: _vertical2ScrollController,
                 physics: const NeverScrollableScrollPhysics(),
@@ -195,7 +195,7 @@ class _GanttChartState extends State<GanttChart> {
             ),
             Container(
               width: staticChartWidth,  
-              margin: EdgeInsets.all(10),
+              margin: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(width: 4)
@@ -221,7 +221,7 @@ class _GanttChartState extends State<GanttChart> {
                         const SizedBox(height: 1.0),
                   
                         // Gantt chart
-                        Container(
+                        SizedBox(
                           height: staticChartHeight,
                           child: SingleChildScrollView(
                             controller: _verticalScrollController,
@@ -269,12 +269,12 @@ class _GanttChartState extends State<GanttChart> {
           child: Container(
             height: 40.0 * _currentVerticalValue,
             width: 190,
-            padding: EdgeInsets.all( 10),
+            padding: const EdgeInsets.all( 10),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.tertiaryContainer,
               borderRadius: BorderRadius.circular(5),
             ),
-            child: Text(machines[index].machineName, style: TextStyle(color: Colors.white),),
+            child: Text(machines[index].machineName, style: const TextStyle(color: Colors.white),),
           )
         )
       );
@@ -354,12 +354,14 @@ class _GanttChartState extends State<GanttChart> {
           if(i == 0) height = 30;
           column.add(SizedBox(height: height, child: VerticalDivider(thickness: i == 0?4: 1, width: 2)));
           if (dayWidth > 800) {
-            if(i != 0) column.add(
+            if(i != 0) {
+              column.add(
               Text(
-                '${i}:00',
+                '$i:00',
                 style: const TextStyle(fontSize: 12),
               ),
             );
+            }
           }
           hoursRow.add(
             SizedBox(

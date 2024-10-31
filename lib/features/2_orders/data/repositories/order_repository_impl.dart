@@ -41,15 +41,28 @@ class OrderRepositoryImpl implements OrderRepository{
       List<OrderEntity> orders = [];
 
       for (var orderModel in orderModels) {
-        // 2. Obtener todos los trabajos asociados a la orden
-        final jobModels = await jobDao.getJobsByOrderId(orderModel.orderId!);
+        final List<JobModel> jobs = await jobDao.getJobsByOrderId(orderModel.orderId!);
+        List<JobEntity> jobsEntities = [];
+        for(final model in jobs){
+          final sequenceModel = await sequencesDao.getSequenceById(model.sequenceId);
+          final List<TaskModel> tasks = await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
 
-        // 3. Convertir los modelos a entidades
-        List<JobEntity> jobs =
-            jobModels.map((jobModel) => jobModel.toEntity()).toList();
-
-        // 4. Crear la entidad de orden y agregarla a la lista
-        orders.add(orderModel.toEntity(jobs));
+          jobsEntities.add(
+            JobEntity(
+              model.jobId, 
+              SequenceEntity(
+                sequenceModel.sequenceId, 
+                tasks.map((mod)=> mod.toEntity()).toList(),
+                sequenceModel.name
+              ), 
+              model.amount, 
+              model.dueDate, 
+              model.priority, 
+              model.availableDate
+            )
+          );
+        }
+        orders.add(OrderEntity(orderModel.orderId, orderModel.regDate, jobsEntities));
       }
 
       return Right(orders);

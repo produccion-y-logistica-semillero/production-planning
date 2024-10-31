@@ -120,8 +120,10 @@ Future<void> initDependencies() async {
     );
 
     //Bloc orders
-    depIn.registerFactory<OrdersBloc>(
-      ()=> OrdersBloc()
+    depIn.registerFactory<OrderBloc>(
+      ()=> OrderBloc(
+        depIn.get<GetOrdersUseCase>()
+      )
     );
     depIn.registerFactory<NewOrderBloc>(
       ()=> NewOrderBloc()

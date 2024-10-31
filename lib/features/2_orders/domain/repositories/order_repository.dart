@@ -10,4 +10,6 @@ abstract class OrderRepository{
 
 
   Future<Either<Failure, EnvironmentEntity>> getEnvironmentByName(String name);
+
+  Future<Either<Failure, bool>> createOrder(OrderEntity orderEntity);
 }

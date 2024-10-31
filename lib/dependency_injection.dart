@@ -84,7 +84,7 @@ Future<void> initDependencies() async {
     depIn.registerLazySingleton<DeleteSequenceUseCase>(()=> DeleteSequenceUseCase(depIn.get<SequencesRepository>()));
 
     //Orders use cases
-    depIn.registerLazySingleton<AddOrderUseCase>(()=> AddOrderUseCase());
+    depIn.registerLazySingleton<AddOrderUseCase>(()=> AddOrderUseCase(depIn.get<OrderRepository>()));
     depIn.registerLazySingleton<GetOrderEnvironment>(()=> GetOrderEnvironment(depIn.get<OrderRepository>(), depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetOrdersUseCase>(()=> GetOrdersUseCase(repository: depIn.get<OrderRepository>()));
     depIn.registerLazySingleton<ScheduleOrderUseCase>(()=> ScheduleOrderUseCase(orderRepository: depIn.get<OrderRepository>(), machineRepository: depIn.get<MachineRepository>()));

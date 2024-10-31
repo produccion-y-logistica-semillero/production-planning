@@ -1,6 +1,5 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
-<<<<<<< HEAD
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/sequences_dao.dart';
 import 'package:production_planning/features/1_sequences/data/dao_interfaces/tasks_dao.dart';
 import 'package:production_planning/features/1_sequences/data/models/task_model.dart';
@@ -35,19 +34,6 @@ class OrderRepositoryImpl implements OrderRepository{
   });
 
   @override
-=======
-import 'package:production_planning/features/2_orders/data/dao_interfaces/order_dao.dart';
-import 'package:production_planning/features/2_orders/data/dao_interfaces/job_dao.dart';
-import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
-import 'package:production_planning/features/2_orders/domain/entities/job_entity.dart';
-
-class OrderRepositoryImpl {
-  final OrderDao orderDao;
-  final JobDao jobDao;
-
-  OrderRepositoryImpl({required this.orderDao, required this.jobDao});
-
->>>>>>> getOrders-laura
   Future<Either<Failure, List<OrderEntity>>> getAllOrders() async {
     try {
       // 1. Obtener todas las órdenes
@@ -55,7 +41,6 @@ class OrderRepositoryImpl {
       List<OrderEntity> orders = [];
 
       for (var orderModel in orderModels) {
-<<<<<<< HEAD
         final List<JobModel> jobs = await jobDao.getJobsByOrderId(orderModel.orderId!);
         List<JobEntity> jobsEntities = [];
         for(final model in jobs){
@@ -78,17 +63,6 @@ class OrderRepositoryImpl {
           );
         }
         orders.add(OrderEntity(orderModel.orderId, orderModel.regDate, jobsEntities));
-=======
-        // 2. Obtener todos los trabajos asociados a la orden
-        final jobModels = await jobDao.getJobsByOrderId(orderModel.orderId!);
-
-        // 3. Convertir los modelos a entidades
-        List<JobEntity> jobs =
-            jobModels.map((jobModel) => jobModel.toEntity()).toList();
-
-        // 4. Crear la entidad de orden y agregarla a la lista
-        orders.add(orderModel.toEntity(jobs));
->>>>>>> getOrders-laura
       }
 
       return Right(orders);
@@ -97,7 +71,6 @@ class OrderRepositoryImpl {
     }
   }
 
-<<<<<<< HEAD
   @override
   Future<Either<Failure, EnvironmentEntity>> getEnvironmentByName(String name) async {
     try{
@@ -105,7 +78,6 @@ class OrderRepositoryImpl {
       final dispatchRules = await dispatchRulesDao.getDispatchRules(env.id);
       print(dispatchRules);
       return Right(EnvironmentEntity(env.id, env.name, dispatchRules));
-
     }
     on Failure catch(error){
       return Left(error);
@@ -142,8 +114,12 @@ class OrderRepositoryImpl {
       );
     }
     on Failure catch(error){
-=======
-  Future<Either<Failure, OrderEntity>> createOrder(OrderEntity order) async {
+      return Left(error);
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> createOrder(OrderEntity order) async {
     try {
       //insert order in data base and get orderId to create job
       final int orderId = await orderDao.insertOrder(order);
@@ -151,15 +127,12 @@ class OrderRepositoryImpl {
       if (order.orderJobs != null) {
         // insert each job from the orderJobs (list) on data base
         for (var job in order.orderJobs!) {
-          job.orderId = orderId;
-          // insert job in data base
-          await jobDao.insertJob(job);
+          await jobDao.insertJob(job, orderId);
         }
       }
       // return if order created sucessfully.
-      return Right(OrderEntity(orderId, order.regDate, order.orderJobs));
+      return const Right(true);
     } on Failure catch (error) {
->>>>>>> getOrders-laura
       return Left(error);
     }
   }

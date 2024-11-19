@@ -4,10 +4,20 @@ import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/features/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:provider/provider.dart';
-
+import 'dart:io';
 
 void main() async {
-  await initDependencies();
+  WidgetsFlutterBinding.ensureInitialized();
+
+  String workspace = 'default';
+  final file = File('workspace.txt');
+  if (await file.exists()) {
+    workspace = await file.readAsLines().then((lines) => lines.isNotEmpty ? lines[0] : 'default');
+  } else {
+    await file.writeAsString('default');
+  }
+
+  await initDependencies(workspace);
   runApp(const MyApp());
 }
 
@@ -17,7 +27,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return  MaterialApp(
-        title: 'Flutter Demo',
+        title: 'Planificacion de la produccion',
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: MaterialTheme.lightMediumContrastScheme()
@@ -29,6 +39,5 @@ class MyApp extends StatelessWidget {
         ),
         debugShowCheckedModeBanner: false,
     );
-
   }
 }

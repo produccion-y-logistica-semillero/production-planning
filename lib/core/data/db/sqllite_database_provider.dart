@@ -6,9 +6,9 @@ import 'package:sqflite/sqflite.dart';
 class SQLLiteDatabaseProvider{
   static Database? _database;
 
-  static Future<Database> open() async{
+  static Future<Database> open(String workspace) async{
     final databasePath = await getDatabasesPath();
-    final path = join(databasePath, 'database.db');
+    final path = join(databasePath, '${workspace.replaceAll(' ', '')}.db');
 
 
      // Get the directory of the current executable (.exe)

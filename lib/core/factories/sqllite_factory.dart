@@ -34,8 +34,8 @@ class SqlLiteFactory implements Factory{
   EnviromentDao? enviromentDao;
 
   //static factory constructor to perform async operation
-  static Future<SqlLiteFactory> create() async{
-    Database db = await  SQLLiteDatabaseProvider.open();
+  static Future<SqlLiteFactory> create(String wrkspace) async{
+    Database db = await  SQLLiteDatabaseProvider.open(wrkspace);
     return SqlLiteFactory(db);
   }
 

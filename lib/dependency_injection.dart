@@ -33,7 +33,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 final depIn = GetIt.instance;
 
-Future<void> initDependencies() async {
+Future<void> initDependencies(String workspace) async {
   try {
     // Initialize the sqflite FFI loader for desktop platforms
     sqflite_ffi.sqfliteFfiInit();
@@ -43,7 +43,7 @@ Future<void> initDependencies() async {
     //we also register the dispose method so it closes the connection
 
     //creating DAO's factory
-    final Factory daoFactory = await SqlLiteFactory.create();
+    final Factory daoFactory = await SqlLiteFactory.create(workspace);
 
 
     //Machine repositories

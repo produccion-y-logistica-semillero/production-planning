@@ -158,20 +158,61 @@ class SQLLiteDatabaseProvider{
           --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
           ---------------------------------------------------------------------------------------------------------------------------
           -- Insert environments
-          INSERT INTO environments (name) VALUES('SINGLE MACHINE');
-          INSERT INTO environments (name) VALUES('PARALLEL MACHINES');
-          INSERT INTO environments (name) VALUES('FLOW SHOP');
-          INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');
-          INSERT INTO environments (name) VALUES('JOB SHOP');
-          INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');
+          INSERT INTO environments (name) VALUES('SINGLE MACHINE');   --ID 1
+          INSERT INTO environments (name) VALUES('PARALLEL MACHINES');    --ID 2
+          INSERT INTO environments (name) VALUES('FLOW SHOP');    --ID 3
+          INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');   --ID 4
+          INSERT INTO environments (name) VALUES('JOB SHOP');   --ID 5
+          INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
 
           -- Insert dispatch rules
-          INSERT INTO dispatch_rules (name) VALUES('JHONSON');
-          INSERT INTO dispatch_rules (name) VALUES('esta la cree yo');
+          ------SINGLE MACHINE RULES
+          INSERT INTO dispatch_rules (name) VALUES('EDD');  --ID 1
+          INSERT INTO dispatch_rules (name) VALUES('SPT');  --ID 2
+          INSERT INTO dispatch_rules (name) VALUES('LPT');  --ID 3
+          INSERT INTO dispatch_rules (name) VALUES('FIFO'); --ID 4
+          INSERT INTO dispatch_rules (name) VALUES('WSPT');   --ID 5
+          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO'); --ID 6
+          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO'); --ID 7
+          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO'); --ID 8
+          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO');  --ID 9
+          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO');  --ID 10
+          INSERT INTO dispatch_rules (name) VALUES('MINSLACK');   --ID 11
+          INSERT INTO dispatch_rules (name) VALUES('CR'); --ID 12
+          
+          ------PARALLEL MACHINE RULES
+          INSERT INTO dispatch_rules (name) VALUES('FCFS');  --ID 13
+
 
           --Insert types_x_rules
+          -------SINGLE MACHINE RULES
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 2);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 3);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 4);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 5);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 6);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 7);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 8);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 9);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
+
+          -------PARALLEL MACHINE RULES
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 1);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 13);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 11);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 12);
+
+
+          -------FLOW SHOP MACHINE RULES
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------

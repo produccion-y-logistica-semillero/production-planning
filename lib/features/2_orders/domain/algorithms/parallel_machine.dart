@@ -32,10 +32,10 @@ class ParallelMachine {
       case "FCFS":
         fcfsRule();
         break;
-      case "Minimum Slack":
+      case "MINSLACK":
         minimumSlackRule();
         break;
-      case "Critical Ratio":
+      case "CR":
         criticalRatioRule();
         break;
     }

@@ -9,8 +9,8 @@ class ParallelMachine {
   List<Tuple2<int, List<Tuple2<DateTime, DateTime>>>> machines = [];
   //  machine Id | Scheduling (list of start and end times)
 
-  List<Tuple5<int, int, DateTime, DateTime, Duration>> output = [];
-  // job id | machine id | start date | end date | delay
+  List<Tuple6<int, int, DateTime, DateTime, Duration, DateTime>> output = [];
+  // job id | machine id | start date | end date | delay | due date
 
   ParallelMachine(
     this.startDate,
@@ -113,7 +113,7 @@ class ParallelMachine {
       DateTime availableDate = job.value4;
       List<Duration> processingTimes = job.value5;
 
-      for (int i = 0; i < processingTimes.length; i++) {
+      for (int i = 0; i < processingTimes.length; ) {
         Duration processingTime = processingTimes[i];
 
         int bestMachineIndex = 0;
@@ -141,7 +141,7 @@ class ParallelMachine {
 
         machines[bestMachineIndex].value2.add(Tuple2(machineStartTime, endTime));
 
-        output.add(Tuple5(jobId, machines[bestMachineIndex].value1, machineStartTime, endTime, delay));
+        output.add(Tuple6(jobId, machines[bestMachineIndex].value1, machineStartTime, endTime, delay, job.value2));
 
         break; // Asignar un trabajo a una máquina
       }

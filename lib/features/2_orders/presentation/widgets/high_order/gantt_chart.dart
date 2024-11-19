@@ -56,14 +56,14 @@ class _GanttChartState extends State<GanttChart> {
   void initState() {
     super.initState();
     endDate = widget.machines[0].tasks[0].endDate;
+    startDate = widget.machines[0].tasks[0].startDate;
     for(final machine in widget.machines){
       for(final task in machine.tasks){
         if(task.startDate.isBefore(startDate)) startDate = task.startDate;
         if(task.endDate.isAfter(endDate)) endDate = task.endDate;
       }
     }
-    print(startDate);
-    print(endDate);
+    startDate = DateTime(startDate.year, startDate.month, startDate.day);
     totalDays = endDate.difference(startDate).inDays;
     if(totalDays == 0){
       endDate = DateTime(endDate.year, endDate.month, endDate.day+1, endDate.hour, endDate.minute);
@@ -279,7 +279,6 @@ class _GanttChartState extends State<GanttChart> {
         )
       );
     }
-
     return machineWidgets;
   }
 

@@ -1,4 +1,3 @@
-import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -29,7 +28,7 @@ class OrdersPage extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => BlocProvider<NewOrderBloc>(
                         create: (context) => GetIt.instance.get<NewOrderBloc>(),
-                        child: NewOrderPage(),
+                        child: const NewOrderPage(),
                       ),
                     ),
                   );
@@ -76,7 +75,7 @@ class OrdersPage extends StatelessWidget {
                                       child: const Text("Programar")
                                     ),
                                     IconButton(
-                                      icon: Icon(Icons.delete, color: Colors.red,),
+                                      icon: const Icon(Icons.delete, color: Colors.red,),
                                       onPressed: ()=>BlocProvider.of<OrderBloc>(context).add(DeleteOrder(state.orders[index].orderId!)), 
                                     ),
                                   ],

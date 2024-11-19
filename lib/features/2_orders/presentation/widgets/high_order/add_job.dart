@@ -64,7 +64,7 @@ class AddJobState extends State<AddJobWidget> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -73,43 +73,43 @@ class AddJobState extends State<AddJobWidget> {
               onPressed: () {
                 BlocProvider.of<NewOrderBloc>(context).add(OnRemoveJob(widget.index));
               },
-              icon: Icon(Icons.delete, color: Colors.red),
+              icon: const Icon(Icons.delete, color: Colors.red),
             ),
             TextFormField(
               controller: widget.quantityController,
-              decoration: InputDecoration(labelText: 'Cantidad'),
+              decoration: const InputDecoration(labelText: 'Cantidad'),
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             TextFormField(
               controller: widget.priorityController,
-              decoration: InputDecoration(labelText: 'Prioridad'),
+              decoration: const InputDecoration(labelText: 'Prioridad'),
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   flex: 3,
                   child: selectDate('Seleccione fecha de disponibilidad', availableDate),
                 ),
-                Expanded(flex: 2, child: SizedBox()),
+                const Expanded(flex: 2, child: SizedBox()),
                 Expanded(
                   flex: 3,
                   child: selectDate('Seleccione fecha de finalizacion', dueDate),
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             DropdownButton<int>(
               value: selectedSequenceValue,
-              hint: Text('Seleccionar secuencia'),
+              hint: const Text('Seleccionar secuencia'),
               onChanged: (int? newValue) {
                 setState(() {
                   selectedSequenceValue = newValue;
@@ -137,9 +137,9 @@ class AddJobState extends State<AddJobWidget> {
         Text(
           date == null ? label : DateFormat('dd/MM/yyyy').format(date),
         ),
-        Spacer(),
+        const Spacer(),
         IconButton(
-          icon: Icon(Icons.calendar_today),
+          icon: const Icon(Icons.calendar_today),
           onPressed: () {
             _selectDate(context, label);
           },

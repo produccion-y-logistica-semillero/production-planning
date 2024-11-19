@@ -6,16 +6,14 @@ import 'package:production_planning/features/2_orders/presentation/bloc/new_orde
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_job.dart';
 
 class NewOrderPage extends StatelessWidget {
-  List<TextEditingController>? priorityControllers;
-  List<TextEditingController>? quantityControllers;
 
-  NewOrderPage({super.key});
+  const NewOrderPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Crear Nueva Orden'),
+        title: const Text('Crear Nueva Orden'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -27,7 +25,7 @@ class NewOrderPage extends StatelessWidget {
                     showDialog(
                         context: context,
                         builder: (subcontext) {
-                          return AlertDialog(
+                          return const AlertDialog(
                             title: Text("Guardado!!"),
                             content: Text("La orden ha sido guardada"),
                           );
@@ -36,7 +34,7 @@ class NewOrderPage extends StatelessWidget {
                     showDialog(
                         context: context,
                         builder: (subcontext) {
-                          return AlertDialog(
+                          return const AlertDialog(
                             title: Text("Error"),
                             content: Text("Hubo un error guardando la orden"),
                           );
@@ -52,7 +50,7 @@ class NewOrderPage extends StatelessWidget {
               List<AddJobWidget> widgets = [];
               if (state is NewOrdersInitialState) {
                 provider.add(OnRetrieveSequences());
-                return Center(
+                return const Center(
                   child: CircularProgressIndicator(),
                 );
               }
@@ -72,7 +70,7 @@ class NewOrderPage extends StatelessWidget {
                       onPressed: () {
                         provider.add(OnAddJob());
                       },
-                      child: Text('Agregar Secuencia'),
+                      child: const Text('Agregar Secuencia'),
                     ),
                     SizedBox(height: 16),
                     ElevatedButton(
@@ -82,19 +80,14 @@ class NewOrderPage extends StatelessWidget {
                           for (final wid in state.jobs) {
                             if (dialog) break;
                             if (wid.priorityController?.text.isEmpty ?? true) {
-                              print("prioridad vacia");
                               dialog = true;
                             } else if (wid.quantityController?.text.isEmpty ?? true) {
-                              print("cantidad vacia");
                               dialog = true;
                             } else if (wid.availableDate == null) {
-                              print("disponibildiad vacia");
                               dialog = true;
                             } else if (wid.dueDate == null) {
-                              print("due date vacia");
                               dialog = true;
                             } else if (wid.selectedSequence == null) {
-                              print("secuencia vacia");
                               dialog = true;
                             }
                           }
@@ -105,7 +98,7 @@ class NewOrderPage extends StatelessWidget {
                           showDialog(
                               context: context,
                               builder: (subcontext) {
-                                return AlertDialog(
+                                return const AlertDialog(
                                   title: Text("Cuidado"),
                                   content: Text("Asegurese de llenar todos los jobs"),
                                 );
@@ -114,7 +107,7 @@ class NewOrderPage extends StatelessWidget {
                           provider.add(OnSaveOrder());
                         }
                       },
-                      child: Text('Crear Orden'),
+                      child: const Text('Crear Orden'),
                     ),
                   ],
                 ),

@@ -80,7 +80,7 @@ void eddrule() {
       inicio = inicioPlaneacion;
     } else { // No cabe la planeación en el mismo día
       // Toca comenzar desde el otro día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       // Resetear desde la hora de inicio
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
@@ -120,11 +120,6 @@ void sptrule() {
   // Organizar las tareas por orden de entrega
   input.sort((a, b) => a.value2.compareTo(b.value2));
 
-  // Imprimimos la lista ordenada
-  for (var tuple in input) {
-    print('(${tuple.value1}, ${tuple.value2}, ${tuple.value3}, ${tuple.value4}, ${tuple.value5})');
-  }
-
   // Calcule fecha de inicio y fecha de finalización
   DateTime startDateTime = DateTime(
     startDate.year,
@@ -175,7 +170,7 @@ void sptrule() {
       inicio = inicioPlaneacion;
     } else {
       // Comenzar desde el siguiente día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
         inicioPlaneacion.month,
@@ -205,11 +200,6 @@ void lptrule() {
   // Organizar las tareas por orden de entrega
   input.sort((a, b) => b.value2.compareTo(a.value2));
 
-  // Imprimimos la lista ordenada
-  for (var tuple in input) {
-    print('(${tuple.value1}, ${tuple.value2}, ${tuple.value3}, ${tuple.value4}, ${tuple.value5})');
-  }
-
   // Calcule fecha de inicio y fecha de finalización
   DateTime startDateTime = DateTime(
     startDate.year,
@@ -260,7 +250,7 @@ void lptrule() {
       inicio = inicioPlaneacion;
     } else {
       // Comenzar desde el siguiente día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
         inicioPlaneacion.month,
@@ -290,11 +280,6 @@ void fiforule() {
   // Organizar las tareas por orden de entrega
   input.sort((a, b) => a.value5.compareTo(b.value5));
 
-  // Imprimimos la lista ordenada
-  for (var tuple in input) {
-    print('(${tuple.value1}, ${tuple.value2}, ${tuple.value3}, ${tuple.value4}, ${tuple.value5})');
-  }
-
   // Calcule fecha de inicio y fecha de finalización
   DateTime startDateTime = DateTime(
     startDate.year,
@@ -345,7 +330,7 @@ void fiforule() {
       inicio = inicioPlaneacion;
     } else {
       // Comenzar desde el siguiente día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
         inicioPlaneacion.month,
@@ -396,11 +381,6 @@ void wsptrule() {
     }
   }
 
-  // Imprimimos la lista ordenada
-  for (var tuple in input) {
-    print('(${tuple.value1}, ${tuple.value2}, ${tuple.value3}, ${tuple.value4}, ${tuple.value5})');
-  }
-
   // Calcule fecha de inicio y fecha de finalización
   DateTime startDateTime = DateTime(
     startDate.year,
@@ -451,7 +431,7 @@ void wsptrule() {
       inicio = inicioPlaneacion;
     } else {
       // Comenzar desde el siguiente día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
         inicioPlaneacion.month,
@@ -480,11 +460,6 @@ void wsptrule() {
  void eddruleadaptado() {
   // Ordenar las tareas por su fecha de vencimiento
   input.sort((a, b) => a.value3.compareTo(b.value3));
-
-  // Imprimimos la lista ordenada
-  for (var tuple in input) {
-    print('(${tuple.value1}, ${tuple.value2}, ${tuple.value3}, ${tuple.value4}, ${tuple.value5})');
-  }
 
   // Calcule fecha de inicio y fecha de finalización
   TimeOfDay timeinit = TimeOfDay.fromDateTime(input[0].value5);
@@ -528,7 +503,7 @@ void wsptrule() {
       inicio = inicioPlaneacion;
     } else {
       // Comenzar desde el siguiente día
-      inicioPlaneacion = inicioPlaneacion.add(Duration(days: 1));
+      inicioPlaneacion = inicioPlaneacion.add(const Duration(days: 1));
       inicioPlaneacion = DateTime(
         inicioPlaneacion.year,
         inicioPlaneacion.month,
@@ -898,7 +873,6 @@ void wsptruleadaptado() {
   ///////////////////////////////////////////////////
   // Implementación de la regla de Minimum Slack
   void scheduleMinimumSlack() {
-    final int workStartInMinutes = workingSchedule.value1.hour * 60 + workingSchedule.value1.minute;
     final int workEndInMinutes = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
 
     DateTime currentTime = DateTime(
@@ -933,7 +907,7 @@ void wsptruleadaptado() {
       // Verificar si el tiempo de fin está fuera del horario laboral
       if (endTime.hour * 60 + endTime.minute > workEndInMinutes) {
         // Programar para el día siguiente
-        currentTime = currentTime.add(Duration(days: 1));
+        currentTime = currentTime.add(const Duration(days: 1));
         currentTime = DateTime(currentTime.year, currentTime.month, currentTime.day,
             workingSchedule.value1.hour, workingSchedule.value1.minute);
         endTime = currentTime.add(jobWithMinimumSlack.value2);
@@ -961,7 +935,6 @@ void wsptruleadaptado() {
   
   
   void scheduleCriticalRatio() {
-    final int workStartInMinutes = workingSchedule.value1.hour * 60 + workingSchedule.value1.minute;
     final int workEndInMinutes = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
 
     DateTime currentTime = DateTime(
@@ -981,7 +954,7 @@ void wsptruleadaptado() {
 
       // Si no hay trabajos disponibles, mover al próximo día
       if (availableJobs.isEmpty) {
-        currentTime = currentTime.add(Duration(days: 1));
+        currentTime = currentTime.add(const Duration(days: 1));
         currentTime = DateTime(currentTime.year, currentTime.month, currentTime.day,
             workingSchedule.value1.hour, workingSchedule.value1.minute);
         continue;
@@ -1003,7 +976,7 @@ void wsptruleadaptado() {
       // Verificar si el tiempo de fin está fuera del horario laboral
       if (endTime.hour * 60 + endTime.minute > workEndInMinutes) {
         // Si se sale del horario, programar para el día siguiente
-        currentTime = currentTime.add(Duration(days: 1));
+        currentTime = currentTime.add(const Duration(days: 1));
         currentTime = DateTime(currentTime.year, currentTime.month, currentTime.day,
             workingSchedule.value1.hour, workingSchedule.value1.minute);
         endTime = currentTime.add(jobWithCriticalRatio.value2);

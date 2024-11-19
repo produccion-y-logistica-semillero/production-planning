@@ -67,6 +67,7 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
 
     //TO DO LATER, SCHEDULE SHOULD BE TAKEN FROM CONFIGURATION IN DATABASE, FOR NOW WE WILL IMAGINE THE TYPICAL 8-5
     final output = SingleMachine(
+      0,
       order!.regDate,
       const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
       input,
@@ -80,9 +81,9 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         sequenceName: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.name,
         taskId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.tasks![0].id!,
         numberProcess:  1,    //to change later depending on amount of a sequence
-        startDate: out.value2,
-        endDate: out.value3,
-        retarded: !out.value2.isBefore(out.value4)
+        startDate: out.value3,
+        endDate: out.value4,
+        retarded: !out.value4.isBefore(out.value5)
       )
     ).toList();
 
@@ -98,7 +99,7 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     final metrics = getMetricts(
       machinesResult, 
       output.map(
-        (out)=> Tuple3(out.value2, out.value3,out.value4)
+        (out)=> Tuple3(out.value3, out.value4,out.value5)
       )
       .toList()
     );

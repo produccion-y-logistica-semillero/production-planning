@@ -22,6 +22,7 @@ import 'package:production_planning/features/1_sequences/presentation/bloc/see_p
 import 'package:production_planning/features/2_orders/data/repositories/order_repository_impl.dart';
 import 'package:production_planning/features/2_orders/domain/repositories/order_repository.dart';
 import 'package:production_planning/features/2_orders/domain/use_cases/add_order_use_case.dart';
+import 'package:production_planning/features/2_orders/domain/use_cases/delete_order_use_case.dart';
 import 'package:production_planning/features/2_orders/domain/use_cases/get_order_environment.dart';
 import 'package:production_planning/features/2_orders/domain/use_cases/get_orders_use_case.dart';
 import 'package:production_planning/features/2_orders/domain/use_cases/schedule_order_use_case.dart';
@@ -87,6 +88,7 @@ Future<void> initDependencies() async {
     depIn.registerLazySingleton<AddOrderUseCase>(()=> AddOrderUseCase(depIn.get<OrderRepository>()));
     depIn.registerLazySingleton<GetOrderEnvironment>(()=> GetOrderEnvironment(depIn.get<OrderRepository>(), depIn.get<MachineRepository>()));
     depIn.registerLazySingleton<GetOrdersUseCase>(()=> GetOrdersUseCase(repository: depIn.get<OrderRepository>()));
+    depIn.registerLazySingleton<DeleteOrderUseCase>(()=> DeleteOrderUseCase( depIn.get<OrderRepository>()));
     depIn.registerLazySingleton<ScheduleOrderUseCase>(()=> ScheduleOrderUseCase(orderRepository: depIn.get<OrderRepository>(), machineRepository: depIn.get<MachineRepository>()));
     
     //Bloc machine
@@ -122,7 +124,8 @@ Future<void> initDependencies() async {
     //Bloc orders
     depIn.registerFactory<OrderBloc>(
       ()=> OrderBloc(
-        depIn.get<GetOrdersUseCase>()
+        depIn.get<GetOrdersUseCase>(),
+        depIn.get<DeleteOrderUseCase>(),
       )
     );
     depIn.registerFactory<NewOrderBloc>(

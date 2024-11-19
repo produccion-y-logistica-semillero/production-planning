@@ -14,6 +14,7 @@ class GanttChart extends StatefulWidget {
   final Metrics metrics;
   final int? selectedRule;
   final List<DropdownMenuItem<int>> items;
+  final int number;
   
 
   const GanttChart({
@@ -22,6 +23,7 @@ class GanttChart extends StatefulWidget {
     required this.selectedRule,
     required this.items,
     required this.metrics,
+    required this.number
   });
 
   @override
@@ -97,9 +99,9 @@ class _GanttChartState extends State<GanttChart> {
 
   @override
   Widget build(BuildContext context) {
-    double staticChartWidth = ((MediaQuery.of(context).size.width- 500) * 0.85) ; 
+    double staticChartWidth = (((MediaQuery.of(context).size.width- 500) * 0.85) ) / widget.number; 
     double staticChartHeight =(MediaQuery.of(context).size.height-220) * 0.85;
-    double chartWidth = (MediaQuery.of(context).size.width * 0.7) * _currentHorizontalValue; // The width depends on the user's selected zoom level
+    double chartWidth = ((MediaQuery.of(context).size.width * 0.88) * _currentHorizontalValue) / widget.number; // The width depends on the user's selected zoom level
     hourWidth = (chartWidth / totalDays) / 24;
     double chartHeight = ((widget.machines.length+1) * (45.0*_currentVerticalValue));
     return Column(
@@ -178,7 +180,7 @@ class _GanttChartState extends State<GanttChart> {
             // Gesture detector for horizontal drag and scroll
             Container(
               height: staticChartHeight,
-              width: 200,
+              width: 140,
               margin: const EdgeInsets.only(top: 70),
               child: SingleChildScrollView(
                 controller: _vertical2ScrollController,
@@ -195,7 +197,7 @@ class _GanttChartState extends State<GanttChart> {
             ),
             Container(
               width: staticChartWidth,  
-              margin: const EdgeInsets.all(10),
+              margin: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(width: 4)
@@ -268,7 +270,7 @@ class _GanttChartState extends State<GanttChart> {
           top: (index * (40.0*_currentVerticalValue)) + (5*index),
           child: Container(
             height: 40.0 * _currentVerticalValue,
-            width: 190,
+            width: 140,
             padding: const EdgeInsets.all( 10),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.tertiaryContainer,

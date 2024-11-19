@@ -7,6 +7,7 @@ import 'package:production_planning/features/2_orders/presentation/bloc/orders_b
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
+import 'package:production_planning/features/2_orders/presentation/pages/gantt_page_container.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/new_order_page.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
@@ -103,12 +104,9 @@ class OrdersPage extends StatelessWidget {
 
   void planificate(BuildContext context, int id){
     Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => BlocProvider<GanttBloc>(
-                      create: (context) => GetIt.instance.get<GanttBloc>(),
-                      child: GanttPage(orderId: id),
-                    ),
-                  ),
-                );
+      MaterialPageRoute(
+        builder: (context) => GanttPageContainer(orderId: id),
+      ),
+    );
   }
 }

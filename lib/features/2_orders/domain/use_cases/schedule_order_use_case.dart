@@ -4,6 +4,7 @@ import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/core/use_cases/use_case.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
+import 'package:production_planning/features/2_orders/domain/algorithms/flow_shop.dart';
 import 'package:production_planning/features/2_orders/domain/algorithms/parallel_machine.dart';
 import 'package:production_planning/features/2_orders/domain/algorithms/single_machine.dart';
 import 'package:production_planning/features/2_orders/domain/entities/metrics.dart';
@@ -28,9 +29,101 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     return switch(p.value3){
       'SINGLE MACHINE' => Right(await singleMachineAdapter(p.value1, p.value2)),
       'PARALLEL MACHINES' => Right(await parallelMachineAdapter(p.value1, p.value2)),
+      'FLOW SHOP' => Right(await flowShopAdapter(p.value1, p.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
     };
   }
+
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flowShopAdapter(int orderId, String rule) async {
+    OrderEntity? order;
+    final responseOrder = await orderRepository.getFullOrder(orderId);
+    responseOrder.fold((f) {}, (or) => order = or);
+    if (order == null) return null;
+
+    // Getting all machines of the specified type
+    int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
+    List<MachineEntity> machineEntities = [];
+    final responseMachines = await machineRepository.getAllMachinesFromType(machineTypeid);
+    responseMachines.fold((f) {}, (m) => machineEntities = m);
+    if (machineEntities.isEmpty) return null;
+
+    // Getting machine type name
+    String machineTypeName = "";
+    final responseTypeMachine = await machineRepository.getMachineTypeName(machineTypeid);
+    responseTypeMachine.fold((f) {}, (name) => machineTypeName = name);
+
+    // Creating input format for FlowShop
+    final List<Tuple4<int, DateTime, int, DateTime>> inputJobs = order!.orderJobs!
+        .map((job) => Tuple4<int, DateTime, int, DateTime>(
+            job.jobId!,
+            job.dueDate,
+            job.priority,
+            job.availableDate))
+        .toList();
+
+    // Creating timeMatrix
+    final List<List<Duration>> timeMatrix = order!.orderJobs!
+        .map((job) => job.sequence!.tasks!.map((task) => task.processingUnits).toList())
+        .toList();
+
+    // TO DO LATER: Working schedule should be fetched from configuration, using 8-5 as default for now
+    final output = FlowShop(
+      order!.regDate,
+      const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
+      inputJobs,
+      timeMatrix,
+      rule,
+    ).output;
+
+    // Creating PlanningMachineEntity list grouped by machine ID
+    final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
+
+    for (int jobIndex = 0; jobIndex < output.length; jobIndex++) {
+      final job = order!.orderJobs![jobIndex];
+      for (int machineIndex = 0; machineIndex < output[jobIndex].value2.length; machineIndex++) {
+        final task = PlanningTaskEntity(
+          sequenceId: job.sequence!.id!,
+          sequenceName: job.sequence!.name,
+          taskId: job.sequence!.tasks![0].id!,
+          numberProcess: 1, // To change later based on job's sequence amount
+          startDate: output[jobIndex].value2[machineIndex].value1,
+          endDate: output[jobIndex].value2[machineIndex].value2,
+          retarded: output[jobIndex].value2[machineIndex].value2.isAfter(job.dueDate),
+        );
+
+        if (!machineTasksMap.containsKey(machineIndex)) {
+          machineTasksMap[machineIndex] = [];
+        }
+        machineTasksMap[machineIndex]!.add(task);
+      }
+    }
+
+    final List<PlanningMachineEntity> machinesResult = machineTasksMap.entries
+        .map((entry) => PlanningMachineEntity(
+            entry.key,
+            machineTypeName,
+            entry.value,
+          ))
+        .toList();
+
+    // Calculate Metrics
+    final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = output
+        .map((job) => Tuple3(
+            job.value2.first.value1, // Start date (first start time)
+            job.value2.last.value2, // End date (last end time)
+            job.value3 // Due date
+        ))
+        .toList();
+
+    final metrics = getMetricts(
+      machinesResult,
+      jobsDates,
+    );
+
+    return Tuple2(machinesResult, metrics);
+  }
+
+
 
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(int orderId, String rule) async {
@@ -80,7 +173,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
 
     for (var out in output) {
       final job = order!.orderJobs!.firstWhere((job) => job.jobId == out.value1);
-      print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ${out.value3} ::::  ${out.value4}');
       final task = PlanningTaskEntity(
         sequenceId: job.sequence!.id!,
         sequenceName: job.sequence!.name,

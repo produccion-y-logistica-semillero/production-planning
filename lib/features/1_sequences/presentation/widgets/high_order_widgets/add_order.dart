@@ -11,10 +11,7 @@ import 'package:production_planning/features/1_sequences/presentation/widgets/lo
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/task_container.dart';
 
-
 class AddOrderForm extends StatelessWidget {
-
-
   final TextEditingController _nameOrder = TextEditingController();
   final List<MachineTypeEntity> selectedMachines;
   final void Function(String name) onSave;
@@ -22,18 +19,17 @@ class AddOrderForm extends StatelessWidget {
   final TextEditingController descController = TextEditingController();
   final TextEditingController hourController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
 
   AddOrderForm({
     super.key,
     required this.selectedMachines,
     required this.onSave,
-    required this.state
+    required this.state,
   });
 
   @override
   Widget build(BuildContext context) {
-    Color onSecondaryColor = Theme.of(context).colorScheme.onSecondaryContainer;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Stack(
       children: [
@@ -45,19 +41,21 @@ class AddOrderForm extends StatelessWidget {
               // Campo para el nombre del trabajo
               Container(
                 height: 60,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
-                margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
+                margin: const EdgeInsets.symmetric(vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withOpacity(0.5),
+                  ),
                 ),
                 child: TextField(
                   controller: _nameOrder,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Nombre del trabajo',
                     labelStyle: TextStyle(
-                      color: Colors.black,
+                      color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w500,
                     ),
                     border: InputBorder.none,
@@ -70,20 +68,22 @@ class AddOrderForm extends StatelessWidget {
                 constraints: const BoxConstraints(maxHeight: 500),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surfaceContainer,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2), 
-                      spreadRadius: 2,  // how much the shadow spreads
-                      blurRadius: 7,   // the blur effect
-                      offset: const Offset(0, 3),  // the position of the shadow (x, y)
+                      color: colorScheme.shadow.withOpacity(0.15),
+                      spreadRadius: 2,
+                      blurRadius: 7,
+                      offset: const Offset(0, 3),
                     ),
                   ],
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withOpacity(0.5),
+                  ),
                 ),
-                //LATER WILL CHANGE TO APPLY GESTURE DETECTOR SO IT CAN BE SCROLLED WITHOUT SHIFT
                 child: GestureDetector(
-                  onHorizontalDragUpdate: (details){
+                  onHorizontalDragUpdate: (details) {
                     _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
                   },
                   child: SingleChildScrollView(
@@ -104,23 +104,20 @@ class AddOrderForm extends StatelessWidget {
                     onPressed: () {
                       _saveOrder(_nameOrder.text, selectedMachines, context);
                     },
-                    label: const Text(
+                    label: Text(
                       "Guardar",
-                      style: TextStyle(color: Colors.white, fontSize: 15),
+                      style: TextStyle(color: colorScheme.onPrimaryContainer, fontSize: 16),
                     ),
                     icon: Icon(
                       Icons.save,
-                      color: onSecondaryColor,
+                      color: colorScheme.onPrimaryContainer,
                     ),
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.all(
-                        Theme.of(context).colorScheme.primaryContainer,
-                      ),
-                      minimumSize: WidgetStateProperty.all(const Size(120, 50)),
-                      shape: WidgetStateProperty.all(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: colorScheme.primaryContainer,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      minimumSize: const Size(140, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
@@ -134,14 +131,14 @@ class AddOrderForm extends StatelessWidget {
             NoMachinesSelectedModal(
               onClose: () => BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(false)),
             ),
-            context
+            context,
           ),
         if (state.isSuccessModalVisible)
           _buildOverlay(
             SuccessModal(
-              onClose: () =>  BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false)),
+              onClose: () => BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false)),
             ),
-            context
+            context,
           ),
       ],
     );
@@ -151,71 +148,75 @@ class AddOrderForm extends StatelessWidget {
   List<Widget> _buildMachineList(List<NewTaskModel>? machines, BuildContext context) {
     List<Widget> machineWidgets = [];
 
-    // Si no hay máquinas seleccionadas, muestra un contenedor vacío
     if (machines == null) {
       machineWidgets.add(
-        const SizedBox(
-          height: 500,
-        ),
+        const SizedBox(height: 500),
       );
     } else {
       for (int i = 0; i < machines.length; i++) {
         machineWidgets.add(
-          TaskContainer(task: machines[i], number: i+1, 
-            onDeleteCallback: ()=> BlocProvider.of<SequencesBloc>(context).add(OnTaskRemoved(i)),
-            callback: 
-              (){
-                showDialog(context: context, 
-                builder: 
-                  (dialogContext){
-                    return Dialog(
-                      child: SizedBox(
-                        height: 350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
-                        width:  MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Maquina ${machines[i].machineName}'),
-                            const SizedBox(height: 10,),
-                            InputFieldCustom(
-                              sizedBoxWidth: 30,
-                              maxLines: 5,
-                              title: "Descripcion",
-                              hintText: "",
-                              controller: descController,
-                            ),
-                            const SizedBox(height: 10,),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text("Tiempo: "),
-                                HourTextInput(controller: hourController)
-                              ],
-                            ),
-                            const SizedBox(height: 10,),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                TextButton(onPressed: ()=> Navigator.of(dialogContext).pop(), child: const Text("Cancelar")),
-                                TextButton(onPressed: (){
-                                  BlocProvider.of<SequencesBloc>(context).add(OnTaskUpdated(hourController.text, descController.text, i));
+          TaskContainer(
+            task: machines[i],
+            number: i + 1,
+            onDeleteCallback: () => BlocProvider.of<SequencesBloc>(context).add(OnTaskRemoved(i)),
+            callback: () {
+              showDialog(
+                context: context,
+                builder: (dialogContext) {
+                  return Dialog(
+                    child: SizedBox(
+                      height: 350,
+                      width: MediaQuery.of(context).size.width - 900,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('Maquina ${machines[i].machineName}'),
+                          const SizedBox(height: 10),
+                          InputFieldCustom(
+                            sizedBoxWidth: 30,
+                            maxLines: 5,
+                            title: "Descripcion",
+                            hintText: "",
+                            controller: descController,
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text("Tiempo: "),
+                              HourTextInput(controller: hourController),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(),
+                                child: const Text("Cancelar"),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  BlocProvider.of<SequencesBloc>(context)
+                                      .add(OnTaskUpdated(hourController.text, descController.text, i));
                                   hourController.clear();
                                   descController.clear();
                                   Navigator.of(dialogContext).pop();
-                                }, child: const Text("Guardar")),
-                              ],
-                            )
-                          ],
-                        ),
+                                },
+                                child: const Text("Guardar"),
+                              ),
+                            ],
+                          )
+                        ],
                       ),
-                    );
-                  }
-                );
-              }
-          )
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         );
 
-        // Si no es el ultimo elemento lo elimina
         if (i < machines.length - 1) {
           machineWidgets.add(
             const Icon(
@@ -232,7 +233,7 @@ class AddOrderForm extends StatelessWidget {
   }
 
   // Función para guardar la orden
-  _saveOrder(String name, List<MachineTypeEntity> selectedMachines, BuildContext context) {
+  void _saveOrder(String name, List<MachineTypeEntity> selectedMachines, BuildContext context) {
     if (name.isNotEmpty) {
       onSave(name);
     } else {

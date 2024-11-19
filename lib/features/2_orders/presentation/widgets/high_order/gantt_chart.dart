@@ -292,16 +292,16 @@ class _GanttChartState extends State<GanttChart> {
         double taskStartPosition = _calculatePosition(task.startDate, chartWidth);
         double taskEndPosition = _calculatePosition(task.endDate, chartWidth);
         if (taskEndPosition > chartWidth) {
-          taskEndPosition = chartWidth; // Maintain the curvature
+          taskEndPosition = chartWidth;
         }
 
         if(!processColor.containsKey('${task.sequenceId}-${task.numberProcess}')){
           final random = Random();
           processColor['${task.sequenceId}-${task.numberProcess}'] = Color.fromARGB(
-            255, // Alpha value (opacity)
-            random.nextInt(256), // Red value
-            random.nextInt(256), // Green value
-            random.nextInt(256), // Blue value
+            255,
+            random.nextInt(256), 
+            random.nextInt(256),
+            random.nextInt(256),
           );
         }
         final Color taskColor = processColor['${task.sequenceId}-${task.numberProcess}']!;

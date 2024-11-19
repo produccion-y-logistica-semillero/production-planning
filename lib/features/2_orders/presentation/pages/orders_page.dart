@@ -4,9 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_state.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/pages/gantt_page.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page_container.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/new_order_page.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
@@ -16,6 +14,8 @@ class OrdersPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: getAppBar(),
       body: BlocProvider(
@@ -34,7 +34,15 @@ class OrdersPage extends StatelessWidget {
                     ),
                   );
                 },
-                child: const Text("nueva orden"),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text("Nueva orden"),
               ),
             ),
             Expanded(
@@ -49,7 +57,13 @@ class OrdersPage extends StatelessWidget {
                         final order = state.orders[index];
                         return Card(
                           margin: const EdgeInsets.all(8.0),
-                          color: Colors.grey[200],
+                          color: colorScheme.surfaceContainer,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
+                          ),
+                          shadowColor: colorScheme.shadow.withOpacity(0.1),
+                          elevation: 4,
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Column(
@@ -57,30 +71,42 @@ class OrdersPage extends StatelessWidget {
                               children: [
                                 Text(
                                   'Fecha: ${order.regDate.toLocal()}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 18.0,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
+                                    color: colorScheme.primary,
                                   ),
                                 ),
                                 const SizedBox(height: 8.0),
                                 Text(
                                   'Jobs: ${order.orderJobs?.map((job) => job.sequence?.name ?? "No sequence").join(", ") ?? "No jobs"}',
-                                  style: const TextStyle(fontSize: 16.0),
+                                  style: TextStyle(
+                                    fontSize: 16.0,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
+                                const SizedBox(height: 8.0),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                   children: [
                                     TextButton(
-                                      onPressed: ()=> planificate(context, state.orders[index].orderId!), 
-                                      child: const Text("Programar")
+                                      onPressed: () => planificate(context, state.orders[index].orderId!),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        backgroundColor: colorScheme.secondary,
+                                        foregroundColor: colorScheme.onSecondary,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      child: const Text("Programar"),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red,),
-                                      onPressed: ()=>BlocProvider.of<OrderBloc>(context).add(DeleteOrder(state.orders[index].orderId!)), 
+                                      icon: Icon(Icons.delete, color: colorScheme.error),
+                                      onPressed: () => BlocProvider.of<OrderBloc>(context).add(DeleteOrder(state.orders[index].orderId!)),
                                     ),
                                   ],
-                                )
+                                ),
                               ],
                             ),
                           ),
@@ -88,21 +114,35 @@ class OrdersPage extends StatelessWidget {
                       },
                     );
                   } else if (state is OrdersErrorState) {
-                    return Center(child: Text(state.message));
+                    return Center(
+                      child: Text(
+                        state.message,
+                        style: TextStyle(
+                          color: colorScheme.error,
+                          fontSize: 16,
+                        ),
+                      ),
+                    );
                   }
-                  return const Center(child: Text("No orders available"));
+                  return Center(
+                    child: Text(
+                      "No orders available",
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                      ),
+                    ),
+                  );
                 },
               ),
-            )
-    
+            ),
           ],
         ),
       ),
     );
   }
 
-
-  void planificate(BuildContext context, int id){
+  void planificate(BuildContext context, int id) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => GanttPageContainer(orderId: id),

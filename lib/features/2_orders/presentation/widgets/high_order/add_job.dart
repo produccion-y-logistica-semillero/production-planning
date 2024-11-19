@@ -63,34 +63,63 @@ class AddJobState extends State<AddJobWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      shadowColor: colorScheme.shadow.withOpacity(0.1),
+      elevation: 4,
+      color: colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            IconButton(
-              onPressed: () {
-                BlocProvider.of<NewOrderBloc>(context).add(OnRemoveJob(widget.index));
-              },
-              icon: const Icon(Icons.delete, color: Colors.red),
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                onPressed: () {
+                  BlocProvider.of<NewOrderBloc>(context).add(OnRemoveJob(widget.index));
+                },
+                icon: Icon(Icons.delete, color: colorScheme.error),
+              ),
             ),
             TextFormField(
               controller: widget.quantityController,
-              decoration: const InputDecoration(labelText: 'Cantidad'),
+              decoration: InputDecoration(
+                labelText: 'Cantidad',
+                labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: colorScheme.outline),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: colorScheme.primary),
+                ),
+              ),
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: widget.priorityController,
-              decoration: const InputDecoration(labelText: 'Prioridad'),
+              decoration: InputDecoration(
+                labelText: 'Prioridad',
+                labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: colorScheme.outline),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: colorScheme.primary),
+                ),
+              ),
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
             Row(
@@ -109,7 +138,7 @@ class AddJobState extends State<AddJobWidget> {
             const SizedBox(height: 8),
             DropdownButton<int>(
               value: selectedSequenceValue,
-              hint: const Text('Seleccionar secuencia'),
+              hint: Text('Seleccionar secuencia', style: TextStyle(color: colorScheme.onSurfaceVariant)),
               onChanged: (int? newValue) {
                 setState(() {
                   selectedSequenceValue = newValue;
@@ -120,10 +149,16 @@ class AddJobState extends State<AddJobWidget> {
                   .map(
                     (sequence) => DropdownMenuItem<int>(
                       value: sequence.value1,
-                      child: Text(sequence.value2),
+                      child: Text(
+                        sequence.value2,
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
                     ),
                   )
                   .toList(),
+              isExpanded: true,
+              dropdownColor: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
             ),
           ],
         ),
@@ -132,14 +167,16 @@ class AddJobState extends State<AddJobWidget> {
   }
 
   Widget selectDate(String label, DateTime? date) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Text(
           date == null ? label : DateFormat('dd/MM/yyyy').format(date),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.calendar_today),
+          icon: Icon(Icons.calendar_today, color: colorScheme.primary),
           onPressed: () {
             _selectDate(context, label);
           },

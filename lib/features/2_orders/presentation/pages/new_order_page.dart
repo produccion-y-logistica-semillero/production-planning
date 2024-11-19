@@ -6,43 +6,48 @@ import 'package:production_planning/features/2_orders/presentation/bloc/new_orde
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_job.dart';
 
 class NewOrderPage extends StatelessWidget {
-
   const NewOrderPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear Nueva Orden'),
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: BlocListener<NewOrderBloc, NewOrderState>(
           listener: (context, state) {
             if (state is NewOrdersState) {
-                if (state.justSaved != null) {
-                  if (state.justSaved!) {
-                    showDialog(
-                        context: context,
-                        builder: (subcontext) {
-                          return const AlertDialog(
-                            title: Text("Guardado!!"),
-                            content: Text("La orden ha sido guardada"),
-                          );
-                        });
-                  } else {
-                    showDialog(
-                        context: context,
-                        builder: (subcontext) {
-                          return const AlertDialog(
-                            title: Text("Error"),
-                            content: Text("Hubo un error guardando la orden"),
-                          );
-                        });
-                  }
-                }
+              if (state.justSaved != null) {
+                showDialog(
+                  context: context,
+                  builder: (subcontext) {
+                    return AlertDialog(
+                      title: Text(
+                        state.justSaved! ? "Guardado!!" : "Error",
+                        style: TextStyle(color: state.justSaved! ? colorScheme.primary : colorScheme.error),
+                      ),
+                      content: Text(
+                        state.justSaved!
+                            ? "La orden ha sido guardada"
+                            : "Hubo un error guardando la orden",
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(subcontext).pop(),
+                          child: const Text("OK"),
+                        ),
+                      ],
+                    );
+                  },
+                );
               }
-
+            }
           },
           child: BlocBuilder<NewOrderBloc, NewOrderState>(
             builder: (context, state) {
@@ -50,12 +55,10 @@ class NewOrderPage extends StatelessWidget {
               List<AddJobWidget> widgets = [];
               if (state is NewOrdersInitialState) {
                 provider.add(OnRetrieveSequences());
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
               if (state is NewOrdersState) {
-                widgets = (state).jobs;
+                widgets = state.jobs;
               }
 
               return Center(
@@ -70,13 +73,21 @@ class NewOrderPage extends StatelessWidget {
                       onPressed: () {
                         provider.add(OnAddJob());
                       },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                       child: const Text('Agregar Secuencia'),
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
                         bool dialog = false;
-                        if (state is NewOrdersState && state.jobs.length > 0) {
+                        if (state is NewOrdersState && state.jobs.isNotEmpty) {
                           for (final wid in state.jobs) {
                             if (dialog) break;
                             if (wid.priorityController?.text.isEmpty ?? true) {
@@ -96,17 +107,35 @@ class NewOrderPage extends StatelessWidget {
                         }
                         if (dialog) {
                           showDialog(
-                              context: context,
-                              builder: (subcontext) {
-                                return const AlertDialog(
-                                  title: Text("Cuidado"),
-                                  content: Text("Asegurese de llenar todos los jobs"),
-                                );
-                              });
+                            context: context,
+                            builder: (subcontext) {
+                              return AlertDialog(
+                                title: Text(
+                                  "Cuidado",
+                                  style: TextStyle(color: colorScheme.error),
+                                ),
+                                content: const Text("Asegúrese de llenar todos los jobs"),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(subcontext).pop(),
+                                    child: const Text("OK"),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
                         } else {
                           provider.add(OnSaveOrder());
                         }
                       },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.secondary,
+                        foregroundColor: colorScheme.onSecondary,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                       child: const Text('Crear Orden'),
                     ),
                   ],

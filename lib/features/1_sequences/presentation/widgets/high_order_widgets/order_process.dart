@@ -12,8 +12,7 @@ class OrderProcess extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color onSecondaryColor = Theme.of(context).colorScheme.onSecondaryContainer;
-    Color primaryColor = Theme.of(context).colorScheme.primaryContainer;
+    final colorScheme = Theme.of(context).colorScheme;
     final machineCount = process.tasks!.length;
 
     return Padding(
@@ -22,26 +21,26 @@ class OrderProcess extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            constraints: const BoxConstraints(
-              maxHeight: 500,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            constraints: const BoxConstraints(maxHeight: 500),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2), 
-                      spreadRadius: 2,  // how much the shadow spreads
-                      blurRadius: 7,   // the blur effect
-                      offset: const Offset(0, 3),  // the position of the shadow (x, y)
-                    ),
-                  ],
+                BoxShadow(
+                  color: colorScheme.shadow.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(2, 3),
+                ),
+              ],
+              border: Border.all(
+                color: colorScheme.outlineVariant.withOpacity(0.5),
+              ),
             ),
             child: GestureDetector(
-              onHorizontalDragUpdate: (details){
-                    _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
-                },
+              onHorizontalDragUpdate: (details) {
+                _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+              },
               child: ListView.builder(
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
@@ -56,48 +55,56 @@ class OrderProcess extends StatelessWidget {
                       ),
                     );
                   }
-              
+
                   final machineIndex = index ~/ 2;
                   if (machineIndex >= process.tasks!.length) {
                     return Container();
                   }
-              
+
                   final duration = process.tasks![machineIndex].processingUnits;
-              
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Container(
-                      width: 200,
-                      margin: const EdgeInsets.symmetric(vertical: 80),
+                      width: 220,
+                      margin: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: primaryColor,
-                        borderRadius: BorderRadius.circular(10),
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.shadow.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(1, 2),
+                          ),
+                        ],
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             'Tarea ${process.tasks![machineIndex].execOrder}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
-                              color: Colors.white,
+                              color: colorScheme.onPrimaryContainer,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           Text(
                             process.tasks![machineIndex].machineName!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
-                              color: Colors.white,
+                              color: colorScheme.onPrimaryContainer.withOpacity(0.8),
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           Text(
-                            'Duración: ${duration.inHours.toString().padLeft(2, '0')}:${(duration.inMinutes - duration.inHours*60).toString().padLeft(2, '0')}', // Mostrar la duración tal cual
-                            style: const TextStyle(
+                            'Duración: ${duration.inHours.toString().padLeft(2, '0')}:${(duration.inMinutes - duration.inHours * 60).toString().padLeft(2, '0')}',
+                            style: TextStyle(
                               fontSize: 14,
-                              color: Colors.white,
+                              color: colorScheme.onPrimaryContainer,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -116,45 +123,44 @@ class OrderProcess extends StatelessWidget {
               TextButton.icon(
                 onPressed: () {
                   showDialog(
-                    context: context, 
-                    builder: (dialogContext){
+                    context: context,
+                    builder: (dialogContext) {
                       return AlertDialog(
-                        title: const Text("Estas seguro de eliminar?"),
+                        title: const Text("¿Estás seguro de eliminar?"),
                         content: Row(
                           children: [
                             TextButton(
-                              onPressed: ()=> Navigator.of(dialogContext).pop(), 
+                              onPressed: () => Navigator.of(dialogContext).pop(),
                               child: const Text("Cancelar"),
                             ),
                             TextButton(
-                              onPressed: (){
+                              onPressed: () {
                                 BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!));
                                 Navigator.of(dialogContext).pop();
-                              }, 
+                              },
                               child: const Text("Eliminar"),
                             ),
                           ],
-                        )
+                        ),
                       );
-                    }
+                    },
                   );
                 },
-                label: const Text(
+                label: Text(
                   "Eliminar",
-                  style: TextStyle(color: Colors.white, fontSize: 15),
+                  style: TextStyle(color: colorScheme.onError, fontSize: 16),
                 ),
                 icon: Icon(
-                  Icons.save,
-                  color: onSecondaryColor,
+                  Icons.delete,
+                  color: colorScheme.onError,
                 ),
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.all(
-                    Colors.red,
-                  ),
-                  minimumSize: WidgetStateProperty.all(const Size(120, 50)),
-                  shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                style: TextButton.styleFrom(
+                  backgroundColor: colorScheme.errorContainer,
+                  minimumSize: const Size(140, 50),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
-                  )),
+                  ),
                 ),
               ),
             ],

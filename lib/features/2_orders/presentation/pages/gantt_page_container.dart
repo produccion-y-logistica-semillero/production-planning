@@ -31,7 +31,9 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                           number++;
                         })
                       },
-                  child: Icon(Icons.add)),
+                  child: Icon(Icons.add),
+                  style: ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.green)),
+              ),
               ElevatedButton(
                   onPressed: () => {
                         if (number > 1)
@@ -39,7 +41,9 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                             number--;
                           })
                       },
-                  child: Icon(Icons.remove)),
+                  child: Icon(Icons.remove),
+                  style: ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.red)),
+              ),
             ],
           ),
           Row(children: [

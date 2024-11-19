@@ -21,109 +21,135 @@ class MachinesListView extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return ListView.builder(
-              itemCount: machineTypes.length,
-              itemBuilder: (context, index) {
-                //we wrap it in a container so add margin between but also to add shadow, THIS ONLY AFFECTS THE SHADOW, NOT THE EXPANSION TILE
-                //SHAPE ITSELF
-                return Container(
-                  margin: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.3),
-                        spreadRadius: 3,
-                        offset: const Offset(0, 2)
-                      )
-                    ]
-                  ),
-                  //so it listens to changes on the machine stae, which means, only this expasion tile will be re rendered
-                  child: BlocProvider(
-                    create: (context)=>GetIt.instance.get<MachineBloc>(),
-                    child: BlocBuilder<MachineBloc,MachinesState> (
-                      builder: (context, state) {
-                        return Row(
-                          children: 
-                            [
-                              //the expansion tile
-                              Expanded(
-                                flex: 8,
-                                //the ClipRReact gives it the round shape to the expansion tile, so is not only the exterior container
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: ExpansionTile(
-                                    title: Text(machineTypes[index].name),
-                                    subtitle: Text(machineTypes[index].description),
-                                    leading: const Icon(Icons.settings_applications_sharp),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                    onExpansionChanged: (value){
-                                      //when expanded, if it was expanded, we will collapse and remove the items from state, if it was collapse
-                                      //we will trigger the machines retrieving event of that machine type
-                                      if(state is MachinesRetrievingSuccess) {
-                                        BlocProvider.of<MachineBloc>(context).add(OnMachinesExpansionCollpased());
-                                      } else {
-                                        BlocProvider.of<MachineBloc>(context).add(OnMachinesRetrieving(machineTypes[index].id!));
-                                      }
-                                    },
-                                    children: 
-                                      //here's where we check the state in order to know what to havedisplayed
-                                      switch(state){
-                                        (MachinesRetrieving _ )=> [const ListTile(title: Text("Loading"),)],
-                                        (MachinesRetrievingError _ )=> [const ListTile(title: Text("Error loading"),)],
-                                        //here we pass the machines to display
-                                        (MachinesRetrievingSuccess _) => state.machines!.map(
-                                          (machine)=> MachineDisplayTile(
-                                            machine,
-                                            ()=>_deleteMachine(context, machine.id!)
-                                        )).toList(),
-                                        (MachineDeletionSuccess _) => state.machines!.map(
-                                          (machine)=> MachineDisplayTile(
-                                            machine,
-                                            ()=>_deleteMachine(context, machine.id!)
-                                        )).toList(),
-                                        (MachineDeletionError _)=> state.machines!.map(
-                                          (machine)=> MachineDisplayTile(
-                                            machine,
-                                            ()=>_deleteMachine(context, machine.id!)
-                                        )).toList(),
-                                        MachinesStateInitial()=>[const ListTile(title: Text(""),)],
-                                        // TODO: Handle this case.
-                                        MachineTypeIdSet() => state.machines!.map(
-                                          (machine)=> MachineDisplayTile(
-                                            machine,
-                                            ()=>_deleteMachine(context, machine.id!)
-                                        )).toList(),
-                                      }
-                                  ),
-                                ),
-                              ), 
-                              //the action buttons inside a container whcih has them in a row
-                              Expanded(
-                                flex: 1,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    IconButton(
-                                      onPressed: ()=>_addNewMachine(context, machineTypes[index].id!, machineTypes[index].name), 
-                                      icon: const Icon(Icons.add)
-                                    ),
-                                    IconButton(
-                                      onPressed: ()=>_deleteMachineType(context, machineTypes[index].id!, index), 
-                                      icon: const Icon(Icons.delete, color: Colors.red,)
-                                    ),
-                                  ],
-                                ),
-                              )
-                            ]
-                        );
-                      }
+      itemCount: machineTypes.length,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(2, 3),
+              ),
+            ],
+            border: Border.all(
+              color: colorScheme.outlineVariant,
+              width: 0.75,
+            ),
+          ),
+          child: BlocProvider(
+            create: (context) => GetIt.instance.get<MachineBloc>(),
+            child: BlocBuilder<MachineBloc, MachinesState>(
+              builder: (context, state) {
+                List<Widget> children = [];
+                if (state is MachinesRetrieving) {
+                  children = [const ListTile(title: Text("Loading..."))];
+                } else if (state is MachinesRetrievingError) {
+                  children = [const ListTile(title: Text("Error loading"))];
+                } else if (state is MachinesRetrievingSuccess) {
+                  children = state.machines!.map(
+                    (machine) => MachineDisplayTile(
+                      machine,
+                      () => _deleteMachine(context, machine.id!),
                     ),
-                  ),
+                  ).toList();
+                } else if (state is MachineDeletionSuccess || state is MachineDeletionError) {
+                  children = state.machines!.map(
+                    (machine) => MachineDisplayTile(
+                      machine,
+                      () => _deleteMachine(context, machine.id!),
+                    ),
+                  ).toList();
+                } else {
+                  children = [const ListTile(title: Text(""))];
+                }
+
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 8,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: ExpansionTile(
+                          title: Text(
+                            machineTypes[index].name,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            machineTypes[index].description,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          leading: Icon(
+                            Icons.settings_applications_sharp,
+                            color: colorScheme.primary,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          collapsedBackgroundColor: colorScheme.surfaceContainerLow,
+                          backgroundColor: colorScheme.surfaceContainerHigh,
+                          onExpansionChanged: (value) {
+                            if (state is MachinesRetrievingSuccess) {
+                              BlocProvider.of<MachineBloc>(context)
+                                  .add(OnMachinesExpansionCollpased());
+                            } else {
+                              BlocProvider.of<MachineBloc>(context).add(
+                                  OnMachinesRetrieving(machineTypes[index].id!));
+                            }
+                          },
+                          children: children,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          IconButton(
+                            onPressed: () => _addNewMachine(
+                              context,
+                              machineTypes[index].id!,
+                              machineTypes[index].name,
+                            ),
+                            icon: Icon(
+                              Icons.add,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _deleteMachineType(
+                              context,
+                              machineTypes[index].id!,
+                              index,
+                            ),
+                            icon: Icon(
+                              Icons.delete,
+                              color: colorScheme.error,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 );
               },
-            );
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _deleteMachineType(BuildContext context, int machineId, int index) async{

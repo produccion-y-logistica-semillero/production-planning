@@ -4,7 +4,6 @@ import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bl
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/gantt_chart.dart';
-import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class GanttPage extends StatelessWidget {
   final int orderId;
@@ -33,28 +32,69 @@ class GanttPage extends StatelessWidget {
           
               if(state.enviroment != null && state is! GanttPlanningSuccess){
                 content.add(
-                  Text(state.enviroment!.name)
-                );
-                content.add(DropdownButton<int>(
-                    value: state.selectedRule,
-                    hint: const Text('Selecciona una opción'),
-                    icon: const Icon(Icons.arrow_downward),
-                    iconSize: 24,
-                    elevation: 16,
-                    style: const TextStyle(color: Colors.deepPurple),
-                    underline: Container(
-                      height: 2,
-                      color: Colors.deepPurpleAccent,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(
+                      state.enviroment!.name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    onChanged: (int? id) {
-                      if(id != null) BlocProvider.of<GanttBloc>(context).add(SelectRule(id));
-                    },
-                    items: state.enviroment!.rules.map((value) => DropdownMenuItem(
-                        value: value.value1,
-                        child: Text(value.value2),
-                      )
-                    ).toList(),
-                  )
+                  ),
+                );
+                content.add(
+                  Padding(
+                    padding: EdgeInsets.all(80),
+                    child: DropdownButtonFormField<int>(
+                      value: state.selectedRule,
+                      hint: Text(
+                        'Selecciona una opción',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                      icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.primary),
+                      iconSize: 24,
+                      elevation: 4,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainer,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      onChanged: (int? id) {
+                        if (id != null) BlocProvider.of<GanttBloc>(context).add(SelectRule(id));
+                      },
+                      items: state.enviroment!.rules.map(
+                        (value) => DropdownMenuItem<int>(
+                          value: value.value1,
+                          child: Text(
+                            value.value2,
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                          ),
+                        ),
+                      ).toList(),
+                    ),
+                  ),
                 );
               }
               if(state is GanttPlanningLoading){

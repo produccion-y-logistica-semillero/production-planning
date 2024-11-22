@@ -23,13 +23,18 @@ class OrderBloc extends Bloc<OrdersEvent, OrdersState> {
       );
     });
     on<DeleteOrder>((event, emit) async {
-
-      /*final response = await deleteOrder.call(p: event.orderId);
+      final response = await deleteOrder.call(p: event.orderId);
 
       response.fold(
         (failure) => emit(OrdersErrorState("Error al cargar órdenes")),
-        (res) => emit(OrdersLoadedState(orders)),
-      );*/
+        (res){
+          final List<OrderEntity> orders = switch(state){
+            OrdersLoadedState(orders: final orders ) => orders,
+            OrdersState()=>[]
+          };
+          emit(OrdersLoadedState(orders.where((o)=>o.orderId != event.orderId).toList()));
+        }
+      );
     });
 
   }

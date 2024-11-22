@@ -10,9 +10,8 @@ class DeleteOrderUseCase implements UseCase<bool, int>{
   DeleteOrderUseCase(this.repo);
   
   @override
-  Future<Either<Failure, bool>> call({required int p}) {
-    // TODO: implement call
-    throw UnimplementedError();
+  Future<Either<Failure, bool>> call({required int p}) async{
+    return await repo.deleteOrder(p);
   }
   
 }

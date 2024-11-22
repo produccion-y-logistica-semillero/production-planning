@@ -44,4 +44,17 @@ class OrderDaoSqlLite implements OrderDao {
       throw LocalStorageFailure();
     }
   }
+  
+  @override
+  Future<void> deleteOrder(int orderId) async{
+    try {
+      int n = await db.delete(
+        'ORDERS',
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+    } catch (error) {
+      throw LocalStorageFailure();
+    }
+  }
 }

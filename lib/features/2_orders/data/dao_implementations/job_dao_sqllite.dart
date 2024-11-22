@@ -39,4 +39,17 @@ class JobDaoSQLlite implements JobDao {
       throw LocalStorageFailure();
     }
   }
+  
+  @override
+  Future<void> deleteJobsFromOrder(int orderId) async{
+    try {
+      int n = await db.delete(
+        'JOBS',
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+    } catch (error) {
+      throw LocalStorageFailure();
+    }
+  }
 }

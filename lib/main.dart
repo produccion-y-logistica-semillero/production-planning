@@ -34,7 +34,6 @@ Future<void> main() async {
   runApp(MyApp());
 }
 
-// Helper function to parse TimeOfDay from a string
 TimeOfDay? _parseTimeOfDay(String time) {
   final parts = time.split(':');
   if (parts.length == 2) {

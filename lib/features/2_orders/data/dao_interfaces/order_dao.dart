@@ -5,4 +5,5 @@ abstract class OrderDao {
   Future<List<OrderModel>> getAllOrders();
   Future<OrderModel> getOrderById(int id);
   Future<int> insertOrder(OrderEntity order);
+  Future<void> deleteOrder(int orderId);
 }

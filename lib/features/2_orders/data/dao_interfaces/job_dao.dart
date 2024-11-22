@@ -4,4 +4,5 @@ import 'package:production_planning/features/2_orders/domain/entities/job_entity
 abstract class JobDao {
   Future<List<JobModel>> getJobsByOrderId(int orderId);
   Future<void> insertJob(JobEntity job, int orderId);
+  Future<void> deleteJobsFromOrder(int orderId);
 }

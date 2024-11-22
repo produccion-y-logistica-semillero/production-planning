@@ -136,4 +136,15 @@ class OrderRepositoryImpl implements OrderRepository{
       return Left(error);
     }
   }
+  
+  @override
+  Future<Either<Failure, bool>> deleteOrder(int orderId) async{
+    try{
+      await jobDao.deleteJobsFromOrder(orderId);
+      await orderDao.deleteOrder(orderId);
+      return Right(true);
+    }on Failure catch(error){
+      return Left(error);
+    }
+  }
 }

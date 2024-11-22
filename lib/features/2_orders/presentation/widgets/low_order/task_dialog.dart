@@ -5,6 +5,7 @@ import 'package:production_planning/features/2_orders/domain/entities/order_enti
 import 'package:production_planning/features/2_orders/domain/entities/planning_task_entity.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_states.dart';
+import 'package:production_planning/shared/functions/rule_3_duration.dart';
 
 class TaskDialog extends StatelessWidget {
   final PlanningTaskEntity task;
@@ -81,7 +82,7 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Cantidad", job.amount.toString()),
           _buildInfoRow(
             "Fechas",
-            "${_getDateFormat(task.startDate)} - ${_getDateFormat(task.endDate)}",
+            "${getDateFormat(task.startDate)} - ${getDateFormat(task.endDate)}",
           ),
         ],
       ),
@@ -114,9 +115,5 @@ class TaskDialog extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _getDateFormat(DateTime date) {
-    return DateFormat("dd/MM/yyyy HH:mm").format(date);
   }
 }

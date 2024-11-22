@@ -7,6 +7,7 @@ import 'package:production_planning/features/2_orders/presentation/bloc/orders_b
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page_container.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/new_order_page.dart';
+import 'package:production_planning/shared/functions/rule_3_duration.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class OrdersPage extends StatelessWidget {
@@ -70,7 +71,7 @@ class OrdersPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Fecha: ${order.regDate.toLocal()}',
+                                  'Fecha: ${getDateFormat(order.regDate)}',
                                   style: TextStyle(
                                     fontSize: 18.0,
                                     fontWeight: FontWeight.bold,
@@ -126,7 +127,7 @@ class OrdersPage extends StatelessWidget {
                   }
                   return Center(
                     child: Text(
-                      "No orders available",
+                      "No hay ordenes disponibles",
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant,
                         fontSize: 16,

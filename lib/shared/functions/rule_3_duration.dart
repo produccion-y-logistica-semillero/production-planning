@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 Duration ruleOf3(Duration machineCapacity, Duration taskDuration){
   // Convert both durations to seconds for easier calculations
   int d1InSeconds = machineCapacity.inSeconds;
@@ -12,3 +14,8 @@ Duration ruleOf3(Duration machineCapacity, Duration taskDuration){
   // Return the scaled duration
   return Duration(seconds: scaledD2InSeconds);
 }
+
+
+  String getDateFormat(DateTime date) {
+    return DateFormat("dd/MM/yyyy HH:mm").format(date);
+  }

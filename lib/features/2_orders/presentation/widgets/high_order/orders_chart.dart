@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
+import 'package:production_planning/shared/functions/rule_3_duration.dart';
 
 class OrdersScreen extends StatelessWidget {
   final List<OrderEntity> orders;
@@ -12,7 +13,7 @@ class OrdersScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orders'),
+        title: const Text('Ordenes'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
@@ -38,7 +39,7 @@ class OrdersScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Order Date: ${order.regDate.toLocal()}',
+                      'Fecha: ${getDateFormat(order.regDate)}',
                       style: TextStyle(
                         fontSize: 18.0,
                         fontWeight: FontWeight.bold,
@@ -66,7 +67,7 @@ class OrdersScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('View Details'),
+                      child: const Text('Ver detalles'),
                     ),
                   ],
                 ),

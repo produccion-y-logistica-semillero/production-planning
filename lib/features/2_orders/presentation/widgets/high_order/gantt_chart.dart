@@ -41,7 +41,7 @@ class _GanttChartState extends State<GanttChart> {
   double _currentHorizontalValue = 1;
   double _currentVerticalValue = 1;
   double hourWidth = 0;
-  Map<String, Color> processColor = {};
+  Map<int, Color> jobColor = {};
 
   DateTime startDate;
   DateTime endDate;
@@ -291,16 +291,16 @@ class _GanttChartState extends State<GanttChart> {
           taskEndPosition = chartWidth;
         }
 
-        if (!processColor.containsKey('${task.sequenceId}-${task.numberProcess}')) {
+        if (!jobColor.containsKey(task.jobId)) {
           final random = Random();
-          processColor['${task.sequenceId}-${task.numberProcess}'] = Color.fromARGB(
+          jobColor[task.jobId] = Color.fromARGB(
             255,
             random.nextInt(256),
             random.nextInt(256),
             random.nextInt(256),
           );
         }
-        final Color taskColor = processColor['${task.sequenceId}-${task.numberProcess}']!;
+        final Color taskColor = jobColor[task.jobId]!;
         // Task bar on the Gantt chart
         final item = Positioned(
           top: (index * (40.0 * _currentVerticalValue)) + (5 * index),

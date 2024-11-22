@@ -136,14 +136,4 @@ class OrderRepositoryImpl implements OrderRepository{
       return Left(error);
     }
   }
-  
-  @override
-  Future<Either<Failure, OrderEntity>> getFullOrderOfTask(int taskId) async{
-    try{
-      final orderId = await orderDao.getOrderByTaskId(taskId);
-      return getFullOrder(orderId);
-    } on Failure catch(error){
-      return Left(error);
-    }
-  }
 }

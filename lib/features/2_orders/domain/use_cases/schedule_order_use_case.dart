@@ -89,6 +89,8 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
           startDate: output[jobIndex].value2[machineIndex].value1,
           endDate: output[jobIndex].value2[machineIndex].value2,
           retarded: output[jobIndex].value2[machineIndex].value2.isAfter(job.dueDate),
+          jobId: job.jobId!,
+          orderId: orderId,
         );
 
         if (!machineTasksMap.containsKey(machineIndex)) {
@@ -181,6 +183,8 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         startDate: out.value3,
         endDate: out.value4,
         retarded: out.value5 > Duration.zero,
+        jobId: job.jobId!,
+        orderId: orderId,
       );
 
       if (!machineTasksMap.containsKey(out.value2)) {
@@ -260,7 +264,9 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         numberProcess:  1,    //to change later depending on amount of a sequence
         startDate: out.value3,
         endDate: out.value4,
-        retarded: !out.value4.isBefore(out.value5)
+        retarded: !out.value4.isBefore(out.value5),
+        jobId: out.value1,
+        orderId: orderId,
       )
     ).toList();
 

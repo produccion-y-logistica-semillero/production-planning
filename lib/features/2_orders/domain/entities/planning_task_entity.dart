@@ -6,6 +6,8 @@ class PlanningTaskEntity{
   final DateTime startDate;
   final bool retarded; //if the termination is after due date
   final DateTime endDate;
+  final int jobId;
+  final int orderId;
 
   PlanningTaskEntity({
     required this.sequenceId,
@@ -14,6 +16,8 @@ class PlanningTaskEntity{
     required this.numberProcess,
     required this.startDate, 
     required this.endDate,
-    required this.retarded
+    required this.retarded,
+    required this.orderId,
+    required this.jobId,
   });
 }

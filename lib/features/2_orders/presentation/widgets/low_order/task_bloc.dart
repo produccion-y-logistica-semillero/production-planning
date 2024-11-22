@@ -9,10 +9,10 @@ class TaskBloc extends Cubit<TaskState>{
   TaskBloc(this.repo): super(TaskInitialState());
 
 
-  void getTaskInfo(int taskId) async{
+  void getTaskInfo(int orderId) async{
     await Future.delayed(Duration.zero);
 
-    final response = await repo.getFullOrderOfTask(taskId);
+    final response = await repo.getFullOrder(orderId);
 
     emit(response.fold((_)=>TaskErrorState(), (o)=> TaskRetrievedState(o)));
   }

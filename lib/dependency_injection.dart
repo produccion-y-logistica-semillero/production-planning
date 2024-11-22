@@ -29,6 +29,7 @@ import 'package:production_planning/features/2_orders/domain/use_cases/schedule_
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
+import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_bloc.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 final depIn = GetIt.instance;
@@ -139,6 +140,10 @@ Future<void> initDependencies(String workspace) async {
         depIn.get<GetOrderEnvironment>(),
         depIn.get<ScheduleOrderUseCase>()
       )
+    );
+
+    depIn.registerFactory<TaskBloc>(
+      ()=> TaskBloc(depIn.get())
     );
   }
   catch(e){

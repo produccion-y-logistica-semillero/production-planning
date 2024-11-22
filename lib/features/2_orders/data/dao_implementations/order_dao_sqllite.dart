@@ -44,4 +44,30 @@ class OrderDaoSqlLite implements OrderDao {
       throw LocalStorageFailure();
     }
   }
+  
+  @override
+  Future<int> getOrderByTaskId(int taskId) async {
+    try {
+      final result = await db.rawQuery(
+        '''
+        SELECT o.order_id 
+        FROM orders o 
+        INNER JOIN tasks t 
+        ON t.order_id = o.order_id 
+        WHERE t.task_id = ? 
+        LIMIT 1
+        ''', 
+        [taskId]
+      );
+
+      if (result.isNotEmpty) {
+        return result.first['order_id'] as int;
+      } else {
+        throw LocalStorageFailure();
+      }
+    } catch (error) {
+      throw LocalStorageFailure();
+    }
+  }
+
 }

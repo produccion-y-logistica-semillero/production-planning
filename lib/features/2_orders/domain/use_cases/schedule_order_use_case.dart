@@ -189,14 +189,15 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
 
       if (!machineTasksMap.containsKey(out.value2)) {
         machineTasksMap[out.value2] = [];
+        print("adding key ${out.value2}");
       }
       machineTasksMap[out.value2]!.add(task);
     }
-
+    machineEntities.forEach((m)=>print(m.id));
     final List<PlanningMachineEntity> machinesResult = machineTasksMap.entries
         .map((entry) => PlanningMachineEntity(
             entry.key,
-            machineTypeName,
+            machineEntities.where((m)=>m.id == entry.key).first.name,
             entry.value,
           ))
         .toList();

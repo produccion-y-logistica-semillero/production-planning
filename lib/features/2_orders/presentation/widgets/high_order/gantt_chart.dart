@@ -325,7 +325,7 @@ class _GanttChartState extends State<GanttChart> {
               ),
               child: Center(
                 child: Text(
-                  '${task.sequenceName} ${task.numberProcess}',
+                  '${task.sequenceName}',
                   style: const TextStyle(color: Colors.white),
                 ),
               ),

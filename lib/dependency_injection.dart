@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/core/factories/sqllite_factory.dart';
@@ -33,6 +34,10 @@ import 'package:production_planning/features/2_orders/presentation/widgets/low_o
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 final depIn = GetIt.instance;
+
+TimeOfDay START_SCHEDULE = const TimeOfDay(hour: 8, minute: 0);
+TimeOfDay END_SCHEDULE = const TimeOfDay(hour: 17, minute: 0);
+
 
 Future<void> initDependencies(String workspace) async {
   try {

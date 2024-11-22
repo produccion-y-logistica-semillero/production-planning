@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/core/use_cases/use_case.dart';
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_entity.dart';
 import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
 import 'package:production_planning/features/2_orders/domain/algorithms/flow_shop.dart';
@@ -66,10 +67,9 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         .map((job) => job.sequence!.tasks!.map((task) => task.processingUnits).toList())
         .toList();
 
-    // TO DO LATER: Working schedule should be fetched from configuration, using 8-5 as default for now
     final output = FlowShop(
       order!.regDate,
-      const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       timeMatrix,
       rule,
@@ -164,7 +164,7 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     // TO DO LATER: Working schedule should be fetched from configuration, using 8-5 as default for now
     final output = ParallelMachine(
       order!.regDate,
-      const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       machines,
       rule,
@@ -250,7 +250,7 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     final output = SingleMachine(
       0,
       order!.regDate,
-      const Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0)),
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
       input,
       rule
     ).output;

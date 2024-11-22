@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_side_menu/flutter_side_menu.dart';
 import 'package:path/path.dart';
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/features/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/features/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
 import 'package:provider/provider.dart';
@@ -52,7 +53,7 @@ class MainPage extends StatelessWidget {
                 builder: (data) => SideMenuData(
                   header: Container(
                     margin: const EdgeInsets.symmetric(vertical: 16),
-                    child: Image.asset('assets/images/javeriana.png')
+                    child: Image.asset('assets/images/javeriana.png'),
                   ),
                   items: [
                     SideMenuItemDataTile(
@@ -62,7 +63,14 @@ class MainPage extends StatelessWidget {
                       icon: Icon(Icons.workspaces_outline, color: onPrimaryContainer),
                       isSelected: false,
                     ),
-                    SideMenuItemDataDivider(divider: const Divider(height: 20, color: Colors.white,)),
+                    SideMenuItemDataTile(
+                      title: 'Horario',
+                      onTap: () => _showScheduleDialog(context),
+                      titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      icon: Icon(Icons.schedule, color: onPrimaryContainer),
+                      isSelected: false,
+                    ),
+                    SideMenuItemDataDivider(divider: const Divider(height: 20, color: Colors.white)),
                     createItem(provider, context, '/machines', 'Maquinas', 1, Icons.settings),
                     createItem(provider, context, '/sequences', 'Secuencias', 2, Icons.work),
                     createItem(provider, context, '/orders', 'Ordenes', 3, Icons.schedule_send_sharp),
@@ -145,7 +153,7 @@ class MainPage extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Select or Create Workspace'),
+          title: const Text('Selecciona o crea un workspace'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -164,7 +172,7 @@ class MainPage extends StatelessWidget {
                 ),
               TextField(
                 controller: newWorkspaceController,
-                decoration: const InputDecoration(hintText: 'New Workspace Name'),
+                decoration: const InputDecoration(hintText: 'Nuevo workspace'),
               ),
             ],
           ),
@@ -182,13 +190,75 @@ class MainPage extends StatelessWidget {
                   _showRestartMessage(context);
                 }
               },
-              child: const Text('Submit'),
+              child: const Text('Enviar'),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: const Text('Cancel'),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showScheduleDialog(BuildContext context) async {
+    TimeOfDay startTime = START_SCHEDULE;
+    TimeOfDay endTime = END_SCHEDULE;
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Configuración de Horario'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Hora de inicio'),
+                trailing: Text('${startTime.format(context)}'),
+                onTap: () async {
+                  final pickedTime = await showTimePicker(context: context, initialTime: startTime);
+                  if (pickedTime != null) {
+                    startTime = pickedTime;
+                  }
+                },
+              ),
+              ListTile(
+                title: const Text('Hora de fin'),
+                trailing: Text('${endTime.format(context)}'),
+                onTap: () async {
+                  final pickedTime = await showTimePicker(context: context, initialTime: endTime);
+                  if (pickedTime != null) {
+                    endTime = pickedTime;
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                START_SCHEDULE = startTime;
+                END_SCHEDULE = endTime;
+
+                final file = File('schedule.txt');
+                await file.writeAsString(
+                  '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}\n'
+                  '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+                );
+
+                Navigator.of(context).pop();
+              },
+              child: const Text('Guardar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
             ),
           ],
         );
@@ -201,8 +271,8 @@ class MainPage extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Restart Required'),
-          content: const Text('The app must be restarted to apply changes.'),
+          title: const Text('Se requiere reinicio'),
+          content: const Text('La aplicacion requiere reiniciar para aplicar los cambios'),
           actions: [
             TextButton(
               onPressed: () {

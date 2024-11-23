@@ -1,5 +1,4 @@
 import 'package:dartz/dartz.dart';
-import 'package:flutter/material.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/core/use_cases/use_case.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -42,30 +41,29 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     if (order == null) return null;
 
     // Getting all machines of the specified type
-    int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
-    List<MachineEntity> machineEntities = [];
-    final responseMachines = await machineRepository.getAllMachinesFromType(machineTypeid);
-    responseMachines.fold((f) {}, (m) => machineEntities = m);
-    if (machineEntities.isEmpty) return null;
+    final List<int> machinesIds = order!.orderJobs![0].sequence!.tasks!.map((t)=>t.machineTypeId).toList();
+    final List<MachineEntity> machines =[];
+    for(final m in machinesIds){
+      final machinesSpecific = await machineRepository.getAllMachinesFromType(m);
+      final machine = machinesSpecific.fold((_)=>MachineEntity.defaultMachine(), (r)=>r.first);
+      machines.add(machine);
+    }
 
-    // Getting machine type name
-    String machineTypeName = "";
-    final responseTypeMachine = await machineRepository.getMachineTypeName(machineTypeid);
-    responseTypeMachine.fold((f) {}, (name) => machineTypeName = name);
+    final List<Tuple4<int, DateTime, int, DateTime>> inputJobs = [];
+    for(final j in order!.orderJobs!){
+      inputJobs.add(Tuple4(j.jobId!, j.dueDate, j.priority, j.availableDate));
+    }
 
-    // Creating input format for FlowShop
-    final List<Tuple4<int, DateTime, int, DateTime>> inputJobs = order!.orderJobs!
-        .map((job) => Tuple4<int, DateTime, int, DateTime>(
-            job.jobId!,
-            job.dueDate,
-            job.priority,
-            job.availableDate))
-        .toList();
-
-    // Creating timeMatrix
-    final List<List<Duration>> timeMatrix = order!.orderJobs!
-        .map((job) => job.sequence!.tasks!.map((task) => task.processingUnits).toList())
-        .toList();
+    final List<List<Duration>> timeMatrix = [];
+    for(final j in order!.orderJobs!){
+      final List<Duration> jobDurations = [];
+      int i = 0;
+      for(final t in j.sequence!.tasks!){
+        jobDurations.add(ruleOf3(machines[i].processingTime, t.processingUnits));
+        i++;
+      }
+      timeMatrix.add(jobDurations);
+    }
 
     final output = FlowShop(
       order!.regDate,
@@ -75,54 +73,49 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
       rule,
     ).output;
 
-    // Creating PlanningMachineEntity list grouped by machine ID
-    final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
-
-    for (int jobIndex = 0; jobIndex < output.length; jobIndex++) {
-      final job = order!.orderJobs![jobIndex];
-      for (int machineIndex = 0; machineIndex < output[jobIndex].value2.length; machineIndex++) {
-        final task = PlanningTaskEntity(
-          sequenceId: job.sequence!.id!,
-          sequenceName: job.sequence!.name,
-          taskId: job.sequence!.tasks![0].id!,
-          numberProcess: 1, // To change later based on job's sequence amount
-          startDate: output[jobIndex].value2[machineIndex].value1,
-          endDate: output[jobIndex].value2[machineIndex].value2,
-          retarded: output[jobIndex].value2[machineIndex].value2.isAfter(job.dueDate),
-          jobId: job.jobId!,
-          orderId: orderId,
-        );
-
-        if (!machineTasksMap.containsKey(machineIndex)) {
-          machineTasksMap[machineIndex] = [];
-        }
-        machineTasksMap[machineIndex]!.add(task);
-      }
+    final List<PlanningMachineEntity> planningMachines = [];
+    for(final m in machines){
+      planningMachines.add(PlanningMachineEntity(m.id!, m.name, []));
     }
 
-    final List<PlanningMachineEntity> machinesResult = machineTasksMap.entries
-        .map((entry) => PlanningMachineEntity(
-            entry.key,
-            machineTypeName,
-            entry.value,
-          ))
-        .toList();
+    final List<DateTime> endDateJobs = [];
+    for(final jr in output){
+      int i = 0;
+      DateTime? aux;
+      for(final plan in jr.value2){
+        if(aux == null || aux.isBefore(plan.value2)){
+          aux = plan.value2;
+        }
+        planningMachines[i].tasks.add(
+          PlanningTaskEntity(
+            sequenceId: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.id!, 
+            sequenceName: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.name!, 
+            taskId: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.tasks![i].id!, 
+            numberProcess: i+1, 
+            startDate: plan.value1, 
+            endDate: plan.value2, 
+            retarded: false, 
+            orderId: orderId, 
+            jobId: jr.value1
+            )
+          );
+        i++;
+      }
+      endDateJobs.add(aux!);
+    }
 
-    // Calculate Metrics
-    final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = output
-        .map((job) => Tuple3(
-            job.value2.first.value1, // Start date (first start time)
-            job.value2.last.value2, // End date (last end time)
-            job.value3 // Due date
-        ))
-        .toList();
-
+    final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = [];
+    int i = 0;
+    for(final j in order!.orderJobs!){
+      jobsDates.add(Tuple3(j.availableDate, endDateJobs[i], j.dueDate));
+      i++;
+    }
     final metrics = getMetricts(
-      machinesResult,
+      planningMachines,
       jobsDates,
     );
 
-    return Tuple2(machinesResult, metrics);
+    return Tuple2(planningMachines, metrics);
   }
 
 
@@ -134,19 +127,16 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     responseOrder.fold((f) {}, (or) => order = or);
     if (order == null) return null;
 
-    // Getting all machines of the specified type
     int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
     List<MachineEntity> machineEntities = [];
     final responseMachines = await machineRepository.getAllMachinesFromType(machineTypeid);
     responseMachines.fold((f) {}, (m) => machineEntities = m);
     if (machineEntities.isEmpty) return null;
 
-    // Getting machine type name
     String machineTypeName = "";
     final responseTypeMachine = await machineRepository.getMachineTypeName(machineTypeid);
     responseTypeMachine.fold((f) {}, (name) => machineTypeName = name);
 
-    // Creating input format for ParallelMachine
     final List<Tuple5<int, DateTime, int, DateTime, List<Duration>>> inputJobs = order!.orderJobs!
         .map((job) => Tuple5<int, DateTime, int, DateTime, List<Duration>>(
             job.jobId!,
@@ -156,12 +146,10 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
             job.sequence!.tasks!.map((task) => task.processingUnits).toList()))
         .toList();
 
-    // Creating initial machine availability list
     final List<Tuple2<int, List<Tuple2<DateTime, DateTime>>>> machines = machineEntities
         .map((machine) => Tuple2<int, List<Tuple2<DateTime, DateTime>>>(machine.id!, []))
         .toList();
 
-    // TO DO LATER: Working schedule should be fetched from configuration, using 8-5 as default for now
     final output = ParallelMachine(
       order!.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
@@ -170,7 +158,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
       rule,
     ).output;
 
-    // Creating PlanningMachineEntity list grouped by machine ID
     final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
 
     for (var out in output) {
@@ -179,7 +166,7 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         sequenceId: job.sequence!.id!,
         sequenceName: job.sequence!.name,
         taskId: job.sequence!.tasks![0].id!,
-        numberProcess: 1, // To change later based on job's sequence amount
+        numberProcess: 1,
         startDate: out.value3,
         endDate: out.value4,
         retarded: out.value5 > Duration.zero,
@@ -189,7 +176,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
 
       if (!machineTasksMap.containsKey(out.value2)) {
         machineTasksMap[out.value2] = [];
-        print("adding key ${out.value2}");
       }
       machineTasksMap[out.value2]!.add(task);
     }
@@ -202,7 +188,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
           ))
         .toList();
 
-    // Calculate Metrics
     final metrics = getMetricts(
       machinesResult,
       output.map((out) => Tuple3(out.value3, out.value4, out.value6)).toList(),
@@ -218,20 +203,16 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
     responseOrder.fold((f){}, (or)=>order = or);
     if(order == null) return null;
 
-    //getting the unique machine
     MachineEntity? machineEntity;
     int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
     final responseMachine = await machineRepository.getAllMachinesFromType(machineTypeid);
     responseMachine.fold((f){}, (m)=> machineEntity = m[0]);
     if(machineEntity == null) return null;
 
-    //getting machine type for the name
     String machineTypeName = "";
     final responseTypeMachine = await machineRepository.getMachineTypeName(machineTypeid);
     responseTypeMachine.fold((f){}, (name)=>machineTypeName = name);
 
-
-    //creating input format
     final List<Tuple5<int, Duration, DateTime, int, DateTime>> input =  order!.orderJobs!
       .map((job)=> Tuple5<int, Duration, DateTime, int, DateTime>(
           job.jobId!,
@@ -245,9 +226,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
         )
       ).toList();
 
-
-
-    //TO DO LATER, SCHEDULE SHOULD BE TAKEN FROM CONFIGURATION IN DATABASE, FOR NOW WE WILL IMAGINE THE TYPICAL 8-5
     final output = SingleMachine(
       0,
       order!.regDate,
@@ -256,8 +234,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
       rule
     ).output;
     
-
-    //get tasks
     final tasks = output.map((out)=>PlanningTaskEntity(
         sequenceId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.id!,
         sequenceName: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.name,
@@ -279,7 +255,6 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
       )
     ];
 
-    //get metricts
     final metrics = getMetricts(
       machinesResult, 
       output.map(
@@ -352,8 +327,8 @@ class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>
   }
 }
 
-extension on List<PlanningTaskEntity>{
 
+extension on List<PlanningTaskEntity>{
   void orderByStartDate(){
     for(int i = 0; i < length; i++){
       for(int j = i+1; j < length; j++){

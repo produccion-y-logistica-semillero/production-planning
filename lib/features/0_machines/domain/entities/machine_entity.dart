@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class MachineEntity{
   int? id;
   int? machineTypeId;
@@ -19,6 +21,15 @@ class MachineEntity{
     required this.continueCapacity
   });
 
-  
+  factory MachineEntity.defaultMachine(){
+    return MachineEntity(
+      status: null, 
+      name: '', 
+      processingTime: Duration.zero, 
+      preparationTime: null, 
+      restTime: null, 
+      continueCapacity: 0
+    );
+  }
 
 }

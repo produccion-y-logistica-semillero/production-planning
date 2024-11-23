@@ -52,7 +52,7 @@ class FlowShop {
         fifoRule();
         break;
     }
-
+    printTimeMatrix();
     printOutput();
   }
 
@@ -152,6 +152,13 @@ class FlowShop {
       for (var schedule in result.value2) {
         print('  Start: ${schedule.value1}, End: ${schedule.value2}');
       }
+    }
+  }
+
+  void printTimeMatrix() {
+    print('Time Matrix:');
+    for (int i = 0; i < timeMatrix.length; i++) {
+      print('Job ${i + 1}: ${timeMatrix[i].map((d) => d.toString()).join(', ')}');
     }
   }
 }

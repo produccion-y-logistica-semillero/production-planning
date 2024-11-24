@@ -52,8 +52,11 @@ class FlowShop {
       case "FIFO":
         fifoRule();
         break;
-      case "JHONSON":
+      case "JOHNSON":
         johnsonRule();
+        break;
+      case "JOHNSON3":
+        johnson3();
         break;
     }
     printTimeMatrix();
@@ -247,6 +250,89 @@ class FlowShop {
     } catch (e) {
       print("Error while applying Johnson's rule: $e");
       throw Exception("An error occurred during job scheduling: $e");
+    }
+  }
+
+  void johnson3() {
+    try {
+      if (timeMatrix.isEmpty || timeMatrix[0].length != 3) {
+        throw Exception(
+            "The Johnson's rule can only be applied to exactly three machines.");
+      }
+
+      List<int> conjuntoI = [];
+      List<int> conjuntoII = [];
+      List<int> p1Prime = [];
+      List<int> p2Prime = [];
+
+      for (int jobIndex = 0; jobIndex < timeMatrix.length; jobIndex++) {
+        int p1j = timeMatrix[jobIndex][0].inMinutes +
+            timeMatrix[jobIndex][1].inMinutes; // p'_{1j}
+        int p2j = timeMatrix[jobIndex][1].inMinutes +
+            timeMatrix[jobIndex][2].inMinutes; // p'_{2j}
+        p1Prime.add(p1j);
+        p2Prime.add(p2j);
+
+        if (p1j <= p2j) {
+          conjuntoI.add(jobIndex);
+        } else {
+          conjuntoII.add(jobIndex);
+        }
+      }
+
+      // sort groups, its the same than johnson with two machines; the first set is with SPT and the second one is with LPT.
+      conjuntoI.sort((a, b) => p1Prime[a].compareTo(p1Prime[b]));
+      conjuntoII.sort((a, b) => p2Prime[b].compareTo(p2Prime[a]));
+
+      // Join both sets.
+      List<int> jobIndices = [...conjuntoI, ...conjuntoII];
+
+      DateTime currentTimeMachine1 = startDate;
+      DateTime currentTimeMachine2 = startDate;
+      DateTime currentTimeMachine3 = startDate;
+
+      for (int jobIndex in jobIndices) {
+        Duration timeOnMachine1 = timeMatrix[jobIndex][0];
+        Duration timeOnMachine2 = timeMatrix[jobIndex][1];
+        Duration timeOnMachine3 = timeMatrix[jobIndex][2];
+
+        // machine 1
+        DateTime startTimeMachine1 = currentTimeMachine1;
+        DateTime endTimeMachine1 = startTimeMachine1.add(timeOnMachine1);
+        currentTimeMachine1 = endTimeMachine1;
+
+        // machine 2
+        DateTime startTimeMachine2 =
+            currentTimeMachine2.isAfter(endTimeMachine1)
+                ? currentTimeMachine2
+                : endTimeMachine1;
+        DateTime endTimeMachine2 = startTimeMachine2.add(timeOnMachine2);
+        currentTimeMachine2 = endTimeMachine2;
+
+        // machine 3
+        DateTime startTimeMachine3 =
+            currentTimeMachine3.isAfter(endTimeMachine2)
+                ? currentTimeMachine3
+                : endTimeMachine2;
+        DateTime endTimeMachine3 = startTimeMachine3.add(timeOnMachine3);
+        currentTimeMachine3 = endTimeMachine3;
+
+        output.add(Tuple3<int, List<Tuple2<DateTime, DateTime>>, DateTime>(
+          // job´s id
+          inputJobs[jobIndex].value1,
+          [
+            Tuple2(startTimeMachine1, endTimeMachine1),
+            Tuple2(startTimeMachine2, endTimeMachine2),
+            Tuple2(startTimeMachine3, endTimeMachine3),
+          ],
+          // due date
+          inputJobs[jobIndex].value2,
+        ));
+      }
+
+      print("Secuencia de trabajos (índices): $jobIndices");
+    } catch (e) {
+      print("Error en la regla de Johnson para 3 máquinas: $e");
     }
   }
 

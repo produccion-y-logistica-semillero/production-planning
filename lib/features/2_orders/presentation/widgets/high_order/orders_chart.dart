@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/features/2_orders/domain/entities/order_entity.dart';
-import 'package:production_planning/shared/functions/rule_3_duration.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 class OrdersScreen extends StatelessWidget {
   final List<OrderEntity> orders;

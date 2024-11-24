@@ -11,6 +11,7 @@ import 'package:production_planning/features/1_sequences/presentation/bloc/new_p
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/button_mode.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/machines_list.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/add_order.dart';
@@ -73,10 +74,7 @@ class SequencesPage extends StatelessWidget {
             onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
           );
         }
-        final machinesList = Container(
-          padding: const EdgeInsets.all(16.0),
-          child: machinesContent,
-        );
+        final machinesList = machinesContent;
 
         final Widget board;
         if (state.isNewOrder) {
@@ -92,50 +90,50 @@ class SequencesPage extends StatelessWidget {
           );
         }
 
-        return Row(
-          children: [
-            Expanded(
-              flex: 1,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  children: [
-                    if (state.isNewOrder)
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.all(16.0),
-                          child: machinesList,
+        return 
+            Row(
+              children: [
+                IconButton(
+              onPressed: ()=>printInfo(context, 
+                title: 'Secuencias', 
+                content: 'Una secuencia se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o \"tarea\" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min'
+              ), 
+              icon: Icon(Icons.info)),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      children: [
+                        if (state.isNewOrder)
+                          Expanded(
+                            flex: 2,
+                            child: machinesList,
+                          ),
+                        Expanded(
+                          flex: 1,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Boton crear trabajo
+                              ButtonMode(
+                                  callback: state.isNewOrder ?
+                                     () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)): 
+                                     () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)),
+                                  labelText: state.isNewOrder ? "Ver secuencias": "Nueva secuencia",
+                                  icon: Icons.roller_shades_closed_outlined,
+                                  horizontalPadding: 30),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
                         ),
-                      ),
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Boton crear trabajo
-                          ButtonMode(
-                              callback: () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)),
-                              labelText: "Agregar trabajo",
-                              icon: Icons.upload,
-                              horizontalPadding: 30),
-                          const SizedBox(height: 20),
-                          // Boton ver trabajos
-                          ButtonMode(
-                              callback: () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)),
-                              labelText: "Ver trabajos",
-                              icon: Icons.upload,
-                              horizontalPadding: 46),
-                        ],
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            Expanded(flex: 2, child: board),
-          ],
-        );
+                Expanded(flex: 2, child: board),
+              ],
+            );
       }),
     );
   }

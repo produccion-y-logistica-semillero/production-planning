@@ -12,7 +12,7 @@ import 'package:production_planning/features/2_orders/domain/entities/order_enti
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 import 'package:production_planning/features/2_orders/domain/entities/planning_task_entity.dart';
 import 'package:production_planning/features/2_orders/domain/repositories/order_repository.dart';
-import 'package:production_planning/shared/functions/rule_3_duration.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 class ScheduleOrderUseCase implements UseCase<Tuple2<List<PlanningMachineEntity>, Metrics>?, Tuple3<int, String, String>>{
 

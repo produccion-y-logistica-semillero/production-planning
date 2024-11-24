@@ -4,6 +4,7 @@ import 'package:production_planning/features/2_orders/presentation/bloc/new_orde
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_job.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 class NewOrderPage extends StatelessWidget {
   const NewOrderPage({super.key});
@@ -64,6 +65,16 @@ class NewOrderPage extends StatelessWidget {
               return Center(
                 child: Column(
                   children: [
+                    Row(
+                      children: [
+                        IconButton(onPressed: ()=>printInfo(context, 
+                          title: 'Crear orden', 
+                          content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de \"produccion empanadas\"'
+                        ), 
+                          icon: Icon(Icons.info)
+                        )
+                      ],
+                    ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(children: widgets),

@@ -5,7 +5,7 @@ import 'package:production_planning/features/2_orders/domain/entities/order_enti
 import 'package:production_planning/features/2_orders/domain/entities/planning_task_entity.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_states.dart';
-import 'package:production_planning/shared/functions/rule_3_duration.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 class TaskDialog extends StatelessWidget {
   final PlanningTaskEntity task;

@@ -7,7 +7,7 @@ import 'package:production_planning/features/2_orders/presentation/bloc/orders_b
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page_container.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/new_order_page.dart';
-import 'package:production_planning/shared/functions/rule_3_duration.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
 class OrdersPage extends StatelessWidget {
@@ -23,28 +23,45 @@ class OrdersPage extends StatelessWidget {
         create: (context) => GetIt.instance.get<OrderBloc>()..add(FetchOrdersEvent()),
         child: Column(
           children: [
-            Center(
-              child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => BlocProvider<NewOrderBloc>(
-                        create: (context) => GetIt.instance.get<NewOrderBloc>(),
-                        child: const NewOrderPage(),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: ()=>printInfo(context, 
+                    title: 'Ordenes', 
+                    content: 'Una orden es sobre lo que se realiza la planificacion de produccion, una orden se refiere a los productos que se requiere fabricar junto con las fechas para las que se requiere esto, por ejemplo: \n\nUna orden puede referrirse a que se requiere producir 100 panes para dentro de 5 dias, 50 empanadas para dentro de 10 dias y 75 tacos para dentro de 4 dias. Sobre esto se planificara el uso de las maquinas disponibles en las cuales se producen algunos o todos los productos que hacen parte de la orden.'
+                  ), 
+                  icon: Icon(Icons.info)
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => BlocProvider<NewOrderBloc>(
+                                create: (context) => GetIt.instance.get<NewOrderBloc>(),
+                                child: const NewOrderPage(),
+                              ),
+                            ),
+                          );
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: colorScheme.onPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text("Nueva orden"),
                       ),
-                    ),
-                  );
-                },
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  backgroundColor: colorScheme.primary,
-                  foregroundColor: colorScheme.onPrimary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    ],
                   ),
                 ),
-                child: const Text("Nueva orden"),
-              ),
+              ],
             ),
             Expanded(
               child: BlocBuilder<OrderBloc, OrdersState>(

@@ -70,8 +70,8 @@ class AddJobState extends State<AddJobWidget> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      shadowColor: colorScheme.shadow.withOpacity(0.1),
-      elevation: 4,
+      shadowColor: Colors.black.withOpacity(0.8),
+      elevation: 8,
       color: colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16.0),

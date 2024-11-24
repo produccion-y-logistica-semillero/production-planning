@@ -58,7 +58,7 @@ class FlowShop {
       case "JOHNSON3":
         johnson3();
         break;
-      case "JOHNSONM":
+      case "CDS":
         cdsAlgorithm();
         break;
     }
@@ -287,7 +287,7 @@ class FlowShop {
       conjuntoI.sort((a, b) => p1Prime[a].compareTo(p1Prime[b]));
       conjuntoII.sort((a, b) => p2Prime[b].compareTo(p2Prime[a]));
 
-      // Join both sets.
+      // join both sets
       List<int> jobIndices = [...conjuntoI, ...conjuntoII];
 
       DateTime currentTimeMachine1 = startDate;

@@ -10,8 +10,9 @@ class FlowShop {
   //  1         |   2024/8/30/6:00    |         1       | 2024/8/30/6:00
   //  2         |   2024/8/30/6:00    |         3       | 2024/8/30/6:00
   //  3         |   2024/8/30/6:00    |         2       | 2024/8/30/6:00
- 
-  List<List<Duration>> timeMatrix = []; //matrix of time it takes the task in each machine type
+
+  List<List<Duration>> timeMatrix =
+      []; //matrix of time it takes the task in each machine type
   //  The first list (rows) are the indexes of jobs, and the inside list (columns) are the times in each machine type
   //  the indexes in these lists (matrix) point to the same indexes in the list of inputJobs and machineId's
   //          :   0   |   1   |   2   |   3   |
@@ -51,6 +52,9 @@ class FlowShop {
       case "FIFO":
         fifoRule();
         break;
+      case "JHONSON":
+        johnsonRule();
+        break;
     }
     printTimeMatrix();
     printOutput();
@@ -64,17 +68,19 @@ class FlowShop {
 
   // Regla SPT: Ordena los trabajos por el tiempo de procesamiento más corto
   void sptRule() {
-    inputJobs.sort((a, b) =>
-        timeMatrix[inputJobs.indexOf(a)].reduce((v1, v2) => v1 + v2)
-            .compareTo(timeMatrix[inputJobs.indexOf(b)].reduce((v1, v2) => v1 + v2)));
+    inputJobs.sort((a, b) => timeMatrix[inputJobs.indexOf(a)]
+        .reduce((v1, v2) => v1 + v2)
+        .compareTo(
+            timeMatrix[inputJobs.indexOf(b)].reduce((v1, v2) => v1 + v2)));
     assignJobs();
   }
 
   // Regla LPT: Ordena los trabajos por el tiempo de procesamiento más largo
   void lptRule() {
-    inputJobs.sort((a, b) =>
-        timeMatrix[inputJobs.indexOf(b)].reduce((v1, v2) => v1 + v2)
-            .compareTo(timeMatrix[inputJobs.indexOf(a)].reduce((v1, v2) => v1 + v2)));
+    inputJobs.sort((a, b) => timeMatrix[inputJobs.indexOf(b)]
+        .reduce((v1, v2) => v1 + v2)
+        .compareTo(
+            timeMatrix[inputJobs.indexOf(a)].reduce((v1, v2) => v1 + v2)));
     assignJobs();
   }
 
@@ -90,13 +96,16 @@ class FlowShop {
       DateTime jobAvailableTime = inputJobs[jobIndex].value4;
       List<Tuple2<DateTime, DateTime>> jobSchedule = [];
 
-      for (int machineIndex = 0; machineIndex < timeMatrix[jobIndex].length; machineIndex++) {
+      for (int machineIndex = 0;
+          machineIndex < timeMatrix[jobIndex].length;
+          machineIndex++) {
         Duration processingTime = timeMatrix[jobIndex][machineIndex];
 
         // La máquina está disponible en su próximo tiempo libre o cuando el trabajo esté disponible, el que sea más tarde
-        DateTime startTime = jobAvailableTime.isAfter(machineAvailability[machineIndex])
-            ? jobAvailableTime
-            : machineAvailability[machineIndex];
+        DateTime startTime =
+            jobAvailableTime.isAfter(machineAvailability[machineIndex])
+                ? jobAvailableTime
+                : machineAvailability[machineIndex];
 
         // Ajustar para el horario laboral
         startTime = adjustForWorkingSchedule(startTime);
@@ -112,7 +121,8 @@ class FlowShop {
         jobAvailableTime = endTime;
       }
 
-      output.add(Tuple3(inputJobs[jobIndex].value1, jobSchedule, inputJobs[jobIndex].value2));
+      output.add(Tuple3(
+          inputJobs[jobIndex].value1, jobSchedule, inputJobs[jobIndex].value2));
     }
   }
 
@@ -122,10 +132,14 @@ class FlowShop {
     TimeOfDay workingEnd = workingSchedule.value2;
 
     if (start.hour < workingStart.hour ||
-        (start.hour == workingStart.hour && start.minute < workingStart.minute)) {
-      return DateTime(start.year, start.month, start.day, workingStart.hour, workingStart.minute);
-    } else if (start.hour > workingEnd.hour || (start.hour == workingEnd.hour && start.minute > workingEnd.minute)) {
-      return DateTime(start.year, start.month, start.day + 1, workingStart.hour, workingStart.minute);
+        (start.hour == workingStart.hour &&
+            start.minute < workingStart.minute)) {
+      return DateTime(start.year, start.month, start.day, workingStart.hour,
+          workingStart.minute);
+    } else if (start.hour > workingEnd.hour ||
+        (start.hour == workingEnd.hour && start.minute > workingEnd.minute)) {
+      return DateTime(start.year, start.month, start.day + 1, workingStart.hour,
+          workingStart.minute);
     }
     return start;
   }
@@ -133,15 +147,107 @@ class FlowShop {
   // Ajusta el tiempo de finalización según el horario laboral
   DateTime adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
     TimeOfDay workingEnd = workingSchedule.value2;
-    DateTime endOfDay = DateTime(start.year, start.month, start.day, workingEnd.hour, workingEnd.minute);
+    DateTime endOfDay = DateTime(
+        start.year, start.month, start.day, workingEnd.hour, workingEnd.minute);
 
     if (end.isAfter(endOfDay)) {
       Duration remainingTime = end.difference(endOfDay);
-      return DateTime(start.year, start.month, start.day + 1, workingSchedule.value1.hour, workingSchedule.value1.minute)
+      return DateTime(start.year, start.month, start.day + 1,
+              workingSchedule.value1.hour, workingSchedule.value1.minute)
           .add(remainingTime);
     }
 
     return end;
+  }
+
+  void johnsonRule() {
+    /**
+      1. create a list of jobs with their indexes
+      2. sort the jobs with the rule
+      3. schedule the jobs
+      
+     */
+
+    try {
+      if (timeMatrix.isEmpty || timeMatrix[0].length != 2) {
+        throw Exception(
+            "The Johnson's rule can only be applied to exactly two machines.");
+      }
+
+      for (var row in timeMatrix) {
+        if (row.length != 2) {
+          throw Exception(
+              "Each job must have exactly two durations specified for the two machines.");
+        }
+      }
+
+      // duration in machine 1 < duration in machine 2
+      List<int> conjuntoI = [];
+      // duration in machine 1 > duration in machine 2
+      List<int> conjuntoII = [];
+
+      for (int i = 0; i < timeMatrix.length; i++) {
+        if (timeMatrix[i][0] < timeMatrix[i][1]) {
+          conjuntoI.add(i);
+        } else {
+          conjuntoII.add(i);
+        }
+      }
+
+      // SPT = sort from smallest to largest
+      conjuntoI.sort((a, b) => timeMatrix[a][0].compareTo(timeMatrix[b][0]));
+      // LPT = sort fromt largest to smallest
+      conjuntoII.sort((a, b) => timeMatrix[b][1].compareTo(timeMatrix[a][1]));
+
+      print("Sorted set I: $conjuntoI");
+      print("Sorted set II: $conjuntoII");
+
+      List<int> jobIndices = [...conjuntoI, ...conjuntoII];
+      print("Sorted jobIndices: $jobIndices");
+
+      DateTime currentTimeMachine1 = startDate;
+      DateTime currentTimeMachine2 = startDate;
+
+      for (int jobIndex in jobIndices) {
+        // these store the job's duration  in the machine
+        Duration timeOnMachine1 = timeMatrix[jobIndex][0];
+        Duration timeOnMachine2 = timeMatrix[jobIndex][1];
+
+        // current time in the machine 1
+        DateTime startTimeMachine1 = currentTimeMachine1;
+        // end time is equal to currentTime plus timeOnMachine
+        DateTime endTimeMachine1 = currentTimeMachine1.add(timeOnMachine1);
+        currentTimeMachine1 = endTimeMachine1;
+
+        DateTime startTimeMachine2 =
+            // if currentTimeMachine2 is after endTimeMachine is because this is busy; so startTimeMachine goint to be the hour where Machine2 is free. Otherwise
+            // startTime2 can be the same endTime1
+            (currentTimeMachine2.isAfter(endTimeMachine1))
+                ? currentTimeMachine2
+                : endTimeMachine1;
+        DateTime endTimeMachine2 = startTimeMachine2.add(timeOnMachine2);
+        currentTimeMachine2 = endTimeMachine2;
+
+        // add the job id and its schedule for machine 1 and machine 2 (is the same tuple created before)
+        output.add(Tuple3(
+          jobIndex,
+          [
+            Tuple2(startTimeMachine1, endTimeMachine1),
+            Tuple2(startTimeMachine2, endTimeMachine2),
+          ],
+          inputJobs[jobIndex].value2,
+        ));
+
+        // Print statements to observe the scheduling process (error tests)
+        print(
+            "Job $jobIndex scheduled on Machine 1: $startTimeMachine1 - $endTimeMachine1");
+        print(
+            "Job $jobIndex scheduled on Machine 2: $startTimeMachine2 - $endTimeMachine2");
+      }
+    } catch (e) {
+      print("Error while applying Johnson's rule: $e");
+      throw Exception("An error occurred during job scheduling: $e");
+    }
   }
 
   // Imprimir el resultado de las asignaciones de trabajos
@@ -158,8 +264,8 @@ class FlowShop {
   void printTimeMatrix() {
     print('Time Matrix:');
     for (int i = 0; i < timeMatrix.length; i++) {
-      print('Job ${i + 1}: ${timeMatrix[i].map((d) => d.toString()).join(', ')}');
+      print(
+          'Job ${i + 1}: ${timeMatrix[i].map((d) => d.toString()).join(', ')}');
     }
   }
 }
-

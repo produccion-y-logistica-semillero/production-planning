@@ -1,4 +1,5 @@
 {
     "editor.rename.enablePreview": false,
-    "workbench.editor.enablePreview": false
+    "workbench.editor.enablePreview": false,
+    "cmake.sourceDirectory": "C:/Users/Sonyvideo1/Programas Personales/arduinoCosas/production-planning/windows"
 }

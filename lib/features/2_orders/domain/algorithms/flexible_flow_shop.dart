@@ -61,6 +61,8 @@ class FlexibleFlowShop {
     List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonSorted = [];
     jhonsonSorted.addAll(jhonsonSort(group1, 0));
     jhonsonSorted.addAll(jhonsonSort(group2, 1));
+    toOutput(jhonsonSorted);
+    print("output: $output");
   }
   
   void jhonson3(){
@@ -70,28 +72,30 @@ class FlexibleFlowShop {
 
   }
 
+  // List<Tuple5<int, DateTime, int, DateTime, List<List<Tuple2<int, Duration>>>>> inputJobs = [];
+
   //  id job  | [machine 1 id | task 1 duration , machine 2 id  | task 2 duration , ...]
   //    1     | [ 10          |   12:22         , 12            |   22:33         , ...]
   //    2     | [ 20          |   32:25         , 32            |   11:43         , ...]
   List<Tuple2<int, List<Tuple2<int, Duration>>>> generateJhonsonTable(){
     List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonTable = [];
     inputJobs.forEach((job){
+      List<Tuple2<int, Duration>> chosenMachines = [];
       job.value5.forEach((task){
-        Tuple2<int, List<Tuple2<int, Duration>>> line = Tuple2(job.value1, chooseMachines(task));
-        jhonsonTable.add(line);
+        Tuple2<int, Duration> chosenMachine = chooseMachine(task);
+        chosenMachines.add(chosenMachine);
       });
+      Tuple2<int, List<Tuple2<int, Duration>>> line = Tuple2(job.value1, chosenMachines);
+      jhonsonTable.add(line);
     });
     return jhonsonTable;
   }
 
   //  machine id  | task duration
-  //    1         |   12:20     
-  //    2         |   11:12
-  //    4         |   14:11     
-  List<Tuple2<int, Duration>> chooseMachines(List<Tuple2<int, Duration>> elegibleMachines){
-    List<Tuple2<int, Duration>> chosenMachines = [];
+  //    1         |   12:20        
+  Tuple2<int, Duration> chooseMachine(List<Tuple2<int, Duration>> elegibleMachines){
+    Tuple2<int, Duration> chosenMachine = const Tuple2(-1, Duration(days: 9999999));
     elegibleMachines.forEach((elegibleMachine){
-      Tuple2<int, Duration> chosenMachine = const Tuple2(-1, Duration(days: 9999999));
       machines.forEach((machine){
         bool elegible = (machine.value1 == elegibleMachine.value1);
         bool faster = (elegibleMachine.value2 < chosenMachine.value2);
@@ -99,9 +103,8 @@ class FlexibleFlowShop {
           chosenMachine = Tuple2(machine.value1, elegibleMachine.value2);
         }
       });
-      chosenMachines.add(chosenMachine);
     });
-    return chosenMachines;
+    return chosenMachine;
   }
 
   bool containsRange(Tuple2<DateTime, DateTime> range1, Tuple2<DateTime, DateTime> range2) {
@@ -161,7 +164,8 @@ void main(){
     const Tuple2(TimeOfDay(hour: 10, minute: 11), TimeOfDay(hour: 10, minute: 11));
   List<Tuple5<int, DateTime, int, DateTime, List<List<Tuple2<int, Duration>>>>> inputJobs = 
     [
-      Tuple5(1, 
+      Tuple5(
+        1, 
         DateTime(2024, 11, 24), 
         1, 
         DateTime(2024, 11, 24),
@@ -170,25 +174,118 @@ void main(){
             const Tuple2(
               1, 
               Duration(hours: 2)
-            ),
+            )
+          ],
+          [
+            const Tuple2(
+              2, 
+              Duration(hours: 3)
+            )
+          ]
+        ]
+      ),
+      Tuple5(
+        2, 
+        DateTime(2024, 11, 24), 
+        1, 
+        DateTime(2024, 11, 24),
+        [
+          [
+            const Tuple2(
+              1, 
+              Duration(hours: 4)
+            )
+          ],
+          [
+            const Tuple2(
+              2, 
+              Duration(hours: 1)
+            )
+          ]
+        ]
+      ),
+      Tuple5(
+        3,
+        DateTime(2024, 11, 25),
+        2,
+        DateTime(2024, 11, 25),
+        [
+          [
+            const Tuple2(
+              1,
+              Duration(hours: 3)
+            )
+          ],
+          [
             const Tuple2(
               2,
+              Duration(hours: 5)
+            )
+          ]
+        ]
+      ),
+      Tuple5(
+        4,
+        DateTime(2024, 11, 25),
+        3,
+        DateTime(2024, 11, 25),
+        [
+          [
+            const Tuple2(
+              1,
+              Duration(hours: 6)
+            )
+          ],
+          [
+            const Tuple2(
+              2,
+              Duration(hours: 2)
+            )
+          ]
+        ]
+      ),
+      Tuple5(
+        5,
+        DateTime(2024, 11, 26),
+        1,
+        DateTime(2024, 11, 26),
+        [
+          [
+            const Tuple2(
+              1,
+              Duration(hours: 2)
+            )
+          ],
+          [
+            const Tuple2(
+              2,
+              Duration(hours: 4)
+            )
+          ]
+        ]
+      ),
+      Tuple5(
+        6,
+        DateTime(2024, 11, 26),
+        2,
+        DateTime(2024, 11, 26),
+        [
+          [
+            const Tuple2(
+              1,
               Duration(hours: 1)
             )
           ],
           [
             const Tuple2(
-              3, 
-              Duration(hours: 2)
-            ),
-            const Tuple2(
-              4,
-              Duration(hours: 1)
+              2,
+              Duration(hours: 3)
             )
           ]
         ]
       )
     ];
+
   List<Tuple2<int, List<Tuple2<DateTime, DateTime>>>> machines = 
     [
       Tuple2(

@@ -93,7 +93,6 @@ class FlexibleFlowShop {
         }
       });
     });
-    print("cpy sorted $sorted");
     return sorted;
   }
   
@@ -123,11 +122,34 @@ class FlexibleFlowShop {
                         );
         jhonson2Table.add(jhonson2Line);
       });
-      print("jhonson2Table $jhonson2Table");
+      print("toJhonson2 $groupSize: $jhonson2Table");
       return jhonson2Table;
     }
 
-  void jhonsonCDS() {}
+  void jhonsonCDS() {
+    int picked = -1;
+    List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonTable =
+        generateJhonsonTable();
+        Duration minC = const Duration(days: 9999999);
+        List<Tuple2<int, List<Tuple2<int, Tuple2<DateTime, DateTime>>>>> minCOutput = [];
+    for(int i = 1; i < machines.length; i++){
+      List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonSorted = 
+        jhonsonRule(toJhonson2(jhonsonTable, i));
+      toOutput(copySort(jhonsonTable, jhonsonSorted));
+      if(evalOutput() < minC){
+        picked = i;
+        minCOutput = output;
+      }
+    }
+    output = minCOutput;
+    print("output $picked: $output");
+  }
+
+  Duration evalOutput(){
+    DateTime start = startDate;
+    DateTime end = output[output.length-1].value2[output[output.length-1].value2.length-1].value2.value2;
+    return start.difference(end);
+  }
 
   // List<Tuple5<int, DateTime, int, DateTime, List<List<Tuple2<int, Duration>>>>> inputJobs = [];
 
@@ -159,6 +181,8 @@ class FlexibleFlowShop {
       machines.forEach((machine) {
         bool elegible = (machine.value1 == elegibleMachine.value1);
         bool faster = (elegibleMachine.value2 < chosenMachine.value2);
+        machine.value2.forEach((avaliblePerriot){
+        });
         if (elegible && faster) {
           chosenMachine = Tuple2(machine.value1, elegibleMachine.value2);
         }
@@ -235,7 +259,6 @@ class FlexibleFlowShop {
       }
       output.add(Tuple2(jobId, outputMachines));
     });
-    print("output: $output");
   }
 }
 
@@ -248,32 +271,38 @@ void main() {
     Tuple5(1, DateTime(2024, 11, 24), 1, DateTime(2024, 11, 24), [
       [const Tuple2(1, Duration(hours: 2))],
       [const Tuple2(2, Duration(hours: 3))],
-      [const Tuple2(3, Duration(hours: 1))]
+      [const Tuple2(3, Duration(hours: 1))],
+      [const Tuple2(4, Duration(hours: 6))]
     ]),
     Tuple5(2, DateTime(2024, 11, 24), 1, DateTime(2024, 11, 24), [
       [const Tuple2(1, Duration(hours: 4))],
       [const Tuple2(2, Duration(hours: 1))],
-      [const Tuple2(3, Duration(hours: 3))]
+      [const Tuple2(3, Duration(hours: 3))],
+      [const Tuple2(4, Duration(hours: 4))]
     ]),
     Tuple5(3, DateTime(2024, 11, 25), 2, DateTime(2024, 11, 25), [
       [const Tuple2(1, Duration(hours: 3))],
       [const Tuple2(2, Duration(hours: 5))],
-      [const Tuple2(3, Duration(hours: 4))]
+      [const Tuple2(3, Duration(hours: 4))],
+      [const Tuple2(4, Duration(hours: 1))]
     ]),
     Tuple5(4, DateTime(2024, 11, 25), 3, DateTime(2024, 11, 25), [
       [const Tuple2(1, Duration(hours: 6))],
       [const Tuple2(2, Duration(hours: 2))],
-      [const Tuple2(3, Duration(hours: 5))]
+      [const Tuple2(3, Duration(hours: 5))],
+      [const Tuple2(4, Duration(hours: 2))]
     ]),
     Tuple5(5, DateTime(2024, 11, 26), 1, DateTime(2024, 11, 26), [
       [const Tuple2(1, Duration(hours: 2))],
       [const Tuple2(2, Duration(hours: 4))],
-      [const Tuple2(3, Duration(hours: 1))]
+      [const Tuple2(3, Duration(hours: 1))],
+      [const Tuple2(4, Duration(hours: 3))]
     ]),
     Tuple5(6, DateTime(2024, 11, 26), 2, DateTime(2024, 11, 26), [
       [const Tuple2(1, Duration(hours: 1))],
       [const Tuple2(2, Duration(hours: 3))],
-      [const Tuple2(3, Duration(hours: 7))]
+      [const Tuple2(3, Duration(hours: 7))],
+      [const Tuple2(4, Duration(hours: 6))]
     ])
   ];
 
@@ -283,6 +312,6 @@ void main() {
     Tuple2(3, [Tuple2(DateTime(2024, 11, 24), DateTime(2024, 11, 24))]),
     Tuple2(4, [Tuple2(DateTime(2024, 11, 24), DateTime(2024, 11, 24))])
   ];
-  String rule = "JHONSON_3_MACHINES";
+  String rule = "JHONSON_CDS";
   FlexibleFlowShop(startDate, workingSchedule, inputJobs, machines, rule);
 }

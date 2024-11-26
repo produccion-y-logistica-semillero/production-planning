@@ -134,25 +134,50 @@ List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonSort(
 // List<Tuple2<int, List<Tuple2<int, Tuple2<DateTime, DateTime>>>>> output = [];
 void toOutput(List<Tuple2<int, List<Tuple2<int, Duration>>>> jhonsonTable){
   Map<int, DateTime> lastMachineUse = {};
+  Map<int, DateTime>lastJobUse = {};
   jhonsonTable.forEach((line){
-    int jobId = line.value1;
+    lastJobUse[line.value1] = startDate;
     line.value2.forEach((machine){
       lastMachineUse[machine.value1] = startDate;
     });
+  });
+  jhonsonTable.forEach((line){
+    int jobId = line.value1;
     List<Tuple2<int, Tuple2<DateTime, DateTime>>> outputMachines = [];
-    line.value2.forEach((machine){
+    for(int i = 0; i < line.value2.length; i++){
       Tuple2<int, Tuple2<DateTime, DateTime>> outputMachine;
+      if(i == 0){
         outputMachine = 
+        Tuple2(
+          line.value2[i].value1, 
           Tuple2(
-            jobId, 
-            Tuple2(
-              lastMachineUse[machine.value1]!, 
-              lastMachineUse[machine.value1]!.add(machine.value2)
-            )
-          );
-        outputMachines.add(outputMachine);
-        output.add(Tuple2(jobId, outputMachines));
-    });
+            lastMachineUse[line.value2[i].value1]!, 
+            lastMachineUse[line.value2[i].value1]!.add(line.value2[i].value2)
+          )
+        );
+      }
+      else{
+        DateTime auxDT;
+        if(lastJobUse[jobId]!.isBefore(lastMachineUse[line.value2[i].value1]!)){
+          auxDT = lastMachineUse[line.value2[i].value1]!;
+        }
+        else{
+          auxDT = lastJobUse[jobId]!;
+        }
+        outputMachine = 
+        Tuple2(
+          line.value2[i].value1, 
+          Tuple2(
+            auxDT, 
+            auxDT.add(line.value2[i].value2)
+          )
+        );  
+      }
+      lastJobUse[jobId] = outputMachine.value2.value2;
+      lastMachineUse[line.value2[i].value1] = outputMachine.value2.value2;
+      outputMachines.add(outputMachine);
+    }
+    output.add(Tuple2(jobId, outputMachines));
   });
 }
   

@@ -52,8 +52,14 @@ class FlowShop {
       case "FIFO":
         fifoRule();
         break;
-      case "JHONSON":
+      case "JOHNSON":
         johnsonRule();
+        break;
+      case "JOHNSON3":
+        johnson3();
+        break;
+      case "CDS":
+        cdsAlgorithm();
         break;
     }
     printTimeMatrix();
@@ -247,6 +253,204 @@ class FlowShop {
     } catch (e) {
       print("Error while applying Johnson's rule: $e");
       throw Exception("An error occurred during job scheduling: $e");
+    }
+  }
+
+  void johnson3() {
+    try {
+      if (timeMatrix.isEmpty || timeMatrix[0].length != 3) {
+        throw Exception(
+            "The Johnson's rule can only be applied to exactly three machines.");
+      }
+
+      List<int> conjuntoI = [];
+      List<int> conjuntoII = [];
+      List<int> p1Prime = [];
+      List<int> p2Prime = [];
+
+      for (int jobIndex = 0; jobIndex < timeMatrix.length; jobIndex++) {
+        int p1j = timeMatrix[jobIndex][0].inMinutes +
+            timeMatrix[jobIndex][1].inMinutes; // p'_{1j}
+        int p2j = timeMatrix[jobIndex][1].inMinutes +
+            timeMatrix[jobIndex][2].inMinutes; // p'_{2j}
+        p1Prime.add(p1j);
+        p2Prime.add(p2j);
+
+        if (p1j <= p2j) {
+          conjuntoI.add(jobIndex);
+        } else {
+          conjuntoII.add(jobIndex);
+        }
+      }
+
+      // sort groups, its the same than johnson with two machines; the first set is with SPT and the second one is with LPT.
+      conjuntoI.sort((a, b) => p1Prime[a].compareTo(p1Prime[b]));
+      conjuntoII.sort((a, b) => p2Prime[b].compareTo(p2Prime[a]));
+
+      // join both sets
+      List<int> jobIndices = [...conjuntoI, ...conjuntoII];
+
+      DateTime currentTimeMachine1 = startDate;
+      DateTime currentTimeMachine2 = startDate;
+      DateTime currentTimeMachine3 = startDate;
+
+      for (int jobIndex in jobIndices) {
+        Duration timeOnMachine1 = timeMatrix[jobIndex][0];
+        Duration timeOnMachine2 = timeMatrix[jobIndex][1];
+        Duration timeOnMachine3 = timeMatrix[jobIndex][2];
+
+        // machine 1
+        DateTime startTimeMachine1 = currentTimeMachine1;
+        DateTime endTimeMachine1 = startTimeMachine1.add(timeOnMachine1);
+        currentTimeMachine1 = endTimeMachine1;
+
+        // machine 2
+        DateTime startTimeMachine2 =
+            currentTimeMachine2.isAfter(endTimeMachine1)
+                ? currentTimeMachine2
+                : endTimeMachine1;
+        DateTime endTimeMachine2 = startTimeMachine2.add(timeOnMachine2);
+        currentTimeMachine2 = endTimeMachine2;
+
+        // machine 3
+        DateTime startTimeMachine3 =
+            currentTimeMachine3.isAfter(endTimeMachine2)
+                ? currentTimeMachine3
+                : endTimeMachine2;
+        DateTime endTimeMachine3 = startTimeMachine3.add(timeOnMachine3);
+        currentTimeMachine3 = endTimeMachine3;
+
+        output.add(Tuple3<int, List<Tuple2<DateTime, DateTime>>, DateTime>(
+          // job´s id
+          inputJobs[jobIndex].value1,
+          [
+            Tuple2(startTimeMachine1, endTimeMachine1),
+            Tuple2(startTimeMachine2, endTimeMachine2),
+            Tuple2(startTimeMachine3, endTimeMachine3),
+          ],
+          // due date
+          inputJobs[jobIndex].value2,
+        ));
+      }
+
+      print("Secuencia de trabajos (índices): $jobIndices");
+    } catch (e) {
+      print("An error occurred during job scheduling for three machines: $e");
+    }
+  }
+
+  // this algorithm can work for three machines, but the makespan can be the same in some cases and with the last algorith "johnson3" is exactly.
+  void cdsAlgorithm() {
+    try {
+      if (timeMatrix.isEmpty || timeMatrix[0].length < 3) {
+        throw Exception(
+            "The C.D.S´s rule can only be applied to three machines or more.");
+      }
+
+      int numJobs = timeMatrix.length;
+      int numMachines = timeMatrix[0].length;
+
+      List<int> bestSequence = [];
+      int bestMakespan = double.maxFinite.toInt();
+
+      // here its creating the subcombinations (m-1)
+      for (int k = 1; k < numMachines; k++) {
+        List<List<int>> subProblemMatrix =
+            List.generate(numJobs, (_) => List<int>.filled(2, 0));
+
+        for (int j = 0; j < numJobs; j++) {
+          //  (p'_{1j})
+          subProblemMatrix[j][0] = timeMatrix[j]
+              .sublist(0, k)
+              .fold(0, (sum, duration) => sum + duration.inMinutes);
+
+          // (p'_{2j})
+          subProblemMatrix[j][1] = timeMatrix[j]
+              .sublist(k, numMachines)
+              .fold(0, (sum, duration) => sum + duration.inMinutes);
+        }
+
+        // johnson algorithm for two machines
+        List<int> conjuntoI = [];
+        List<int> conjuntoII = [];
+
+        for (int j = 0; j < subProblemMatrix.length; j++) {
+          if (subProblemMatrix[j][0] <= subProblemMatrix[j][1]) {
+            conjuntoI.add(j);
+          } else {
+            conjuntoII.add(j);
+          }
+        }
+
+        // first set (SPT)
+        conjuntoI.sort(
+            (a, b) => subProblemMatrix[a][0].compareTo(subProblemMatrix[b][0]));
+
+        // second set (LPT)
+        conjuntoII.sort(
+            (a, b) => subProblemMatrix[b][1].compareTo(subProblemMatrix[a][1]));
+
+        // join sets
+        List<int> sequence = [...conjuntoI, ...conjuntoII];
+
+        //makespan
+        int makespan = 0;
+        List<int> endTimes = List<int>.filled(numMachines, 0);
+
+        for (int jobIndex in sequence) {
+          for (int machine = 0; machine < numMachines; machine++) {
+            int startTime =
+                (machine == 0) ? endTimes[0] : endTimes[machine - 1];
+            endTimes[machine] =
+                startTime + timeMatrix[jobIndex][machine].inMinutes;
+          }
+        }
+
+        makespan = endTimes.last;
+
+        if (makespan < bestMakespan) {
+          bestMakespan = makespan;
+          bestSequence = sequence;
+        }
+      }
+
+      List<DateTime> currentTimeMachines =
+          List<DateTime>.filled(numMachines, startDate);
+
+      for (int jobIndex in bestSequence) {
+        List<Tuple2<DateTime, DateTime>> machineSchedules = [];
+
+        for (int machine = 0; machine < numMachines; machine++) {
+          Duration jobDuration = timeMatrix[jobIndex][machine];
+          DateTime startTime = (machine == 0)
+              ? currentTimeMachines[0]
+              : currentTimeMachines[machine - 1]
+                      .isAfter(currentTimeMachines[machine])
+                  ? currentTimeMachines[machine - 1]
+                  : currentTimeMachines[machine];
+          DateTime endTime = startTime.add(jobDuration);
+          // update availability time
+          currentTimeMachines[machine] = endTime;
+
+          print(
+              "Trabajo ${inputJobs[jobIndex].value1} programado en Máquina ${machine + 1}: Inicio $startTime - Fin $endTime");
+
+          machineSchedules.add(Tuple2(startTime, endTime));
+        }
+
+        output.add(Tuple3<int, List<Tuple2<DateTime, DateTime>>, DateTime>(
+          // job´s id
+          inputJobs[jobIndex].value1,
+          machineSchedules,
+          // due date
+          inputJobs[jobIndex].value2,
+        ));
+      }
+
+      print("Secuencia óptima: $bestSequence");
+      print("Makespan óptimo: $bestMakespan");
+    } catch (e) {
+      print("Error in C.D.S´s algorithm: $e");
     }
   }
 

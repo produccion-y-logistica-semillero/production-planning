@@ -184,6 +184,12 @@ class SQLLiteDatabaseProvider{
           INSERT INTO dispatch_rules (name) VALUES('FCFS');  --ID 13
 
 
+          -----FLOW SHOP RULES
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 14
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3');  --ID 15
+          INSERT INTO dispatch_rules (name) VALUES('CDS');  --ID 16
+
+
           --Insert types_x_rules
           -------SINGLE MACHINE RULES
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
@@ -213,6 +219,9 @@ class SQLLiteDatabaseProvider{
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 14);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 15);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 16);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------

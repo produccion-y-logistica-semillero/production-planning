@@ -1,8 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
-import 'package:production_planning/features/0_machines/domain/repositories/machine_repository.dart';
+import 'package:production_planning/entities/machine_type_entity.dart';
+import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/features/0_machines/domain/use_cases/get_machines_type_use_case.dart';
 
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:production_planning/core/themes/theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:production_planning/dependency_injection.dart';
-import 'package:production_planning/features/main_page/presentation/pages/main_page.dart';
-import 'package:production_planning/features/main_page/presentation/provider/side_menu_provider.dart';
+import 'package:production_planning/presentation/main_page/presentation/pages/main_page.dart';
+import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 
@@ -58,7 +58,8 @@ class MyApp extends StatelessWidget {
       title: 'Planificación de la Producción',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: MaterialTheme.lightMediumContrastScheme(),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        textTheme: GoogleFonts.lexendDecaTextTheme()
       ),
       home: ChangeNotifierProvider(
         create: (context) => SideMenuProvider(),

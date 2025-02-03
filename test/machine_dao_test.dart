@@ -1,9 +1,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:production_planning/features/0_machines/data/dao_implementations/machine_type_dao_sqllite.dart';
-import 'package:production_planning/features/0_machines/data/dao_interfaces/machine_type_dao.dart';
-import 'package:production_planning/features/0_machines/data/models/machine_type_model.dart';
+import 'package:production_planning/daos/implementations/machine_type_dao_sqllite.dart';
+import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
+import 'package:production_planning/repositories/models/machine_type_model.dart';
 import 'package:sqflite/sqflite.dart';
 
 

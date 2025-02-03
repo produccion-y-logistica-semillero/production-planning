@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/gantt_chart.dart';
 
@@ -25,7 +24,7 @@ class GanttPage extends StatelessWidget {
                 return const Text("Hubo un error encontrando la orden");
               }
               if(state.orderId == null){
-                BlocProvider.of<GanttBloc>(context).add(AssignOrderId(orderId));
+                BlocProvider.of<GanttBloc>(context).assignOrderId(orderId);
                 return const CircularProgressIndicator();
               }
               List<Widget> content = [];
@@ -82,7 +81,7 @@ class GanttPage extends StatelessWidget {
                         ),
                       ),
                       onChanged: (int? id) {
-                        if (id != null) BlocProvider.of<GanttBloc>(context).add(SelectRule(id));
+                        if (id != null) BlocProvider.of<GanttBloc>(context).selectRule(id);
                       },
                       items: state.enviroment!.rules.map(
                         (value) => DropdownMenuItem<int>(

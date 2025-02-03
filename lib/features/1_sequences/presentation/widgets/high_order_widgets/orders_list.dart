@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/order_process.dart';
 
@@ -16,7 +15,7 @@ class OrderList extends StatelessWidget {
       builder: (context, state) {
         Widget dropdown = const SizedBox();
         if (state is SeeProcessInitialState) {
-          BlocProvider.of<SeeProcessBloc>(context).add(OnRetrieveSequencesEvent());
+          BlocProvider.of<SeeProcessBloc>(context).retrieveSequences();
         }
         if (state.sequences != null) {
           dropdown = DropdownButton<int>(
@@ -36,7 +35,7 @@ class OrderList extends StatelessWidget {
               );
             }).toList(),
             onChanged: (value) {
-              BlocProvider.of<SeeProcessBloc>(context).add(OnSequenceSelected(value!));
+              BlocProvider.of<SeeProcessBloc>(context).selectSequence(value!);
             },
             isExpanded: true,
             underline: Container(

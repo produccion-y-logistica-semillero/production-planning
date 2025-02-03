@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_state.dart';
 import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/add_machine_type_dialog.dart';
 import 'package:production_planning/features/0_machines/presentation/widgets/high_order_widgets/machines_list_view.dart';
@@ -62,7 +61,7 @@ class MachinesListPage extends StatelessWidget{
                 (MachineTypeDeletionSuccess _) => MachinesListView(machineTypes: state.machineTypes!,),
               };
               //IF WE ARE IN THE INITIAL STATE, WE TRIGGER THE FETCHING OF THE MACHINES
-              if(state is MachineTypeInitial) BlocProvider.of<MachineTypesBloc>(context).add(OnMachineTypeRetrieving());
+              if(state is MachineTypeInitial) BlocProvider.of<MachineTypesBloc>(context).retrieveMachineTypes();
 
               return Expanded(
                 child: Container(
@@ -87,7 +86,7 @@ class MachinesListPage extends StatelessWidget{
           addMachine: (){
             //IMPORTANT, notice how we operate over the external context, because thats the one with the bloc provider
             //but we pop over the dialog widget, since that's the one where the dialog is displaying
-            BlocProvider.of<MachineTypesBloc>(context).add(OnAddNewMachineType(_nameController.text, _descController.text));
+            BlocProvider.of<MachineTypesBloc>(context).addNewMachineType(_nameController.text, _descController.text);
             Navigator.of(dialogContext).pop();
             _nameController.clear();
             _descController.clear();

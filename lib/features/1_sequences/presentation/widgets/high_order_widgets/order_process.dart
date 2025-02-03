@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/1_sequences/domain/entities/sequence_entity.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_event.dart';
 
 class OrderProcess extends StatelessWidget {
   final SequenceEntity process;
@@ -135,7 +134,7 @@ class OrderProcess extends StatelessWidget {
                             ),
                             TextButton(
                               onPressed: () {
-                                BlocProvider.of<SeeProcessBloc>(context).add(OnDeleteSequence(process.id!));
+                                BlocProvider.of<SeeProcessBloc>(context).deleteSequence(process.id!);
                                 Navigator.of(dialogContext).pop();
                               },
                               child: const Text("Eliminar"),

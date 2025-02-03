@@ -5,7 +5,6 @@ import 'package:production_planning/shared/widgets/hour_text_input.dart';
 import 'package:production_planning/shared/widgets/input_field_custom.dart';
 import 'package:production_planning/features/1_sequences/domain/request_models/new_task_model.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/add_machines_successful.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/low_order_widgets/error_add_machines.dart';
@@ -129,14 +128,14 @@ class AddOrderForm extends StatelessWidget {
         if (state.isNoMachinesModalVisible)
           _buildOverlay(
             NoMachinesSelectedModal(
-              onClose: () => BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(false)),
+              onClose: () => BlocProvider.of<SequencesBloc>(context).modelChanged(false),
             ),
             context,
           ),
         if (state.isSuccessModalVisible)
           _buildOverlay(
             SuccessModal(
-              onClose: () => BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false)),
+              onClose: () => BlocProvider.of<SequencesBloc>(context).machinesSuccessModalChanged(false),
             ),
             context,
           ),
@@ -158,7 +157,7 @@ class AddOrderForm extends StatelessWidget {
           TaskContainer(
             task: machines[i],
             number: i + 1,
-            onDeleteCallback: () => BlocProvider.of<SequencesBloc>(context).add(OnTaskRemoved(i)),
+            onDeleteCallback: () => BlocProvider.of<SequencesBloc>(context).taskRemoved(i),
             callback: () {
               showDialog(
                 context: context,
@@ -197,8 +196,7 @@ class AddOrderForm extends StatelessWidget {
                               ),
                               TextButton(
                                 onPressed: () {
-                                  BlocProvider.of<SequencesBloc>(context)
-                                      .add(OnTaskUpdated(hourController.text, descController.text, i));
+                                  BlocProvider.of<SequencesBloc>(context).tsaskUpdated(i, descController.text, hourController.text);
                                   hourController.clear();
                                   descController.clear();
                                   Navigator.of(dialogContext).pop();
@@ -237,7 +235,7 @@ class AddOrderForm extends StatelessWidget {
     if (name.isNotEmpty) {
       onSave(name);
     } else {
-      BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(true));
+      BlocProvider.of<SequencesBloc>(context).modelChanged(true);
     }
   }
 
@@ -248,8 +246,8 @@ class AddOrderForm extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: () {
-              BlocProvider.of<SequencesBloc>(context).add(OnMachinesModalChanged(false));
-              BlocProvider.of<SequencesBloc>(context).add(OnMachinesSuccessModalChanged(false));
+              BlocProvider.of<SequencesBloc>(context).modelChanged(false);
+              BlocProvider.of<SequencesBloc>(context).machinesSuccessModalChanged(false);
             },
             child: const SizedBox(
               width: double.infinity,

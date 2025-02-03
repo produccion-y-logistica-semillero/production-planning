@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/orders_bloc/orders_state.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/pages/gantt_page_container.dart';
@@ -20,7 +19,7 @@ class OrdersPage extends StatelessWidget {
     return Scaffold(
       appBar: getAppBar(),
       body: BlocProvider(
-        create: (context) => GetIt.instance.get<OrderBloc>()..add(FetchOrdersEvent()),
+        create: (context) => GetIt.instance.get<OrderBloc>()..fetchOrders(),
         child: Column(
           children: [
             Row(
@@ -121,7 +120,7 @@ class OrdersPage extends StatelessWidget {
                                     ),
                                     IconButton(
                                       icon: Icon(Icons.delete, color: colorScheme.error),
-                                      onPressed: () => BlocProvider.of<OrderBloc>(context).add(DeleteOrder(state.orders[index].orderId!)),
+                                      onPressed: () => BlocProvider.of<OrderBloc>(context).deleteOrderById(state.orders[index].orderId!),
                                     ),
                                   ],
                                 ),

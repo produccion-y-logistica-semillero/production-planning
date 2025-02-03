@@ -7,7 +7,6 @@ import 'package:production_planning/features/2_orders/domain/entities/metrics.da
 import 'package:production_planning/features/2_orders/domain/entities/planning_machine_entity.dart';
 import 'package:intl/intl.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/gantt_bloc/gantt_event.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/metrics_page.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/low_order/task_dialog.dart'; // For formatting dates
@@ -126,7 +125,7 @@ class _GanttChartState extends State<GanttChart> {
                 color: Colors.deepPurpleAccent,
               ),
               onChanged: (int? id) {
-                if (id != null) BlocProvider.of<GanttBloc>(context).add(SelectRule(id));
+                if (id != null) BlocProvider.of<GanttBloc>(context).selectRule(id);
               },
               items: items,
             ),

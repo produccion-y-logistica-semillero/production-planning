@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_event.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/features/2_orders/presentation/widgets/high_order/add_job.dart';
 import 'package:production_planning/shared/functions/functions.dart';
@@ -55,7 +54,7 @@ class NewOrderPage extends StatelessWidget {
               final provider = BlocProvider.of<NewOrderBloc>(context);
               List<AddJobWidget> widgets = [];
               if (state is NewOrdersInitialState) {
-                provider.add(OnRetrieveSequences());
+                provider.retrieveSequences();
                 return const Center(child: CircularProgressIndicator());
               }
               if (state is NewOrdersState) {
@@ -82,7 +81,7 @@ class NewOrderPage extends StatelessWidget {
                     ),
                     ElevatedButton(
                       onPressed: () {
-                        provider.add(OnAddJob());
+                        provider.addJob();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.primary,
@@ -136,7 +135,7 @@ class NewOrderPage extends StatelessWidget {
                             },
                           );
                         } else {
-                          provider.add(OnSaveOrder());
+                          provider.saveOrder();
                         }
                       },
                       style: ElevatedButton.styleFrom(

@@ -2,10 +2,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/delete_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequence_use_case.dart';
 import 'package:production_planning/features/1_sequences/domain/use_cases/get_sequences_use_case.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_state.dart';
 
-class SeeProcessBloc extends Bloc<SeeProcessEvent, SeeProcessState>{
+class SeeProcessBloc extends Cubit<SeeProcessState>{
   final GetSequencesUseCase _getSequencesUseCase;
   final GetSequenceUseCase _getSequenceUseCase;
   final DeleteSequenceUseCase _deleteSequenceUseCase;
@@ -15,38 +14,33 @@ class SeeProcessBloc extends Bloc<SeeProcessEvent, SeeProcessState>{
     this._getSequenceUseCase,
     this._deleteSequenceUseCase
   ): 
-  super(SeeProcessInitialState(null, null, null)){
-    on<OnRetrieveSequencesEvent>(
-      (event, emit) async {
-        final response = await _getSequencesUseCase();
+  super(SeeProcessInitialState(null, null, null));
 
-        response.fold(
-          (f)=> emit(SequencesRetrieveFailure(null, state.selectedProcess, state.process)), 
-          (success)=> emit(SequencesRetrieved(success, state.selectedProcess, state.process))
-        );
-      }
+
+  void retrieveSequences()async{
+    final response = await _getSequencesUseCase();
+    response.fold(
+      (f)=> emit(SequencesRetrieveFailure(null, state.selectedProcess, state.process)), 
+      (success)=> emit(SequencesRetrieved(success, state.selectedProcess, state.process))
     );
-    on<OnSequenceSelected>(
-      (event, emit) async {
-        final response = await _getSequenceUseCase(p: event.id);
-        response.fold(
-          (f)=>emit(SequenceRetrieveFailure(state.sequences, state.selectedProcess, null)), 
-         (success) => emit(SequenceRetrieveSuccess(state.sequences, event.id, success))
-        );
-      }
+  }
+
+  void selectSequence(int id) async{
+    final response = await _getSequenceUseCase(p: id);
+    response.fold(
+      (f)=>emit(SequenceRetrieveFailure(state.sequences, state.selectedProcess, null)), 
+     (success) => emit(SequenceRetrieveSuccess(state.sequences, id, success))
     );
+  }
 
-    on<OnDeleteSequence>(
-      (event, emit)async{
-        final response = await _deleteSequenceUseCase(p: event.id);
-
-        response.fold(
-          (f)=>emit(SequenceDeletedFailure(state.sequences, state.selectedProcess, state.process))
-          , (s){ 
-              state.sequences?.removeWhere((seq)=>seq.id == event.id);
-              emit(SequenceDeletedSuccess(state.sequences, null, null));
-            });
-      }
+  void deleteSequence(int id) async{
+    final response = await _deleteSequenceUseCase(p: id);
+    response.fold(
+      (f)=>emit(SequenceDeletedFailure(state.sequences, state.selectedProcess, state.process)), 
+      (s){ 
+          state.sequences?.removeWhere((seq)=>seq.id == id);
+          emit(SequenceDeletedSuccess(state.sequences, null, null));
+        }
     );
   }
   

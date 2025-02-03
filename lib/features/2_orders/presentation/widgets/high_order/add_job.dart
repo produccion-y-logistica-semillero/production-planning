@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_bloc.dart';
-import 'package:production_planning/features/2_orders/presentation/bloc/new_order_bloc/new_order_event.dart';
 
 class AddJobWidget extends StatefulWidget {
   DateTime? availableDate;
@@ -81,7 +80,7 @@ class AddJobState extends State<AddJobWidget> {
               alignment: Alignment.topRight,
               child: IconButton(
                 onPressed: () {
-                  BlocProvider.of<NewOrderBloc>(context).add(OnRemoveJob(widget.index));
+                  BlocProvider.of<NewOrderBloc>(context).removeJob(widget.index);
                 },
                 icon: Icon(Icons.delete, color: colorScheme.error),
               ),

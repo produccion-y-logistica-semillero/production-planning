@@ -6,7 +6,6 @@ import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/1_sequences/domain/entities/process_entity.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_bloc.dart';
-import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_event.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/features/1_sequences/presentation/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'package:production_planning/features/1_sequences/presentation/widgets/high_order_widgets/orders_list.dart';
@@ -66,12 +65,12 @@ class SequencesPage extends StatelessWidget {
         Widget machinesContent = const Center(child: CircularProgressIndicator());
 
         //HANDLERS BASED ON CURRENT STATE, HERE WE SPECIFY ALL THAT IS DYNAMIC DEPENDING ON STATE
-        if (state is SequencesInitialState) BlocProvider.of<SequencesBloc>(context).add(OnSequencesMachineRetrieve());
+        if (state is SequencesInitialState) BlocProvider.of<SequencesBloc>(context).retrieveSequencesMachine(); 
         if (state is SequencesMachineFailure) machinesContent = const Center(child: Text("Error fetching"));
         if (state.machines != null) {
           machinesContent = MachinesList(
             machineTypes: state.machines!,
-            onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).add(OnSelectMachine(machine)),
+            onSelectMachine: (machine) => BlocProvider.of<SequencesBloc>(context).selectMachine(machine),
           );
         }
         final machinesList = machinesContent;
@@ -118,8 +117,8 @@ class SequencesPage extends StatelessWidget {
                               // Boton crear trabajo
                               ButtonMode(
                                   callback: state.isNewOrder ?
-                                     () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(false)): 
-                                     () => BlocProvider.of<SequencesBloc>(context).add(OnUseModeEvent(true)),
+                                     () => BlocProvider.of<SequencesBloc>(context).useMode(false): 
+                                     () => BlocProvider.of<SequencesBloc>(context).useMode(true),
                                   labelText: state.isNewOrder ? "Ver secuencias": "Nueva secuencia",
                                   icon: Icons.roller_shades_closed_outlined,
                                   horizontalPadding: 30),
@@ -139,6 +138,6 @@ class SequencesPage extends StatelessWidget {
   }
 
   void _onSaveOrder(BuildContext context, String name) {
-    BlocProvider.of<SequencesBloc>(context).add(OnSequencesSaveProcess(name));
+    BlocProvider.of<SequencesBloc>(context).saveProcess(name);
   }
 }

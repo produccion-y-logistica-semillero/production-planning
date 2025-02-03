@@ -3,9 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/features/0_machines/domain/entities/machine_type_entity.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_bloc.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machine_types_bloc/machine_types_event.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machine_bloc.dart';
-import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machines_event.dart';
 import 'package:production_planning/features/0_machines/presentation/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/features/0_machines/presentation/widgets/low_order_widgets/machine_display_tile.dart';
@@ -101,11 +99,9 @@ class MachinesListView extends StatelessWidget{
                           backgroundColor: colorScheme.surfaceContainerHigh,
                           onExpansionChanged: (value) {
                             if (state is MachinesRetrievingSuccess) {
-                              BlocProvider.of<MachineBloc>(context)
-                                  .add(OnMachinesExpansionCollpased());
+                              BlocProvider.of<MachineBloc>(context).machinesExpansionCollapses();
                             } else {
-                              BlocProvider.of<MachineBloc>(context).add(
-                                  OnMachinesRetrieving(machineTypes[index].id!));
+                              BlocProvider.of<MachineBloc>(context).retrieveMachines(machineTypes[index].id!);
                             }
                           },
                           children: children,
@@ -167,7 +163,7 @@ class MachinesListView extends StatelessWidget{
             ),
             TextButton(
               onPressed: (){
-                BlocProvider.of<MachineTypesBloc>(context).add(OnDeleteMachineType(machineId, index));
+                BlocProvider.of<MachineTypesBloc>(context).deleteMachineType(machineId, index);
                 Navigator.of(dialogContext).pop();
               }, 
               child: const Text("Eliminar")
@@ -192,7 +188,7 @@ class MachinesListView extends StatelessWidget{
             ),
             TextButton(
               onPressed: (){
-                BlocProvider.of<MachineBloc>(context).add(OnDeleteMachine(machineId));
+                BlocProvider.of<MachineBloc>(context).deleteMachine(machineId);
                 Navigator.of(dialogContext).pop();
               }, 
               child: const Text("Confirmar")
@@ -244,7 +240,7 @@ class MachinesListView extends StatelessWidget{
             }
             //else if to check if the inputs are correct, for instance, no 12:85
             else {
-              BlocProvider.of<MachineBloc>(context).add(OnNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerRestTime.text, controllerContinue.text, machineId, nameController.text));
+              BlocProvider.of<MachineBloc>(context).addNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerContinue.text, controllerRestTime.text, nameController.text, machineId); 
               Navigator.of(dialogContext).pop();
             }
           },

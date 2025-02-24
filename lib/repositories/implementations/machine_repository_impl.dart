@@ -131,6 +131,7 @@ class MachineRepositoryImpl implements MachineRepository {
   Future<MachineEntity> jsonToEntity(Map<String, dynamic> map) async {
     return MachineEntity(
       id: map["machine_id"],
+      machineTypeId: map["machine_type_id"],
       status: await statusDao.getNameById(map["status_id"]), 
       processingTime: Duration(
         hours: int.parse(map["processing_time"].toString().substring(11, 13)), 

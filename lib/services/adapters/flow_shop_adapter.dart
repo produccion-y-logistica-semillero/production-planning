@@ -9,7 +9,6 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flow_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
-
 import '../../entities/machine_entity.dart';
 
 class FlowShopAdapter {
@@ -23,74 +22,93 @@ class FlowShopAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flowShopAdapter(int orderId, String rule) async {
-    OrderEntity? order;
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    responseOrder.fold((f) {}, (or) => order = or);
+    OrderEntity? order = responseOrder.fold((f) =>null, (or) => or);
     if (order == null) return null;
-    // Getting all machines of the specified type
-    final List<int> machinesIds = order!.orderJobs![0].sequence!.tasks!.map((t)=>t.machineTypeId).toList();
+
+    //We get all machines
+    final List<int> machinesTypesIds = order.orderJobs![0].sequence!.tasks!.map((t)=>t.machineTypeId).toList();
     final List<MachineEntity> machines =[];
-    for(final m in machinesIds){
-      final machinesSpecific = await machineRepository.getAllMachinesFromType(m);
-      final machine = machinesSpecific.fold((_)=>MachineEntity.defaultMachine(), (r)=>r.first);
+    for(final typeId in machinesTypesIds){
+      final machinesSpecific = await machineRepository.getAllMachinesFromType(typeId);
+      final machine = machinesSpecific.fold((_)=>null, (m)=>m.first);
+      if(machine == null) return null;
+      print("adding ${machine.id} ${machine.name} ${machine.continueCapacity} ${machine.status}");
       machines.add(machine);
     }
-    final List<Tuple4<int, DateTime, int, DateTime>> inputJobs = [];
-    for(final j in order!.orderJobs!){
-      inputJobs.add(Tuple4(j.jobId!, j.dueDate, j.priority, j.availableDate));
-    }
-    final List<List<Duration>> timeMatrix = [];
-    for(final j in order!.orderJobs!){
-      final List<Duration> jobDurations = [];
-      int i = 0;
-      for(final t in j.sequence!.tasks!){
-        jobDurations.add(ruleOf3(machines[i].processingTime, t.processingUnits));
-        i++;
+
+    //we create the input
+    final List<FlowShopInput> inputJobs = [];
+    for(final job in order.orderJobs!){
+      final Map<int, Duration> taskTimes = {};
+      final List<Tuple2<int, int>> taskSequence = [];
+      //iterating over all tasks, and for each one, we get the time it takes on the machine we have for the machine type
+      for(final task in job.sequence!.tasks!){
+        print("searching ${task.machineTypeId}");
+        final machineOfTask = machines.where((m)=>m.machineTypeId==task.machineTypeId).first;
+        taskTimes[task.id!] = ruleOf3(machineOfTask.processingTime, task.processingUnits);
+        taskSequence.add(Tuple2(task.id!, task.machineTypeId));
       }
-      timeMatrix.add(jobDurations);
+      inputJobs.add(FlowShopInput(
+        job.jobId!, 
+        job.dueDate, 
+        job.priority, 
+        job.availableDate, 
+        taskSequence,
+        taskTimes,
+      ));
     }
+
+    //we create the sequence
+    final Map<int, DateTime> machinesAvailability= {};
+    for(final task in order.orderJobs!.first.sequence!.tasks!){
+      machinesAvailability[task.machineTypeId] = DateTime.now();
+    }
+
+    //we call the algorithm and receive the output
     final output = FlowShop(
-      order!.regDate,
+      order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
-      timeMatrix,
-      rule,
+      machinesAvailability,
+      rule
     ).output;
+
+
+    //transform to planning machines
     final List<PlanningMachineEntity> planningMachines = [];
     for(final m in machines){
-      planningMachines.add(PlanningMachineEntity(m.id!, m.name, []));
+      planningMachines.add(PlanningMachineEntity(m.machineTypeId!, m.name, []));
     }
-    final List<DateTime> endDateJobs = [];
-    for(final jr in output){
+
+    for(final out in output){
       int i = 0;
-      DateTime? aux;
-      for(final plan in jr.value2){
-        if(aux == null || aux.isBefore(plan.value2)){
-          aux = plan.value2;
-        }
-        planningMachines[i].tasks.add(
-          PlanningTaskEntity(
-            sequenceId: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.id!, 
-            sequenceName: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.name!, 
-            taskId: order!.orderJobs!.where((j)=>j.jobId == jr.value1).first.sequence!.tasks![i].id!, 
-            numberProcess: i+1, 
-            startDate: plan.value1, 
-            endDate: plan.value2, 
-            retarded: false, 
-            orderId: orderId, 
-            jobId: jr.value1
-            )
-          );
-        i++;
+      final jobSequence = order.orderJobs!.where((j)=>j.jobId == out.jobId).first.sequence!;
+      for(final machineScheduling in out.machinesScheduling.entries){
+        //we get the planning machine where this task belongs
+        final planningMachineEntity = planningMachines.where((pm) => pm.machineId == machineScheduling.key).first;
+        final DateTime taskStart = machineScheduling.value.value2.startDate;
+        final DateTime taskEnd = machineScheduling.value.value2.endDate;
+        final planningTask = PlanningTaskEntity(
+          sequenceId: jobSequence.id!, 
+          sequenceName: jobSequence.name, 
+          taskId:  machineScheduling.value.value1, 
+          numberProcess: i++, 
+          startDate: taskStart, 
+          endDate: taskEnd,
+          retarded: out.dueDate.isBefore(out.endTime), 
+          orderId: orderId, 
+          jobId: out.jobId
+        );
+        planningMachineEntity.tasks.add(planningTask);
       }
-      endDateJobs.add(aux!);
     }
+    //we get the metrics
     final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = [];
-    int i = 0;
-    for(final j in order!.orderJobs!){
-      jobsDates.add(Tuple3(j.availableDate, endDateJobs[i], j.dueDate));
-      i++;
+    for(final out in output){
+      jobsDates.add(Tuple3(out.startDate, out.endTime, out.dueDate));
     }
+
     final metrics = getMetricts(
       planningMachines,
       jobsDates,

@@ -4,8 +4,6 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
-import 'package:production_planning/services/algorithms/flow_shop.dart';
-import 'package:production_planning/services/algorithms/parallel_machine.dart';
 import 'package:production_planning/services/algorithms/single_machine.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
@@ -25,26 +23,27 @@ class SingleMachineAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> singleMachineAdapter(int orderId, String rule) async{
-    OrderEntity? order;
+    //we get the current order
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    responseOrder.fold((f){}, (or)=>order = or);
+    OrderEntity? order = responseOrder.fold((f)=>null, (order)=>order);
     if(order == null) return null;
 
-    MachineEntity? machineEntity;
-    int machineTypeid = order!.orderJobs![0].sequence!.tasks![0].machineTypeId;
+    //we retrieve the machine type id of the first task, which we know is the one for all tasks
+    int machineTypeid = order.orderJobs![0].sequence!.tasks![0].machineTypeId;
     final responseMachine = await machineRepository.getAllMachinesFromType(machineTypeid);
-    responseMachine.fold((f){}, (m)=> machineEntity = m[0]);
+    MachineEntity? machineEntity = responseMachine.fold((f)=>null, (m)=> m[0]);
     if(machineEntity == null) return null;
-
-    String machineTypeName = "";
+    
+    //we get the machine type name
     final responseTypeMachine = await machineRepository.getMachineTypeName(machineTypeid);
-    responseTypeMachine.fold((f){}, (name)=>machineTypeName = name);
+    String machineTypeName = responseTypeMachine.fold((f)=>"", (name)=>name);
 
-    final List<Tuple5<int, Duration, DateTime, int, DateTime>> input =  order!.orderJobs!
-      .map((job)=> Tuple5<int, Duration, DateTime, int, DateTime>(
+    //we get the input for the single machine
+    final List<SingleMachineInput> input =  order.orderJobs!
+      .map((job)=> SingleMachineInput(
           job.jobId!,
           ruleOf3(
-            machineEntity!.processingTime,
+            machineEntity.processingTime,
             job.sequence!.tasks![0].processingUnits 
           ),
           job.dueDate,
@@ -53,30 +52,37 @@ class SingleMachineAdapter {
         )
       ).toList();
 
+    //we get the output
     final output = SingleMachine(
       0,
-      order!.regDate,
+      order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       input,
       rule
     ).output;
     
-    final tasks = output.map((out)=>PlanningTaskEntity(
-        sequenceId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.id!,
-        sequenceName: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.name,
-        taskId: order!.orderJobs!.where((job)=> job.jobId == out.value1).first.sequence!.tasks![0].id!,
+
+    final tasks = output.map((out){
+      //we get the job sequence for this job
+      final jobSequence = order.orderJobs!.where((job)=> job.jobId == out.jobId).first.sequence!;
+      return PlanningTaskEntity(
+        sequenceId: jobSequence.id!,
+        sequenceName: jobSequence.name,
+        taskId: jobSequence.tasks![0].id!,
         numberProcess:  1,    //to change later depending on amount of a sequence
-        startDate: out.value3,
-        endDate: out.value4,
-        retarded: !out.value4.isBefore(out.value5),
-        jobId: out.value1,
+        startDate: out.startDate,
+        endDate: out.endDate,
+        retarded: out.dueDate.isBefore(out.endDate),
+        jobId: out.jobId,
         orderId: orderId,
-      )
+      );
+    }
     ).toList();
 
+    //since its single machine we know that there's only 1 planning machine
     final machinesResult = [
       PlanningMachineEntity(
-        machineEntity!.id!,
+        machineEntity.id!,
         machineTypeName,
         tasks
       )
@@ -85,11 +91,10 @@ class SingleMachineAdapter {
     final metrics = getMetricts(
       machinesResult, 
       output.map(
-        (out)=> Tuple3(out.value3, out.value4,out.value5)
+        (out)=> Tuple3(out.startDate, out.endDate,out.dueDate)
       )
       .toList()
     );
-
     return Tuple2(machinesResult, metrics);
   }
 }

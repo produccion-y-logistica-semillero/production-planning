@@ -1,3 +1,4 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -58,7 +59,11 @@ class MyApp extends StatelessWidget {
       title: 'Planificación de la Producción',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blueGrey,
+          brightness: Brightness.light,
+          dynamicSchemeVariant: DynamicSchemeVariant.content
+        ),
         textTheme: GoogleFonts.lexendDecaTextTheme()
       ),
       home: ChangeNotifierProvider(

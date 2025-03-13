@@ -158,36 +158,37 @@ class SQLLiteDatabaseProvider{
           --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
           ---------------------------------------------------------------------------------------------------------------------------
           -- Insert environments
-          INSERT INTO environments (name) VALUES('SINGLE MACHINE');   --ID 1
+          INSERT INTO environments (name) VALUES('SINGLE MACHINE');       --ID 1
           INSERT INTO environments (name) VALUES('PARALLEL MACHINES');    --ID 2
-          INSERT INTO environments (name) VALUES('FLOW SHOP');    --ID 3
+          INSERT INTO environments (name) VALUES('FLOW SHOP');            --ID 3
           INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');   --ID 4
-          INSERT INTO environments (name) VALUES('JOB SHOP');   --ID 5
+          INSERT INTO environments (name) VALUES('JOB SHOP');             --ID 5
           INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
 
           -- Insert dispatch rules
           ------SINGLE MACHINE RULES
-          INSERT INTO dispatch_rules (name) VALUES('EDD');  --ID 1
-          INSERT INTO dispatch_rules (name) VALUES('SPT');  --ID 2
-          INSERT INTO dispatch_rules (name) VALUES('LPT');  --ID 3
-          INSERT INTO dispatch_rules (name) VALUES('FIFO'); --ID 4
-          INSERT INTO dispatch_rules (name) VALUES('WSPT');   --ID 5
-          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO'); --ID 6
-          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO'); --ID 7
-          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO'); --ID 8
-          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO');  --ID 9
-          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO');  --ID 10
-          INSERT INTO dispatch_rules (name) VALUES('MINSLACK');   --ID 11
-          INSERT INTO dispatch_rules (name) VALUES('CR'); --ID 12
+          INSERT INTO dispatch_rules (name) VALUES('EDD');                --ID 1
+          INSERT INTO dispatch_rules (name) VALUES('SPT');                --ID 2
+          INSERT INTO dispatch_rules (name) VALUES('LPT');                --ID 3
+          INSERT INTO dispatch_rules (name) VALUES('FIFO');               --ID 4
+          INSERT INTO dispatch_rules (name) VALUES('WSPT');               --ID 5
+          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO');       --ID 6
+          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO');       --ID 7
+          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO');       --ID 8
+          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO');      --ID 9
+          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO');      --ID 10
+          INSERT INTO dispatch_rules (name) VALUES('MINSLACK');           --ID 11
+          INSERT INTO dispatch_rules (name) VALUES('CR');                 --ID 12
+          INSERT INTO dispatch_rules (name) VALUES('ATCS');               --ID 13
           
           ------PARALLEL MACHINE RULES
-          INSERT INTO dispatch_rules (name) VALUES('FCFS');  --ID 13
+          INSERT INTO dispatch_rules (name) VALUES('FCFS');  --ID 14
 
 
           -----FLOW SHOP RULES
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 14
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3');  --ID 15
-          INSERT INTO dispatch_rules (name) VALUES('CDS');  --ID 16
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 15
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3');  --ID 16
+          INSERT INTO dispatch_rules (name) VALUES('CDS');  --ID 17
 
 
           --Insert types_x_rules
@@ -204,24 +205,28 @@ class SQLLiteDatabaseProvider{
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
 
           -------PARALLEL MACHINE RULES
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 1);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 13);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 14);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 11);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 12);
-
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 5);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 6);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 7);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 10);
 
           -------FLOW SHOP MACHINE RULES
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 14);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 15);
           INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 16);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 17);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------

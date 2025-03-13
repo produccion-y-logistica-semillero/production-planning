@@ -10,7 +10,7 @@ class FlowShopInput{
   //this list has the order of the tasks, it has a tuple of 2 <task id, machine id>
   final List<Tuple2<int,int>> taskSequence;
   //in this map we have the durations, the id is the task id, and the duration is how long it takes (since we know there's only one machine, and we already have that time)
-  final Map<int, Duration> taskTimesInMachines;
+  final Map<int, Duration> taskTimesInMachines; 
   FlowShopInput(this.jobId, this.dueDate, this.priority,this.availableDate,this.taskSequence,this.taskTimesInMachines);
 }
 

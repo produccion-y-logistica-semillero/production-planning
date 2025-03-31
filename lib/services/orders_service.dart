@@ -9,6 +9,7 @@ import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
+import 'package:production_planning/services/adapters/flexible_flow_shop_adapter.dart';
 import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
@@ -108,8 +109,9 @@ class OrdersService {
     }
 
     String enviroment;
-    if(differentMachine && !allOne) enviroment = 'FLEXIBLE JOB SHOP';
-    else if(differentMachine && allOne) enviroment = 'JOB SHOP';
+    if(differentMachine && !allOne) {
+      enviroment = 'FLEXIBLE JOB SHOP';
+    } else if(differentMachine && allOne) enviroment = 'JOB SHOP';
     else if(!differentMachine && max > 1 && !allOne) enviroment = 'FLEXIBLE FLOW SHOP';
     else if(!differentMachine && max > 1 && allOne) enviroment = 'FLOW SHOP';
     else if(!differentMachine && max == 1 && !allOne) enviroment = 'PARALLEL MACHINES';
@@ -124,7 +126,10 @@ class OrdersService {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(orderRepository: orderRepo, machineRepository: machineRepo).singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(machineRepository: machineRepo, orderRepository: orderRepo).parallelMachineAdapter(sch.value1, sch.value2)),
       'FLOW SHOP' => Right(await FlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flowShopAdapter(sch.value1, sch.value2)),
+      'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleFlowShopAdapter(sch.value1, sch.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
+      
+      
     };
   }
 

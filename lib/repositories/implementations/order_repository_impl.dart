@@ -142,7 +142,7 @@ class OrderRepositoryImpl implements OrderRepository{
     try{
       await jobDao.deleteJobsFromOrder(orderId);
       await orderDao.deleteOrder(orderId);
-      return Right(true);
+      return const Right(true);
     }on Failure catch(error){
       return Left(error);
     }

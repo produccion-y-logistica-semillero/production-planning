@@ -43,7 +43,7 @@ class AddMachineDialog extends StatelessWidget{
                     title: 'Agregar maquina especifica', 
                     content: 'Agrega una maquina especifica de $machineTypeName, una maquina especifica es una maquina fisica de la categoria de $machineTypeName\n\nLos atributos estan ligados con esta maquina fisica, por ejemplo, el tiempo de procesamiento se refiere a :\n1 hora generica en $machineTypeName es equivalente a cuantas horas en esta maquina fisica?, en donde 1 hora seria el promedio, mas de 1 hora implicaria que esta maquina es mas lenta, y menos de 1 hora implicaria que es mas rapida'
                   ), 
-                  icon: Icon(Icons.info)
+                  icon: const Icon(Icons.info)
                 )
               ],
             ),

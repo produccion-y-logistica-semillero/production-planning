@@ -71,7 +71,7 @@ class GanttPage extends StatelessWidget {
                         vertical: 8,
                       ),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(

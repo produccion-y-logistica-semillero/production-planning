@@ -275,12 +275,12 @@ class FlowShop {
 
   int _calculateMakespan(List<FlowShopInput> jobSequence) {
     Map<int, DateTime> currentMachineAvailability = {};
-    jobSequence.forEach((job) {
+    for (var job in jobSequence) {
       for (var task in job.taskSequence) {
         int machineId = task.value2;
         currentMachineAvailability[machineId] = startDate;
       }
-    });
+    }
 
     DateTime makespanEndTime = startDate;
 

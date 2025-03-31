@@ -95,9 +95,9 @@ class SequencesPage extends StatelessWidget {
                 IconButton(
               onPressed: ()=>printInfo(context, 
                 title: 'Secuencias', 
-                content: 'Una secuencia se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o \"tarea\" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min'
+                content: 'Una secuencia se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o "tarea" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min'
               ), 
-              icon: Icon(Icons.info)),
+              icon: const Icon(Icons.info)),
                 Expanded(
                   flex: 1,
                   child: Container(

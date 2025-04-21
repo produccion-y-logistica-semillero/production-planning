@@ -1,15 +1,17 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
-import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
-import '../../entities/machine_entity.dart';
+import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
+import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/shared/types/rnage.dart';
 
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
@@ -27,111 +29,119 @@ class FlexibleFlowShopAdapter {
     return 0;
   }
 
-  Duration ruleOf3(int baseTime, int processingUnits) {
-    return Duration(minutes: baseTime * processingUnits);
+
+Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(int orderId, String rule) async {
+  // Obtener la orden completa
+  final responseOrder = await orderRepository.getFullOrder(orderId);
+  OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
+  if (order == null || order.orderJobs == null) return null;
+
+  // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
+  final List<int> machineTypeIds = order.orderJobs!
+      .expand((job) => job.sequence!.tasks!.map((t) => t.machineTypeId))
+      .toSet()
+      .toList();
+  final List<MachineEntity> machines = [];
+  for (final typeId in machineTypeIds) {
+    final responseMachines = await machineRepository.getAllMachinesFromType(typeId);
+    final machineList = responseMachines.fold((_) => null, (m) => m);
+    if (machineList == null || machineList.isEmpty) return null;
+    machines.addAll(machineList); // Agregar todas las máquinas del tipo
   }
 
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(int orderId, String rule) async {
-    // Obtener la orden completa
-    final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
-    if (order == null || order.orderJobs == null) return null;
+  // Crear el input para el algoritmo Flexible Flow Shop
 
-    // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
-    final List<int> machineTypeIds = order.orderJobs![0].sequence!.tasks!.map((t) => t.machineTypeId).toList();
-    final List<MachineEntity> machines = [];
-    for (final typeId in machineTypeIds) {
-      final responseMachines = await machineRepository.getAllMachinesFromType(typeId);
-      final machine = responseMachines.fold((_) => null, (m) => m.first);
-      if (machine == null) return null;
-      machines.add(machine);
-    }
-
-    // Crear el input para el algoritmo Flexible Flow Shop
-    final List<FlexibleFlowInput> inputJobs = [];
-    for (final job in order.orderJobs!) {
-      final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
-      for (final task in job.sequence!.tasks!) {
-        final Map<int, Duration> machineDurations = {};
-        for (final machine in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
-          machineDurations[machine.id!] = ruleOf3(
-            machine.processingTime is Duration ? machine.processingTime.inMinutes : toInt(machine.processingTime),
-            toInt(task.processingUnits),
-          );
+  final List<FlexibleFlowInput> inputJobs = [];
+  for (final job in order.orderJobs!) {
+    final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
+    for (final task in job.sequence!.tasks!) {
+      final Map<int, Duration> machineDurations = {};
+      for (final machine in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
+        Duration processingTime = machine.processingTime;
+        
+        print("processing time: $processingTime, processing units: ${task.processingUnits}");
+        final duration = ruleOf3(processingTime, task.processingUnits);
+        
+        if (duration == Duration.zero) {
+          print('Error: Duración calculada es cero para la máquina ${machine.id}');
+          continue;
         }
-        taskSequence.add(Tuple2(task.id!, machineDurations));
-      }
+    machineDurations[machine.id!] = duration;
+  }
 
-      inputJobs.add(FlexibleFlowInput(
-        job.jobId!,
-        job.dueDate,
-        job.priority,
-        job.availableDate,
-        taskSequence,
-      ));
-    }
+  taskSequence.add(Tuple2(task.id!, machineDurations));
+}
 
-    // Crear la disponibilidad inicial de las máquinas
-    final Map<int, DateTime> machinesAvailability = {};
-    for (final machine in machines) {
-      machinesAvailability[machine.id!] = order.regDate;
-    }
+    inputJobs.add(FlexibleFlowInput(
+      job.jobId!,
+      job.dueDate,
+      job.priority,
+      job.availableDate,
+      taskSequence,
+    ));
+  }
 
-    // Ejecutar el algoritmo Flexible Flow Shop
-    final output = FlexibleFlowShop(
-      order.regDate,
-      Tuple2(START_SCHEDULE, END_SCHEDULE),
-      inputJobs,
-      machinesAvailability,
-      rule,
-    ).output;
+  // Crear la disponibilidad inicial de las máquinas
+  final Map<int, DateTime> machinesAvailability = {};
+  for (final machine in machines) {
+    machinesAvailability[machine.id!] = order.regDate;
+  }
 
-    // Transformar la salida en PlanningMachineEntity
-    final List<PlanningMachineEntity> planningMachines = [];
-    for (final machine in machines) {
-      planningMachines.add(PlanningMachineEntity(machine.id!, machine.name, []));
-    }
+  // Ejecutar el algoritmo Flexible Flow Shop
+  final output = FlexibleFlowShop(
+    order.regDate,
+    Tuple2(START_SCHEDULE, END_SCHEDULE),
+    inputJobs,
+    machinesAvailability,
+    rule,
+  ).output;
 
-    for (final out in output) {
-      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      final sequence = job.sequence!;
-      for (final taskEntry in out.scheduling.entries) {
-        final taskId = taskEntry.key;
-        final machineId = taskEntry.value.value1;
-        final timeRange = taskEntry.value.value2;
+  // Transformar la salida en PlanningMachineEntity
+  final List<PlanningMachineEntity> planningMachines = [];
+  for (final machine in machines) {
+    planningMachines.add(PlanningMachineEntity(machine.id!, machine.name, []));
+  }
 
-        final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
+for (final out in output) {
+  final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
+  final sequence = job.sequence!;
+  for (final taskEntry in out.scheduling.entries) {
+    final taskId = taskEntry.key;
+    final machineId = taskEntry.value.value1;
+    final timeRange = taskEntry.value.value2;
 
-        // Crear la tarea planificada
-        final planningTask = PlanningTaskEntity(
-          sequenceId: sequence.id!,
-          sequenceName: sequence.name,
-          taskId: task.id!,
-          numberProcess: taskId,
-          startDate: timeRange.start,
-          endDate: timeRange.end,
-          retarded: out.dueDate.isBefore(timeRange.end),
-          jobId: job.jobId!,
-          orderId: orderId,
-        );
+    print('Task Range - Start: ${timeRange.startDate}, End: ${timeRange.endDate}');
 
-        // Asignar la tarea a la máquina correspondiente
-        final planningMachine = planningMachines.firstWhere((m) => m.machineId == machineId);
-        planningMachine.tasks.add(planningTask);
-      }
-    }
+    final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
-    // Calcular métricas
-    final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = [];
-    for (final out in output) {
-      jobsDates.add(Tuple3(out.startDate, out.endTime, out.dueDate));
-    }
-
-    final metrics = getMetricts(
-      planningMachines,
-      jobsDates,
+    final planningTask = PlanningTaskEntity(
+      sequenceId: sequence.id!,
+      sequenceName: sequence.name,
+      taskId: task.id!,
+      numberProcess: taskId,
+      startDate: timeRange.startDate,
+      endDate: timeRange.endDate,
+      retarded: out.dueDate.isBefore(timeRange.endDate),
+      jobId: job.jobId!,
+      orderId: orderId,
     );
 
-    return Tuple2(planningMachines, metrics);
+    final planningMachine = planningMachines.firstWhere((m) => m.machineId == machineId);
+    planningMachine.tasks.add(planningTask);
+  }
+}
+
+  // Calcular métricas
+  final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = [];
+  for (final out in output) {
+    jobsDates.add(Tuple3(out.startDate, out.endTime, out.dueDate));
+  }
+
+  final metrics = getMetricts(
+    planningMachines,
+    jobsDates,
+  );
+
+  return Tuple2(planningMachines, metrics);
   }
 }

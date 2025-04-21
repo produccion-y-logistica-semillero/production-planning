@@ -198,8 +198,8 @@ class SQLLiteDatabaseProvider{
           INSERT INTO dispatch_rules (name) VALUES('CDS');      --ID 25
 
           ------ FLEXIBLE FLOW SHOP RULES
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES');      --ID 26
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');      --ID 27
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES');
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');      
 
 -- Insert types_x_rules
 ------- SINGLE MACHINE RULES
@@ -291,8 +291,13 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 22);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 23);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 24);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 25);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 26);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 27);
+-- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 26);
+-- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 27);
+
+-------- FLEXIBLE JOB SHOP MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
+
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------

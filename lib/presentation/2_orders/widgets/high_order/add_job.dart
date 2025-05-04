@@ -32,6 +32,7 @@ class AddJobState extends State<AddJobWidget> {
   int? selectedSequenceValue;
   DateTime? availableDate;
   DateTime? dueDate;
+  TimeOfDay? hour;
 
   @override
   void initState() {
@@ -130,7 +131,7 @@ class AddJobState extends State<AddJobWidget> {
                 const Expanded(flex: 2, child: SizedBox()),
                 Expanded(
                   flex: 3,
-                  child: selectDate('Seleccione fecha de finalizacion', dueDate),
+                  child: selectDate('Seleccione fecha de entrega', dueDate),
                 ),
               ],
             ),
@@ -169,6 +170,16 @@ class AddJobState extends State<AddJobWidget> {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
+        TextButton(onPressed: ()async{
+          final timeOfDay = await showTimePicker(
+            context: context,
+            initialTime: TimeOfDay.now());
+            setState(() {
+              hour = timeOfDay;
+              availableDate = DateTime(date!.year, date.month, date.day, hour!.hour, hour!.minute);
+            });
+            
+        }, child: hour == null ? Text("Hora") : Text(hour!.hour.toString() + ":" +  (hour!.minute < 10 ? "0" : "") + hour!.minute.toString())),
         Text(
           date == null ? label : DateFormat('dd/MM/yyyy').format(date),
           style: TextStyle(color: colorScheme.onSurface),

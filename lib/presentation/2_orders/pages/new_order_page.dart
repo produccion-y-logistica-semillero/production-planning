@@ -14,7 +14,7 @@ class NewOrderPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crear Nueva Orden'),
+        title: const Text('Crear Nuevo Programa de Produccion'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
@@ -146,7 +146,7 @@ class NewOrderPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Crear Orden'),
+                      child: const Text('Crear programa de produccion'),
                     ),
                   ],
                 ),

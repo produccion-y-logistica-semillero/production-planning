@@ -34,7 +34,7 @@ class MachinesListPage extends StatelessWidget{
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 60, vertical: 10),
                 child: TextButton.icon(
-                  label: Text("Agregar maquina", style: TextStyle(color:onSecondaryContainer ),),
+                  label: Text("Agregar estacion de trabajo", style: TextStyle(color:onSecondaryContainer ),),
                   icon: Icon(Icons.upload, color: onSecondaryContainer,),
                   onPressed: () => _clickNewMachineType(context), 
                   style: ButtonStyle(

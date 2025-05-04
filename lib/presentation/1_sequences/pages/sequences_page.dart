@@ -119,7 +119,7 @@ class SequencesPage extends StatelessWidget {
                                   callback: state.isNewOrder ?
                                      () => BlocProvider.of<SequencesBloc>(context).useMode(false): 
                                      () => BlocProvider.of<SequencesBloc>(context).useMode(true),
-                                  labelText: state.isNewOrder ? "Ver secuencias": "Nueva secuencia",
+                                  labelText: state.isNewOrder ? "Ver Secuencias": "Nueva Orden",
                                   icon: Icons.roller_shades_closed_outlined,
                                   horizontalPadding: 30),
                               const SizedBox(height: 20),

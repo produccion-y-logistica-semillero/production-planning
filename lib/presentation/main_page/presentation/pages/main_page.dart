@@ -70,9 +70,9 @@ class MainPage extends StatelessWidget {
                       isSelected: false,
                     ),
                     const SideMenuItemDataDivider(divider: Divider(height: 20, color: Colors.white)),
-                    createItem(provider, context, '/machines', 'Maquinas', 1, Icons.settings),
-                    createItem(provider, context, '/sequences', 'Secuencias', 2, Icons.work),
-                    createItem(provider, context, '/orders', 'Ordenes', 3, Icons.schedule_send_sharp),
+                    createItem(provider, context, '/machines', 'Estaciones de Trabajo', 1, Icons.settings),
+                    createItem(provider, context, '/sequences', 'Rutas de Proceso', 2, Icons.work),
+                    createItem(provider, context, '/orders', 'Programas de produccion', 3, Icons.schedule_send_sharp),
                   ],
                   footer: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),

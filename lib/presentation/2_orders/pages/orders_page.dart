@@ -55,7 +55,7 @@ class OrdersPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text("Nueva orden"),
+                        child: const Text("Nuevo Programa de Produccion"),
                       ),
                     ],
                   ),

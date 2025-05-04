@@ -10,9 +10,12 @@ import 'package:production_planning/presentation/2_orders/request_models/new_ord
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/flexible_flow_shop_adapter.dart';
+import 'package:production_planning/services/adapters/flexible_job_shop_adapter.dart';
 import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
+
+import 'adapters/flexible_job_shop_adapter.dart';
 
 class OrdersService {
   final OrderRepository orderRepo;
@@ -127,7 +130,9 @@ class OrdersService {
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(machineRepository: machineRepo, orderRepository: orderRepo).parallelMachineAdapter(sch.value1, sch.value2)),
       'FLOW SHOP' => Right(await FlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleFlowShopAdapter(sch.value1, sch.value2)),
+      'FLEXIBLE JOB SHOP' => Right(await FlexibleJobShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleJobShopAdapter(sch.value1, sch.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
+
       
       
     };

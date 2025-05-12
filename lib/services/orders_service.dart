@@ -15,7 +15,6 @@ import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 
-import 'adapters/flexible_job_shop_adapter.dart';
 
 class OrdersService {
   final OrderRepository orderRepo;

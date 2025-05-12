@@ -91,7 +91,7 @@ class NewOrderPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Agregar Secuencia'),
+                      child: const Text('Agregar Ruta de Proceso'),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(

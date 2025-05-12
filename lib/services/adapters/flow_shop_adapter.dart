@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';

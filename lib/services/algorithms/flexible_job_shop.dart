@@ -188,40 +188,40 @@ class FlexibleFlowShop {
 // ---------- MAIN ----------
 void main() {
   final start = DateTime(2025, 1, 1, 8);
-  final workingHours = Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0));
+  const workingHours = Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0));
 
   final jobs = [
     FlexibleJobInput(
       1,
-      start.add(Duration(days: 1)),
+      start.add(const Duration(days: 1)),
       1,
       start,
       [
-        Tuple2(1, {1: Duration(hours: 3), 2: Duration(hours: 3)}),
-        Tuple2(2, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
-        Tuple2(3, {5: Duration(hours: 2), 6: Duration(hours: 2)}),
+        const Tuple2(1, {1: const Duration(hours: 3), 2: const Duration(hours: 3)}),
+        const Tuple2(2, {3: const Duration(hours: 3), 4: const Duration(hours: 3)}),
+        const Tuple2(3, {5: const Duration(hours: 2), 6: const Duration(hours: 2)}),
       ],
     ),
     FlexibleJobInput(
       2,
-      start.add(Duration(days: 1)),
+      start.add(const Duration(days: 1)),
       1,
       start,
       [
-        Tuple2(1, {1: Duration(hours: 1), 2: Duration(hours: 1)}),
-        Tuple2(2, {5: Duration(hours: 5), 6: Duration(hours: 5)}),
-        Tuple2(3, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
+        const Tuple2(1, {1: const Duration(hours: 1), 2: const Duration(hours: 1)}),
+        const Tuple2(2, {5: const Duration(hours: 5), 6: const Duration(hours: 5)}),
+        const Tuple2(3, {3: const Duration(hours: 3), 4: const Duration(hours: 3)}),
       ],
     ),
     FlexibleJobInput(
       3,
-      start.add(Duration(days: 1)),
+      start.add(const Duration(days: 1)),
       1,
       start,
       [
-        Tuple2(1, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
-        Tuple2(2, {1: Duration(hours: 2), 2: Duration(hours: 2)}),
-        Tuple2(3, {5: Duration(hours: 3), 6: Duration(hours: 3)}),
+        const Tuple2(1, {3: const Duration(hours: 3), 4: const Duration(hours: 3)}),
+        const Tuple2(2, {1: const Duration(hours: 2), 2: const Duration(hours: 2)}),
+        const Tuple2(3, {5: const Duration(hours: 3), 6: const Duration(hours: 3)}),
       ],
     ),
   ];

@@ -50,7 +50,7 @@ class NoMachinesSelectedModal extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Por favor ingresa el nombre del trabajo y selecciona al menos una máquina.",
+                  "Por favor ingresa el nombre de la orden y selecciona al menos una máquina.",
                   style: TextStyle(
                     fontSize: 14,
                     color: colorScheme.onSurfaceVariant,

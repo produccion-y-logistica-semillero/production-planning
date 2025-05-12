@@ -1,5 +1,4 @@
 import 'package:dartz/dartz.dart';
-import 'package:flutter/material.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -11,7 +10,6 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
-import 'package:production_planning/shared/types/rnage.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;

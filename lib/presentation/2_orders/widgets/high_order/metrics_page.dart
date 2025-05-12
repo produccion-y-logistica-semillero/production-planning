@@ -4,7 +4,7 @@ import 'package:production_planning/entities/metrics.dart';
 class MetricsPage extends StatelessWidget {
   final Metrics metrics;
 
-  MetricsPage({
+  const MetricsPage({super.key, 
     required this.metrics,
   });
 
@@ -14,7 +14,7 @@ class MetricsPage extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12.0),
       ),
-      child: Container(
+      child: SizedBox(
         width: 500,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -22,10 +22,10 @@ class MetricsPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Metricas',
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               _buildMetricRow('Tiempo muerto', _formatDuration(metrics.idle)),
               _buildMetricRow('Total trabajos', metrics.totalJobs.toString()),
               _buildMetricRow('Tardanza maxima', _formatDuration(metrics.maxDelay)),
@@ -34,7 +34,7 @@ class MetricsPage extends StatelessWidget {
               _buildMetricRow('Retardo promedio', _formatDuration(metrics.avarageLatenessTime)),
               _buildMetricRow('Trabajos retrasados', metrics.delayedJobs.toString()),
               _buildMetricRow('Porcentaje trabajos retrasados', '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               Align(
                 alignment: Alignment.centerRight,
                 child: ElevatedButton(
@@ -57,7 +57,7 @@ class MetricsPage extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(value),
         ],
       ),

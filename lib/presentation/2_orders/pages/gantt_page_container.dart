@@ -9,7 +9,7 @@ import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 class GanttPageContainer extends StatefulWidget {
   final int orderId;
 
-  GanttPageContainer({super.key, required this.orderId});
+  const GanttPageContainer({super.key, required this.orderId});
 
   @override
   State<GanttPageContainer> createState() => _GanttPageContainerState();
@@ -33,7 +33,7 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                     IconButton(onPressed: ()=>printInfo(context, 
                       title: 'Programar orden', 
                       content: 'Aca se muestra el ambiente de manofactura en el que cae la orden seleccionada, con este ambiente puedes seleccionar cualqueira de las reglas mostradas en la lista, cada regla usa algoritmos distintos para realizar la planificacion, puedes agregar mas pantallas para visualizar varios algoritmos al tiempo.'), 
-                    icon: Icon(Icons.info))
+                    icon: const Icon(Icons.info))
                   ],
                 ),
               ),
@@ -48,8 +48,8 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                             number++;
                           })
                         },
-                    child: Icon(Icons.add),
-                    style: ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.green)),
+                    style: const ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.green)),
+                    child: const Icon(Icons.add),
                     ),
                     ElevatedButton(
                         onPressed: () => {
@@ -58,8 +58,8 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                                   number--;
                                 })
                             },
-                        child: Icon(Icons.remove),
-                        style: ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.red)),
+                        style: const ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.red)),
+                        child: const Icon(Icons.remove),
                     ),
                   ],
                 ),

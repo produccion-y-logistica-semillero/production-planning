@@ -22,7 +22,7 @@ class OrderList extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             value: state.selectedProcess,
             hint: Text(
-              'Vea sus secuencias registradas',
+              'Vea sus rutas de proceso registradas',
               style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
             items: state.sequences!.map((process) {

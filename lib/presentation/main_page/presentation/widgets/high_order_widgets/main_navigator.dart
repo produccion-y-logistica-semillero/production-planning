@@ -44,10 +44,10 @@ class MainNavigator extends StatelessWidget{
                     );
                     break;
                   case '/welcomePage':
-                    builder = (BuildContext _) => WelcomePage();
+                    builder = (BuildContext _) => const WelcomePage();
                     break;
                   default:
-                    builder = (BuildContext _) => WelcomePage(); // Fallback route
+                    builder = (BuildContext _) => const WelcomePage(); // Fallback route
                 }
                 return MaterialPageRoute(builder: builder, settings: settings);
               },

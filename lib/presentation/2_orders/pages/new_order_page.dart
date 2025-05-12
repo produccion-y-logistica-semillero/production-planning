@@ -14,7 +14,7 @@ class NewOrderPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crear Nueva Orden'),
+        title: const Text('Crear Nuevo Programa de Produccion'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
@@ -68,9 +68,9 @@ class NewOrderPage extends StatelessWidget {
                       children: [
                         IconButton(onPressed: ()=>printInfo(context, 
                           title: 'Crear orden', 
-                          content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de \"produccion empanadas\"'
+                          content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de "produccion empanadas"'
                         ), 
-                          icon: Icon(Icons.info)
+                          icon: const Icon(Icons.info)
                         )
                       ],
                     ),
@@ -91,7 +91,7 @@ class NewOrderPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Agregar Secuencia'),
+                      child: const Text('Agregar Ruta de Proceso'),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
@@ -146,7 +146,7 @@ class NewOrderPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Crear Orden'),
+                      child: const Text('Crear programa de produccion'),
                     ),
                   ],
                 ),

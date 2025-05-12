@@ -52,7 +52,7 @@ class AddOrderForm extends StatelessWidget {
                 child: TextField(
                   controller: _nameOrder,
                   decoration: InputDecoration(
-                    labelText: 'Nombre del trabajo',
+                    labelText: 'Nombre de la orden',
                     labelStyle: TextStyle(
                       color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w500,

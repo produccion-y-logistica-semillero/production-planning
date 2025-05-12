@@ -40,8 +40,11 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       jobs.add(AddJobWidget(
         availableDate: null,
         dueDate: null,
+        availableHour: null,
+        dueHour: null,
         priorityController: TextEditingController(),
         quantityController: TextEditingController(),
+        idController: TextEditingController(),
         index: index + 1,
         sequences: sequences,
       ));

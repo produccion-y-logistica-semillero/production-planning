@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_side_menu/flutter_side_menu.dart';
-import 'package:path/path.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
@@ -70,10 +69,10 @@ class MainPage extends StatelessWidget {
                       icon: Icon(Icons.schedule, color: onPrimaryContainer),
                       isSelected: false,
                     ),
-                    SideMenuItemDataDivider(divider: const Divider(height: 20, color: Colors.white)),
-                    createItem(provider, context, '/machines', 'Maquinas', 1, Icons.settings),
-                    createItem(provider, context, '/sequences', 'Secuencias', 2, Icons.work),
-                    createItem(provider, context, '/orders', 'Ordenes', 3, Icons.schedule_send_sharp),
+                    const SideMenuItemDataDivider(divider: Divider(height: 20, color: Colors.white)),
+                    createItem(provider, context, '/machines', 'Estaciones de Trabajo', 1, Icons.settings),
+                    createItem(provider, context, '/sequences', 'Rutas de Proceso', 2, Icons.work),
+                    createItem(provider, context, '/orders', 'Programas de produccion', 3, Icons.schedule_send_sharp),
                   ],
                   footer: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -218,7 +217,7 @@ class MainPage extends StatelessWidget {
             children: [
               ListTile(
                 title: const Text('Hora de inicio'),
-                trailing: Text('${startTime.format(context)}'),
+                trailing: Text(startTime.format(context)),
                 onTap: () async {
                   final pickedTime = await showTimePicker(context: context, initialTime: startTime);
                   if (pickedTime != null) {
@@ -228,7 +227,7 @@ class MainPage extends StatelessWidget {
               ),
               ListTile(
                 title: const Text('Hora de fin'),
-                trailing: Text('${endTime.format(context)}'),
+                trailing: Text(endTime.format(context)),
                 onTap: () async {
                   final pickedTime = await showTimePicker(context: context, initialTime: endTime);
                   if (pickedTime != null) {

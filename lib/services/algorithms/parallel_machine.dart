@@ -60,7 +60,7 @@ class ParallelMachine {
       case "EDD":
         eddRule();
         break;
-      case "FCFS":
+      case "FIFO":
         fcfsRule();
         break;
       case "MINSLACK":
@@ -69,22 +69,37 @@ class ParallelMachine {
       case "CR":
         crRule();
         break;
-      case "ATC":
+      case "ATCS":
         atcRule();
         break;
       case "WSPT":
         wsptRule();
+        break;
       case "SPT_ADAPTADO":
         sptaRule();
+        break;
       case "EDD_ADAPTADO":
         eddaRule();
-      case "FCFSA":
+        break;
+      case "FIFO_ADAPTADO":
         fifoaRule();
+        break;
       case "WSPT_ADAPTADO":
         wsptaRule();
-    }
-  }
+        break;
+      case "LPT_ADAPTADO":
+        lptaRule();
+        break;
+      case "MS":
+        msRule();
+        break;
 
+    }
+
+  }
+  void msRule() {
+    _schedule((a, b) => _slack(a).compareTo(_slack(b)));
+  }
   void sptRule() {
     return _schedule(
       (a, b) => _averageProcessingTime(a).compareTo(_averageProcessingTime(b)),

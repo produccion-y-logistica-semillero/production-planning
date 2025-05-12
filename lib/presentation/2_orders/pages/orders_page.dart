@@ -29,7 +29,7 @@ class OrdersPage extends StatelessWidget {
                     title: 'Ordenes', 
                     content: 'Una orden es sobre lo que se realiza la planificacion de produccion, una orden se refiere a los productos que se requiere fabricar junto con las fechas para las que se requiere esto, por ejemplo: \n\nUna orden puede referrirse a que se requiere producir 100 panes para dentro de 5 dias, 50 empanadas para dentro de 10 dias y 75 tacos para dentro de 4 dias. Sobre esto se planificara el uso de las maquinas disponibles en las cuales se producen algunos o todos los productos que hacen parte de la orden.'
                   ), 
-                  icon: Icon(Icons.info)
+                  icon: const Icon(Icons.info)
                 ),
                 Expanded(
                   flex: 1,
@@ -55,7 +55,7 @@ class OrdersPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text("Nueva orden"),
+                        child: const Text("Nuevo Programa de Produccion"),
                       ),
                     ],
                   ),

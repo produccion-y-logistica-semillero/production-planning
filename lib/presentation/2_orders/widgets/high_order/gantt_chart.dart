@@ -457,8 +457,9 @@ class _GanttChartState extends State<GanttChart> {
                 ),
                 alignment: Alignment.center,
                 child: FittedBox(
+                  //Agregar id del job y el id de la secuencia
                   child: Text(
-                    task.sequenceName,
+                    '${task.sequenceName} (Job: ${task.jobId})',
                     style: const TextStyle(color: Colors.white),
                   ),
                 ),

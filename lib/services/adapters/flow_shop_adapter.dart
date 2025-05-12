@@ -1,3 +1,4 @@
+
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -31,10 +32,10 @@ class FlowShopAdapter {
     final List<MachineEntity> machines =[];
     for(final typeId in machinesTypesIds){
       final machinesSpecific = await machineRepository.getAllMachinesFromType(typeId);
-      final machine = machinesSpecific.fold((_)=>null, (m)=>m.first);
-      if(machine == null) return null;
-      print("adding ${machine.id} ${machine.name} ${machine.continueCapacity} ${machine.status}");
-      machines.add(machine);
+      final machineList = machinesSpecific.fold((_) => null, (m) => m);
+      if (machineList == null || machineList.isEmpty) return null;
+      machines.addAll(machineList);
+      
     }
 
     //we create the input
@@ -44,7 +45,7 @@ class FlowShopAdapter {
       final List<Tuple2<int, int>> taskSequence = [];
       //iterating over all tasks, and for each one, we get the time it takes on the machine we have for the machine type
       for(final task in job.sequence!.tasks!){
-        print("searching ${task.machineTypeId}");
+       // print("searching ${task.machineTypeId}");
         final machineOfTask = machines.where((m)=>m.machineTypeId==task.machineTypeId).first;
         taskTimes[task.id!] = ruleOf3(machineOfTask.processingTime, task.processingUnits);
         taskSequence.add(Tuple2(task.id!, task.machineTypeId));
@@ -109,6 +110,9 @@ class FlowShopAdapter {
       jobsDates.add(Tuple3(out.startDate, out.endTime, out.dueDate));
     }
 
+
+
+    
     final metrics = getMetricts(
       planningMachines,
       jobsDates,

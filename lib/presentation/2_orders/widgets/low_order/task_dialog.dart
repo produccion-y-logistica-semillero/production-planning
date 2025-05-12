@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
@@ -11,9 +10,9 @@ class TaskDialog extends StatelessWidget {
   final PlanningTaskEntity task;
 
   const TaskDialog({
-    Key? key,
+    super.key,
     required this.task,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

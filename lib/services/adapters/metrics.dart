@@ -4,7 +4,9 @@ import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 
 Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, DateTime, DateTime>> jobsDates){  //(start date, end date, due date)
-    machines.forEach((machine)=>machine.tasks.orderByStartDate());
+    for (var machine in machines) {
+      machine.tasks.orderByStartDate();
+    }
 
     //IDLE METRIC (TIME OF MACHINES NOT BEING USED)
     Duration totalIdle = Duration.zero;

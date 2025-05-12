@@ -1,4 +1,3 @@
-import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -32,7 +31,7 @@ Future<void> main() async {
   }
 
   await initDependencies(workspace);
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 TimeOfDay? _parseTimeOfDay(String time) {

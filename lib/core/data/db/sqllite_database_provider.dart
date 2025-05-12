@@ -166,7 +166,7 @@ class SQLLiteDatabaseProvider{
           INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
 
           -- Insert dispatch rules
-          ------SINGLE MACHINE RULES
+          ------ SINGLE MACHINE RULES
           INSERT INTO dispatch_rules (name) VALUES('EDD');                --ID 1
           INSERT INTO dispatch_rules (name) VALUES('SPT');                --ID 2
           INSERT INTO dispatch_rules (name) VALUES('LPT');                --ID 3
@@ -180,53 +180,124 @@ class SQLLiteDatabaseProvider{
           INSERT INTO dispatch_rules (name) VALUES('MINSLACK');           --ID 11
           INSERT INTO dispatch_rules (name) VALUES('CR');                 --ID 12
           INSERT INTO dispatch_rules (name) VALUES('ATCS');               --ID 13
-          
-          ------PARALLEL MACHINE RULES
-          INSERT INTO dispatch_rules (name) VALUES('FCFS');  --ID 14
+
+          ------ PARALLEL MACHINE RULES
+          INSERT INTO dispatch_rules (name) VALUES('FIFO');  --ID 14
+          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO');  --ID 15
+          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO');  --ID 16
+          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO');  --ID 17
+          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO'); --ID 18
+          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO'); --ID 19
+          INSERT INTO dispatch_rules (name) VALUES('CR');    --ID 20
+          INSERT INTO dispatch_rules (name) VALUES('MS');    --ID 21
+          INSERT INTO dispatch_rules (name) VALUES('ATCS');  --ID 22
+
+          ------ FLOW SHOP RULES
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 23
+          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3'); --ID 24
+          INSERT INTO dispatch_rules (name) VALUES('CDS');      --ID 25
+
+          ------ FLEXIBLE FLOW SHOP RULES
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES');
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');      
+
+-- Insert types_x_rules
+------- SINGLE MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 3);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 4);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 6);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 7);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 8);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 9);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
+
+------- PARALLEL MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 1);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 14);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 11);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 6);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 7);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 10);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 15);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 16);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 17);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 18);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 19);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 20);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 21);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 22);
+
+------- FLOW SHOP MACHINE RULES (SPT,EDD,LPT,FIFO,WSPT,SPTA,EDDA,LPTA,FIFOA,WSPTA,CR, MS,ATCS,JOHNSON,JOHNSON3,CDS)
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 6);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 7);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 8);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 9);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 10);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 11);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 13);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 14);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 15);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 16);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 17);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 18);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 19);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 20);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 21);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 22);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 23);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 24);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 25);
 
 
-          -----FLOW SHOP RULES
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 15
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3');  --ID 16
-          INSERT INTO dispatch_rules (name) VALUES('CDS');  --ID 17
+------- FLEXIBLE FLOW SHOP MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 1);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 3);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 4);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 6);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 7);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 8);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 9);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 10);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 11);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 13);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 14);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 15);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 16);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 17);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 18);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 19);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 20);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 21);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 22);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 23);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 24);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 25);
+-- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 26);
+-- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 27);
 
+-------- FLEXIBLE JOB SHOP MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
 
-          --Insert types_x_rules
-          -------SINGLE MACHINE RULES
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 2);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 3);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 4);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 5);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 6);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 7);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 8);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 9);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
-
-          -------PARALLEL MACHINE RULES
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 1);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 14);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 11);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 12);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 5);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 6);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 7);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 10);
-
-          -------FLOW SHOP MACHINE RULES
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 15);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 16);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 17);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------

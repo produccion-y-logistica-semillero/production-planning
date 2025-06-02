@@ -24,46 +24,64 @@ class OrderList extends StatelessWidget {
       buildWhen: (previous, current) =>
           previous.selectedProcess != current.selectedProcess ||
           previous.process?.name != current.process?.name ||
-          previous.process?.tasks != current.process?.tasks,
+          previous.process?.tasks != current.process?.tasks ||
+          previous.sequences != current.sequences,
       builder: (context, state) {
         // Actualiza el controlador solo cuando cambia la secuencia seleccionada
         if (state.selectedProcess != null && state.process != null) {
           nameController.text = state.process!.name;
         }
 
-        Widget dropdown = const SizedBox();
+        // Siempre muestra el DropdownButton, aunque no haya secuencias
+        Widget dropdown = DropdownButton<int>(
+          borderRadius: BorderRadius.circular(12),
+          value: state.selectedProcess,
+          hint: Text(
+            (state.sequences == null || state.sequences!.isEmpty)
+                ? 'No hay rutas de proceso registradas'
+                : 'Vea sus rutas de proceso registradas',
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
+          items: (state.sequences ?? []).isEmpty
+              ? [
+                  DropdownMenuItem<int>(
+                    value: null,
+                    enabled: false,
+                    child: Text(
+                      'No hay rutas de proceso registradas',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                  )
+                ]
+              : (state.sequences ?? []).map((process) {
+                  return DropdownMenuItem<int>(
+                    value: process.id,
+                    child: Text(
+                      process.name,
+                      style: TextStyle(color: colorScheme.onSurface),
+                    ),
+                  );
+                }).toList(),
+          onChanged: (state.sequences == null || state.sequences!.isEmpty)
+              ? null
+              : (value) {
+                  if (value != null) {
+                    BlocProvider.of<SeeProcessBloc>(context).selectSequence(value);
+                  }
+                },
+          isExpanded: true,
+          underline: Container(
+            height: 0,
+            color: Colors.transparent,
+          ),
+          icon: Icon(Icons.arrow_drop_down, color: colorScheme.primary),
+          dropdownColor: colorScheme.surface,
+        );
+
         if (state is SeeProcessInitialState) {
           BlocProvider.of<SeeProcessBloc>(context).retrieveSequences();
         }
-        if (state.sequences != null) {
-          dropdown = DropdownButton<int>(
-            borderRadius: BorderRadius.circular(12),
-            value: state.selectedProcess,
-            hint: Text(
-              'Vea sus rutas de proceso registradas',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-            items: state.sequences!.map((process) {
-              return DropdownMenuItem<int>(
-                value: process.id,
-                child: Text(
-                  process.name,
-                  style: TextStyle(color: colorScheme.onSurface),
-                ),
-              );
-            }).toList(),
-            onChanged: (value) {
-              BlocProvider.of<SeeProcessBloc>(context).selectSequence(value!);
-            },
-            isExpanded: true,
-            underline: Container(
-              height: 0,
-              color: Colors.transparent,
-            ),
-            icon: Icon(Icons.arrow_drop_down, color: colorScheme.primary),
-            dropdownColor: colorScheme.surface,
-          );
-        }
+
         return LayoutBuilder(
           builder: (context, constraints) {
             return Column(

@@ -64,9 +64,27 @@ class OrderList extends StatelessWidget {
                 }).toList(),
           onChanged: (state.sequences == null || state.sequences!.isEmpty)
               ? null
-              : (value) {
+              : (value) async {
                   if (value != null) {
                     BlocProvider.of<SeeProcessBloc>(context).selectSequence(value);
+
+                    // Espera a que el Bloc actualice el estado y luego carga los nodos y conexiones
+                    await Future.delayed(const Duration(milliseconds: 200));
+                    final process = BlocProvider.of<SeeProcessBloc>(context).state.process;
+                    if (process != null && process.tasks != null) {
+                      final machines = process.tasks!
+                          .map((t) => MachineTypeEntity(
+                                id: t.machineTypeId,
+                                name: t.machineName ?? '',
+                                description: t.description ?? '',
+                              ))
+                          .toList();
+
+                      //............
+                      final connections = process.dependencies ?? [];
+
+                      nodeEditorKey.currentState?.loadNodesAndConnections(machines, connections.cast<Connection>());
+                    }
                   }
                 },
           isExpanded: true,

@@ -6,6 +6,6 @@ class SequenceEntity{
   final int? id;
   final String name;
   List<TaskEntity>? tasks;
-  //List<TaskDependencyEntity>? dependencies;
+  List<TaskDependencyEntity>? dependencies;
   SequenceEntity(this.id, this.tasks, this.name/* , this.dependencies*/);
 }

@@ -21,6 +21,30 @@ class NodeEditorState extends State<NodeEditor> {
   Offset? cursorPosition;
   ToolMode currentMode = ToolMode.addConnection;
 
+
+    void loadNodesAndConnections(List<MachineTypeEntity> machines, List<Connection> connectionsList) {
+    setState(() {
+      nodePositions.clear();
+      nodeMachines.clear();
+      connections.clear();
+
+      // Distribuye los nodos en posiciones automáticas (puedes mejorar esto)
+      double x = 100;
+      double y = 100;
+      for (final machine in machines) {
+        nodePositions[machine.id!] = Offset(x, y);
+        nodeMachines[machine.id!] = machine;
+        x += 120;
+        if (x > 600) {
+          x = 100;
+          y += 120;
+        }
+      }
+      connections.addAll(connectionsList);
+    });
+  }
+
+
   void addNodeForMachine(MachineTypeEntity machine) {
     if (nodePositions.containsKey(machine.id)) return;
     setState(() {

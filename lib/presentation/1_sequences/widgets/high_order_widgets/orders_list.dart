@@ -1,18 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_state.dart';
-import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/order_process.dart';
+import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/sequence_editor_panel.dart';
+import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 
 class OrderList extends StatelessWidget {
-  const OrderList({super.key});
+  final TextEditingController nameController;
+  final GlobalKey<NodeEditorState> nodeEditorKey;
+
+  const OrderList({
+    super.key,
+    required this.nameController,
+    required this.nodeEditorKey,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return BlocBuilder<SeeProcessBloc, SeeProcessState>(
+      buildWhen: (previous, current) =>
+          previous.selectedProcess != current.selectedProcess ||
+          previous.process?.name != current.process?.name ||
+          previous.process?.tasks != current.process?.tasks,
       builder: (context, state) {
+        // Actualiza el controlador solo cuando cambia la secuencia seleccionada
+        if (state.selectedProcess != null && state.process != null) {
+          nameController.text = state.process!.name;
+        }
+
         Widget dropdown = const SizedBox();
         if (state is SeeProcessInitialState) {
           BlocProvider.of<SeeProcessBloc>(context).retrieveSequences();
@@ -39,56 +57,77 @@ class OrderList extends StatelessWidget {
             },
             isExpanded: true,
             underline: Container(
-              height: 0, // Removed underline for a cleaner look
+              height: 0,
               color: Colors.transparent,
             ),
             icon: Icon(Icons.arrow_drop_down, color: colorScheme.primary),
             dropdownColor: colorScheme.surface,
           );
         }
-        return Column(
-          children: [
-            Container(
-              height: 60,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.shadow.withOpacity(0.15),
-                    blurRadius: 6,
-                    offset: const Offset(2, 3),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return Column(
+              children: [
+                Container(
+                  height: 60,
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  margin: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.shadow.withOpacity(0.15),
+                        blurRadius: 6,
+                        offset: const Offset(2, 3),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withOpacity(0.5),
+                    ),
                   ),
-                ],
-                border: Border.all(
-                  color: colorScheme.outlineVariant.withOpacity(0.5),
+                  child: Center(child: dropdown),
                 ),
-              ),
-              child: Center(child: dropdown),
-            ),
-            if (state.selectedProcess != null)
-              OrderProcess(process: state.process!),
-            if (state.selectedProcess == null)
-              Container(
-                constraints: const BoxConstraints(
-                  maxHeight: 400,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text(
-                      'Ninguna orden seleccionada',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: colorScheme.onSurfaceVariant,
+                if (state.selectedProcess != null)
+                  // El SequenceEditorPanel ahora ocupa todo el espacio disponible restante
+                  Expanded(
+                    child: SequenceEditorPanel(
+                      nameController: nameController,
+                      onSave: () {},
+                      machines: state.process?.tasks
+                              ?.map((t) => MachineTypeEntity(
+                                    id: t.machineTypeId,
+                                    name: t.machineName ?? '',
+                                    description: t.description ?? '',
+                                  ))
+                              .toList() ??
+                          [],
+                      nodeEditorKey: nodeEditorKey,
+                    ),
+                  ),
+                if (state.selectedProcess == null)
+                  Expanded(
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        maxHeight: 400,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Center(
+                          child: Text(
+                            'Ninguna orden seleccionada',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            );
+          },
         );
       },
     );

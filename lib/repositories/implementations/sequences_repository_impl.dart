@@ -35,7 +35,7 @@ class SequencesRepositoryImpl implements SequencesRepository{
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences() async{
     try{
       final list = (await sequencesDao.getSequences()).map(
-        (model) => SequenceEntity(model.sequenceId, null, model.name)
+        (model) => SequenceEntity(model.sequenceId, null, model.name/*, model.dependencies*/)
       ).toList();
       return Right(list);
     }

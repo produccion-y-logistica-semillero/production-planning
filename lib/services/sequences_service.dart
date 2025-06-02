@@ -15,14 +15,14 @@ class SequencesService {
           .map(
             (t) => 
             TaskEntity(
-              execOrder: t.execOrder, 
+             
               processingUnits: t.processingUnit, 
               description: t.description, 
               machineTypeId: t.machineTypeId,
               machineName: null)
           ).toList();
           
-    final SequenceEntity seq = SequenceEntity(null, tasks, name);
+    final SequenceEntity seq = SequenceEntity(null, tasks, name/*--*//* ,null*/);
     return repository.createSequence(seq);
   }
 
@@ -36,5 +36,20 @@ class SequencesService {
 
   Future<Either<Failure, List<SequenceEntity>>> getSequences() {
     return repository.getBasicSequences();
+  }
+
+  Future addSequenceWithGraph(List<NewTaskModel> tasks, List<Map<String, int>> dependencies, String processName) async {
+    // Implementa el guardado real aquí, usando tu repositorio
+    final List<TaskEntity> taskEntities = tasks
+        .map((t) => TaskEntity(
+              processingUnits: t.processingUnit,
+              description: t.description,
+              machineTypeId: t.machineTypeId,
+              machineName: t.machineName,
+            ))
+        .toList();
+
+    final SequenceEntity seq = SequenceEntity(null, taskEntities, processName);
+    return repository.createSequence(seq);
   }
 }

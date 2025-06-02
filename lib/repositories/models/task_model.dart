@@ -2,15 +2,13 @@ import 'package:production_planning/entities/task_entity.dart';
 
 class TaskModel{
   int? taskId;
-  final int execOrder;
   final Duration nProcUnits;
   final String description;
   final int sequenceId;
   final int machineTypeId;
 
   TaskModel({
-    this.taskId,
-    required this.execOrder, 
+    this.taskId, 
     required this.nProcUnits,
     required this.description, 
     required this.sequenceId, 
@@ -19,7 +17,6 @@ class TaskModel{
 
   factory TaskModel.fromEntity(TaskEntity entity, int sequenceId){
     return TaskModel(
-      execOrder: entity.execOrder, 
       nProcUnits: entity.processingUnits,
       description: entity.description, 
       sequenceId: sequenceId, 
@@ -29,8 +26,7 @@ class TaskModel{
 
   factory TaskModel.fromJson(Map<String, dynamic> map){
     return TaskModel(
-      taskId: map["task_id"],
-      execOrder: map["exec_order"], 
+      taskId: map["task_id"], 
       nProcUnits: Duration(
         hours: int.parse(map["n_proc_units"].toString().substring(11, 13)), 
         minutes: int.parse(map["n_proc_units"].toString().substring(14, 16))
@@ -46,7 +42,6 @@ class TaskModel{
     return {
       "sequence_id": sequenceId,
       "machine_type_id" : machineTypeId,
-      "exec_order" : execOrder,
       "n_proc_units" : '1970-01-01 $timeStamp', //the default date since we only care about the time, not date
       "description" : description
     };
@@ -55,7 +50,6 @@ class TaskModel{
   TaskEntity toEntity(){
     return TaskEntity(
       id: taskId,
-      execOrder: execOrder, 
       processingUnits: nProcUnits, 
       description: description, 
       machineTypeId: machineTypeId,

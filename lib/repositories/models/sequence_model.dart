@@ -23,8 +23,10 @@ class SequenceModel{
     );
   }
 
+  get dependencies => null;
+
   SequenceEntity toEntity(){
-    return SequenceEntity(sequenceId, null, name);
+    return SequenceEntity(sequenceId, null, name/*, null*/);
   }
 
   Map<String, dynamic> toJson(){

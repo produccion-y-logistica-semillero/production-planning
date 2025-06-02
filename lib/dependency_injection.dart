@@ -55,6 +55,7 @@ Future<void> initDependencies(String workspace) async {
       dispatchRulesDao: daoFactory.getDispatchRulesDao(),
       sequencesDao: daoFactory.getSequenceDao(),
       tasksDao: daoFactory.getTaskDao()
+      //,taskDependencyDao: daoFactory.getTaskDependencyDao()
     );
   
     //services

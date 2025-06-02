@@ -20,4 +20,6 @@ abstract class Factory{
   DispatchRulesDao getDispatchRulesDao();
 
   void closeDatabase();
+
+  getTaskDependencyDao() {}
 }

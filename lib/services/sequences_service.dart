@@ -39,38 +39,53 @@ class SequencesService {
     return repository.getBasicSequences();
   }
 
-  Future<Either<Failure, bool>> addSequenceWithGraph(List<NewTaskModel> tasks,List<Map<String, int>> dependencies,String processName,
+  Future<Either<Failure, bool>> addSequenceWithGraph(
+    List<NewTaskModel> tasks,
+    List<Map<String, int>> dependencies,
+    String processName,
   ) async {
     try {
-      
-      final List<TaskEntity> taskEntities = tasks
-          .map((t) => TaskEntity(
-                processingUnits: t.processingUnit,
-                description: t.description,
-                machineTypeId: t.machineTypeId,
-                machineName: t.machineName,
-              ))
-          .toList();
+      print("....................Add Sequence with Graph....................");
+      // 1. Crea la secuencia y obtén el ID
+      final SequenceEntity seq = SequenceEntity(null, [], processName);
+      final int sequenceId = await repository.createSequenceAndReturnId(seq);
+      print('Sequence created with ID: $sequenceId');
 
-      
-      final List<TaskDependencyEntity> dependencyEntities = dependencies
-          .map((d) => TaskDependencyEntity(
-                predecessor_id: d['predecessor_id']!,
-                successor_id: d['successor_id']!, sequenceId: d['sequenceId'] ?? 0,
-              ))
-          .toList();
+      // 2. Guarda las tareas con el sequenceId y mapea machineTypeId -> taskId
+      final Map<int, int> machineTypeIdToTaskId = {};
+      for (final t in tasks) {
+        final taskEntity = TaskEntity(
+          processingUnits: t.processingUnit,
+          description: t.description,
+          machineTypeId: t.machineTypeId,
+          machineName: t.machineName,
+        );
+        final int taskId = await repository.createTaskForSequenceAndReturnId(taskEntity, sequenceId);
+        machineTypeIdToTaskId[t.machineTypeId] = taskId;
+        print('Creating task: ${taskEntity.description} for sequence ID: $sequenceId, machineTypeId: ${t.machineTypeId}, taskId: $taskId');
+      }
 
-      
-      final SequenceEntity seq = SequenceEntity(
-        null,
-        taskEntities,
-        processName,
-      );
-      seq.dependencies = dependencyEntities;
+      // 3. Guarda las dependencias con el sequenceId usando los taskId reales
+      for (final d in dependencies) {
+        final predTaskId = machineTypeIdToTaskId[d['predecessor_id']];
+        final succTaskId = machineTypeIdToTaskId[d['successor_id']];
+        print('Mapping dependency: machineTypeId ${d['predecessor_id']} -> ${d['successor_id']} to taskId $predTaskId -> $succTaskId');
+        if (predTaskId != null && succTaskId != null) {
+          final depEntity = TaskDependencyEntity(
+            predecessor_id: predTaskId,
+            successor_id: succTaskId,
+            sequenceId: sequenceId,
+          );
+          print('Creating dependency: ${depEntity.predecessor_id} -> ${depEntity.successor_id} for sequence ID: ${depEntity.sequenceId}');
+          await repository.createTaskDependencyForSequence(depEntity);
+        } else {
+          print('ERROR: No se encontró el taskId para alguno de los nodos de la dependencia');
+        }
+      }
 
-      
-      return await repository.createSequence(seq);
+      return const Right(true);
     } catch (e) {
+      print('ERROR en addSequenceWithGraph: $e');
       return Left(LocalStorageFailure());
     }
   }

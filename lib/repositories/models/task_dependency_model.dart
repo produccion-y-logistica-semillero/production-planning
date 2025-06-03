@@ -4,7 +4,6 @@ class TaskDependencyModel {
   int? id;
   final int successor_id ;           
   final int predecessor_id;
-  final String? description;
   final int sequenceId;
 
   TaskDependencyModel({
@@ -12,7 +11,6 @@ class TaskDependencyModel {
     required this.successor_id,
     required this.predecessor_id,
     required this.sequenceId,
-    this.description,
   });
 
   factory TaskDependencyModel.fromEntity(TaskDependencyEntity entity, int sequenceId) {
@@ -21,7 +19,6 @@ class TaskDependencyModel {
       successor_id: entity.successor_id,
       predecessor_id: entity.predecessor_id,
       sequenceId: sequenceId,
-      description: entity.description,
     );
   }
 
@@ -31,7 +28,6 @@ class TaskDependencyModel {
       successor_id: map["successor_id"],
       predecessor_id: map["predecessor_id"],
       sequenceId: map["sequence_id"],
-      description: map["description"],
     );
   }
 
@@ -41,7 +37,6 @@ class TaskDependencyModel {
       "predecessor_id": predecessor_id,
       "successor_id": successor_id,
       "sequence_id": sequenceId,
-      "description": description,
     };
   }
 
@@ -51,7 +46,6 @@ class TaskDependencyModel {
       predecessor_id: predecessor_id,
       sequenceId: sequenceId,
       successor_id: successor_id,
-      description: description,
     );
   }
 }

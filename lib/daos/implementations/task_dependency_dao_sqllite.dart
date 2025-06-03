@@ -11,10 +11,10 @@ class TaskDependencyDaoSqllite implements TaskDependencyDao {
   @override
   Future<int> createTaskDependency(TaskDependencyModel dependency) async {
     try {
+      print('----Creating TaskDependency: ${dependency.toJson()}');
       int id = await db.insert('TaskDependency', {
         'predecessor_id': dependency.predecessor_id,
         'successor_id': dependency.successor_id,
-        'description': dependency.description,
         'sequence_id': dependency.sequenceId,
       });
       return id;
@@ -46,6 +46,20 @@ class TaskDependencyDaoSqllite implements TaskDependencyDao {
         whereArgs: [taskId],
       );
       return nDeleted > 0;
+    } catch (error) {
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
+  Future<List<TaskDependencyModel>> getDependenciesBySequenceId(int sequenceId) async {
+    try {
+      final result = await db.query(
+        'TaskDependency',
+        where: 'sequence_id = ?',
+        whereArgs: [sequenceId],
+      );
+      return result.map((json) => TaskDependencyModel.fromJson(json)).toList();
     } catch (error) {
       throw LocalStorageFailure();
     }

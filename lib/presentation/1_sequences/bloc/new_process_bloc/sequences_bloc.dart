@@ -59,6 +59,15 @@ void saveProcess(String processName, List<MachineTypeEntity> nodes, List<Connect
             'successor_id': conn.target,
           })
       .toList();
+
+
+      print("....................SAVE PROCESS....................");
+      print("Saving process with name: $processName");
+      //Dependencies
+  print("Tasks: ${tasks.map((t) => t.description).join(', ')}");
+  print("Dependencies: ${dependencies.map((d) => '(${d['predecessor_id']}, ${d['successor_id']})').join(', ')}");
+
+  
   final response = await seqService.addSequenceWithGraph(tasks, dependencies, processName);
 
   response.fold(

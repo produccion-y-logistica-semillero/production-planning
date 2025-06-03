@@ -87,7 +87,7 @@ class OrderList extends StatelessWidget {
                           if (process != null && process.tasks != null) {
                             final machines = process.tasks!
                                 .map((t) => MachineTypeEntity(
-                                      id: t.machineTypeId,
+                                      id: t.id,
                                       name: t.machineName ?? '',
                                       description: t.description ?? '',
                                     ))

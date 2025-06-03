@@ -2,7 +2,9 @@ import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
 import 'package:production_planning/daos/interfaces/sequences_dao.dart';
+import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/daos/interfaces/tasks_dao.dart';
+import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/repositories/models/sequence_model.dart';
 import 'package:production_planning/repositories/models/task_model.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
@@ -13,8 +15,8 @@ class SequencesRepositoryImpl implements SequencesRepository{
   final SequencesDao sequencesDao;
   final TasksDao tasksDao;
   final MachineTypeDao machineTypeDao;
-
-  SequencesRepositoryImpl({required this.sequencesDao, required this.tasksDao, required this.machineTypeDao});
+  final TaskDependencyDao taskDependencyDao;
+  SequencesRepositoryImpl({required this.sequencesDao, required this.tasksDao, required this.machineTypeDao, required this.taskDependencyDao});
 
   @override
   Future<Either<Failure, bool>> createSequence(SequenceEntity sequence) async {
@@ -44,24 +46,29 @@ class SequencesRepositoryImpl implements SequencesRepository{
     }
   }
   
-  @override
-  Future<Either<Failure, SequenceEntity?>> getFullSequence(int id) async {
-    try{
-      final SequenceEntity?  seq = (await sequencesDao.getSequenceById(id))?.toEntity();
-      if(seq != null){
-        seq.tasks = (await tasksDao.getTasksBySequenceId(id)).map((model) => model.toEntity()).toList();
+@override
+Future<Either<Failure, SequenceEntity?>> getFullSequence(int id) async {
+  try {
+    final SequenceEntity? seq = (await sequencesDao.getSequenceById(id))?.toEntity();
+    if (seq != null) {
+      seq.tasks = (await tasksDao.getTasksBySequenceId(id)).map((model) => model.toEntity()).toList();
 
-        for(TaskEntity t in seq.tasks!){
-          t.machineName = await machineTypeDao.getMachineName(t.machineTypeId);
-        }
-        return Right(seq);
+      // Cargar nombres de máquina
+      for (TaskEntity t in seq.tasks!) {
+        t.machineName = await machineTypeDao.getMachineName(t.machineTypeId);
       }
-      return const Right(null);
+
+      // Cargar dependencias y asignarlas
+      final dependencies = await taskDependencyDao.getDependenciesBySequenceId(id);
+      seq.dependencies = dependencies.map((model) => model.toEntity()).toList();
+
+      return Right(seq);
     }
-    on LocalStorageFailure catch(f){
-      return Left(f);
-    }
+    return const Right(null);
+  } on LocalStorageFailure catch (f) {
+    return Left(f);
   }
+}
   
   @override
   Future<Either<Failure, bool>> deleteSequence(int id) async {
@@ -77,4 +84,29 @@ class SequencesRepositoryImpl implements SequencesRepository{
       return Left(f);
     }
   }
+
+  @override
+  Future<int> createSequenceAndReturnId(SequenceEntity sequence) async {
+    final sequenceId = await sequencesDao.createSequence(SequenceModel.fromEntity(sequence));
+    return sequenceId;
+  }
+@override
+  Future<void> createTaskForSequence(TaskEntity task, int sequenceId) async {
+  await tasksDao.createTask(TaskModel.fromEntity(task, sequenceId));
+}
+  @override
+  Future<int> createTaskForSequenceAndReturnId(TaskEntity taskEntity, int sequenceId) async {
+    final taskModel = TaskModel.fromEntity(taskEntity, sequenceId);
+    final taskId = await tasksDao.createTask(taskModel);
+    print('Task created: ${taskEntity.description}, machineTypeId: ${taskEntity.machineTypeId}, taskId: $taskId, sequenceId: $sequenceId');
+    return taskId;
+  }
+
+  @override
+  Future<void> createTaskDependencyForSequence(TaskDependencyEntity dep) async {
+    print("Antes de la tragedia");
+    await taskDependencyDao.createTaskDependency(dep.toModel());
+    print('Task dependency created: ${dep.predecessor_id} -> ${dep.successor_id} for sequence ID: ${dep.sequenceId}');
+  }
+
 }

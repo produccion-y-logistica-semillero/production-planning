@@ -3,6 +3,7 @@ import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/daos/implementations/machine_dao_sqllite.dart';
 import 'package:production_planning/daos/implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/daos/implementations/status_dao_sqllite.dart';
+import 'package:production_planning/daos/implementations/task_dependency_dao_sqllite.dart';
 import 'package:production_planning/daos/interfaces/machine_dao.dart';
 import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
 import 'package:production_planning/daos/interfaces/status_dao.dart';
@@ -33,6 +34,7 @@ class SqlLiteFactory implements Factory{
   JobDaoSQLlite? jobDaoSQLlite;
   DispatchRulesDao? dispatchRulesDao;
   EnviromentDao? enviromentDao;
+  TaskDependencyDao? taskDependencyDao;
 
 
   //static factory constructor to perform async operation
@@ -88,8 +90,7 @@ class SqlLiteFactory implements Factory{
   }
   @override
   TaskDependencyDao getTaskDependencyDao() {
-    // This method is not implemented in the original code, so we return null or throw an error.
-    throw UnimplementedError('TaskDependencyDao is not implemented in SqlLiteFactory');
+    return taskDependencyDao ??= TaskDependencyDaoSqllite(db);
   }
 
   @override

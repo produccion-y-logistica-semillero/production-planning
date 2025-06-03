@@ -25,16 +25,16 @@ class OrderRepositoryImpl implements OrderRepository{
   final DispatchRulesDao dispatchRulesDao;
   final SequencesDao sequencesDao;
   final TasksDao tasksDao;
-  //final TaskDependencyDao taskDependencyDao;
+  final TaskDependencyDao taskDependencyDao;
 
-  OrderRepositoryImpl({
+    OrderRepositoryImpl({
     required this.orderDao, 
     required this.jobDao, 
     required this.enviromentDao, 
     required this.dispatchRulesDao,
     required this.sequencesDao,
     required this.tasksDao,
-    //required this.taskDependencyDao
+    required this.taskDependencyDao
   });
 
   @override

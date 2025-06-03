@@ -40,7 +40,7 @@ class OrderRepositoryImpl implements OrderRepository{
   @override
   Future<Either<Failure, List<OrderEntity>>> getAllOrders() async {
     try {
-      // 1. Obtener todas las órdenes
+      
       final orderModels = await orderDao.getAllOrders();
       List<OrderEntity> orders = [];
 

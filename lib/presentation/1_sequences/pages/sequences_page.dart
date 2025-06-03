@@ -68,7 +68,6 @@ class _SequencesPageState extends State<SequencesPage> {
               nodeEditorKey: nodeEditorKey,
             );
           } else {
-            // Pasa los controladores a OrderList
             board = OrderList(
               nameController: _sequenceNameController,
               nodeEditorKey: nodeEditorKey,

@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/1_sequences/request_models/new_task_model.dart';
 import 'package:production_planning/repositories/interfaces/sequences_repository.dart';
@@ -38,18 +39,39 @@ class SequencesService {
     return repository.getBasicSequences();
   }
 
-  Future addSequenceWithGraph(List<NewTaskModel> tasks, List<Map<String, int>> dependencies, String processName) async {
-    // Implementa el guardado real aquí, usando tu repositorio
-    final List<TaskEntity> taskEntities = tasks
-        .map((t) => TaskEntity(
-              processingUnits: t.processingUnit,
-              description: t.description,
-              machineTypeId: t.machineTypeId,
-              machineName: t.machineName,
-            ))
-        .toList();
+  Future<Either<Failure, bool>> addSequenceWithGraph(List<NewTaskModel> tasks,List<Map<String, int>> dependencies,String processName,
+  ) async {
+    try {
+      
+      final List<TaskEntity> taskEntities = tasks
+          .map((t) => TaskEntity(
+                processingUnits: t.processingUnit,
+                description: t.description,
+                machineTypeId: t.machineTypeId,
+                machineName: t.machineName,
+              ))
+          .toList();
 
-    final SequenceEntity seq = SequenceEntity(null, taskEntities, processName);
-    return repository.createSequence(seq);
+      
+      final List<TaskDependencyEntity> dependencyEntities = dependencies
+          .map((d) => TaskDependencyEntity(
+                predecessor_id: d['predecessor_id']!,
+                successor_id: d['successor_id']!, sequenceId: d['sequenceId'] ?? 0,
+              ))
+          .toList();
+
+      
+      final SequenceEntity seq = SequenceEntity(
+        null,
+        taskEntities,
+        processName,
+      );
+      seq.dependencies = dependencyEntities;
+
+      
+      return await repository.createSequence(seq);
+    } catch (e) {
+      return Left(LocalStorageFailure());
+    }
   }
 }

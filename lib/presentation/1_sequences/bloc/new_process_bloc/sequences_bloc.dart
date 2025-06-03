@@ -34,7 +34,7 @@ class SequencesBloc extends Cubit<SequencesState>{
     //emit the state with the new machine selected
     List<NewTaskModel> selectedMachines = [];
     if(state.selectedMachines != null) selectedMachines = state.selectedMachines!;
-    final newTask = NewTaskModel(m.id!, const Duration(hours: 1, minutes: 0), "", 0, m.name);
+    final newTask = NewTaskModel(m.id!, const Duration(hours: 1, minutes: 0), "", m.name);
     emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(newTask), state.dependencies));
   }
 
@@ -45,29 +45,46 @@ class SequencesBloc extends Cubit<SequencesState>{
 
 
 void saveProcess(String processName, List<MachineTypeEntity> nodes, List<Connection> connections) async {
-  // 1. Crear tareas a partir de los nodos del grafo
-  final tasks = nodes.map((machine) => NewTaskModel(
-    machine.id!,
-    const Duration(hours: 1), // Ajusta según tu UI
-    machine.description ?? "",
-    0, // Orden, puedes calcularlo si tu lógica lo requiere
-    machine.name
-  )).toList();
-
-  // 2. Crear dependencias a partir de las conexiones del grafo
-  final dependencies = connections.map((conn) => {
-    'from': conn.source,
-    'to': conn.target,
-  }).toList();
-
-  // 3. Guardar la secuencia con tareas y dependencias
+  final List<NewTaskModel> tasks = nodes
+      .map((machine) => NewTaskModel(
+            machine.id!,
+            const Duration(hours: 1),
+            machine.description ?? "",
+            machine.name,
+          ))
+      .toList();
+  final List<Map<String, int>> dependencies = connections
+      .map((conn) => {
+            'predecessor_id': conn.source,
+            'successor_id': conn.target,
+          })
+      .toList();
   final response = await seqService.addSequenceWithGraph(tasks, dependencies, processName);
 
   response.fold(
-    (f) => modelChanged(true),
-    (success) => emit(SequencesProcessAdded(true, state.machines, true, false, null, null)),
+    (failure) {
+      
+      emit(SequencesMinimumStateChange(
+        state.isNewOrder,
+        state.machines,
+        state.isSuccessModalVisible,
+        true,
+        state.selectedMachines,
+        state.dependencies,
+      ));
+    },
+    (success) {
+      emit(SequencesProcessAdded(
+        state.isNewOrder,
+        state.machines,
+        true,
+        false,
+        state.selectedMachines,
+        state.dependencies,
+      ));
+      GetIt.instance.get<SeeProcessBloc>().retrieveSequences();
+    },
   );
-  GetIt.instance.get<SeeProcessBloc>().retrieveSequences();
 }
 
 

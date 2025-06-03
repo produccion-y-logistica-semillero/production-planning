@@ -12,8 +12,8 @@ class TaskDependencyDaoSqllite implements TaskDependencyDao {
   Future<int> createTaskDependency(TaskDependencyModel dependency) async {
     try {
       int id = await db.insert('TaskDependency', {
-        'predecessor_id': dependency.dependsOnTaskId,
-        'successor_id': dependency.taskId,
+        'predecessor_id': dependency.predecessor_id,
+        'successor_id': dependency.successor_id,
         'description': dependency.description,
         'sequence_id': dependency.sequenceId,
       });

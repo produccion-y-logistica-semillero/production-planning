@@ -2,15 +2,15 @@ import 'package:production_planning/entities/task_dependency_entity.dart';
 
 class TaskDependencyModel {
   int? id;
-  final int taskId;            
-  final int dependsOnTaskId;
+  final int successor_id ;           
+  final int predecessor_id;
   final String? description;
   final int sequenceId;
 
   TaskDependencyModel({
     this.id,
-    required this.taskId,
-    required this.dependsOnTaskId,
+    required this.successor_id,
+    required this.predecessor_id,
     required this.sequenceId,
     this.description,
   });
@@ -18,8 +18,8 @@ class TaskDependencyModel {
   factory TaskDependencyModel.fromEntity(TaskDependencyEntity entity, int sequenceId) {
     return TaskDependencyModel(
       id: entity.id,
-      taskId: entity.taskId,
-      dependsOnTaskId: entity.dependsOnTaskId,
+      successor_id: entity.successor_id,
+      predecessor_id: entity.predecessor_id,
       sequenceId: sequenceId,
       description: entity.description,
     );
@@ -28,8 +28,8 @@ class TaskDependencyModel {
   factory TaskDependencyModel.fromJson(Map<String, dynamic> map) {
     return TaskDependencyModel(
       id: map["id"],
-      taskId: map["successor_id"],
-      dependsOnTaskId: map["predecessor_id"],
+      successor_id: map["successor_id"],
+      predecessor_id: map["predecessor_id"],
       sequenceId: map["sequence_id"],
       description: map["description"],
     );
@@ -38,8 +38,8 @@ class TaskDependencyModel {
   Map<String, dynamic> toJson() {
     return {
       "id": id,
-      "predecessor_id": dependsOnTaskId,
-      "successor_id": taskId,
+      "predecessor_id": predecessor_id,
+      "successor_id": successor_id,
       "sequence_id": sequenceId,
       "description": description,
     };
@@ -48,9 +48,9 @@ class TaskDependencyModel {
   TaskDependencyEntity toEntity() {
     return TaskDependencyEntity(
       id: id,
-      taskId: taskId,
+      predecessor_id: predecessor_id,
       sequenceId: sequenceId,
-      dependsOnTaskId: dependsOnTaskId,
+      successor_id: successor_id,
       description: description,
     );
   }

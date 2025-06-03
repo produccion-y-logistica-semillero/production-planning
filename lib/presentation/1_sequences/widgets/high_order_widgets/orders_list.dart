@@ -27,12 +27,26 @@ class OrderList extends StatelessWidget {
           previous.process?.tasks != current.process?.tasks ||
           previous.sequences != current.sequences,
       builder: (context, state) {
-        // Actualiza el controlador solo cuando cambia la secuencia seleccionada
+        
         if (state.selectedProcess != null && state.process != null) {
           nameController.text = state.process!.name;
+                      final machines = state.process!.tasks
+                ?.map((t) => MachineTypeEntity(
+                      id: t.machineTypeId,
+                      name: t.machineName ?? '',
+                      description: t.description ?? '',
+                    ))
+                .toList() ?? [];
+            final connections = (state.process!.dependencies ?? [])
+                .map((dep) => Connection(dep.predecessor_id, dep.successor_id))
+                .toList();
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              nodeEditorKey.currentState?.loadNodesAndConnections(machines, connections);
+            });
         }
 
-        // Siempre muestra el DropdownButton, aunque no haya secuencias
+        
         Widget dropdown = DropdownButton<int>(
           borderRadius: BorderRadius.circular(12),
           value: state.selectedProcess,
@@ -62,31 +76,37 @@ class OrderList extends StatelessWidget {
                     ),
                   );
                 }).toList(),
-          onChanged: (state.sequences == null || state.sequences!.isEmpty)
-              ? null
-              : (value) async {
-                  if (value != null) {
-                    BlocProvider.of<SeeProcessBloc>(context).selectSequence(value);
+                onChanged: (state.sequences == null || state.sequences!.isEmpty)
+                    ? null
+                    : (value) async {
+                        if (value != null) {
+                          BlocProvider.of<SeeProcessBloc>(context).selectSequence(value);
 
-                    // Espera a que el Bloc actualice el estado y luego carga los nodos y conexiones
-                    await Future.delayed(const Duration(milliseconds: 200));
-                    final process = BlocProvider.of<SeeProcessBloc>(context).state.process;
-                    if (process != null && process.tasks != null) {
-                      final machines = process.tasks!
-                          .map((t) => MachineTypeEntity(
-                                id: t.machineTypeId,
-                                name: t.machineName ?? '',
-                                description: t.description ?? '',
-                              ))
-                          .toList();
+                          await Future.delayed(const Duration(milliseconds: 200));
+                          final process = BlocProvider.of<SeeProcessBloc>(context).state.process;
+                          if (process != null && process.tasks != null) {
+                            final machines = process.tasks!
+                                .map((t) => MachineTypeEntity(
+                                      id: t.machineTypeId,
+                                      name: t.machineName ?? '',
+                                      description: t.description ?? '',
+                                    ))
+                                .toList();
 
-                      //............
-                      final connections = process.dependencies ?? [];
+                            final connections = (process.dependencies ?? [])
+                              .map((dep) => Connection(dep.predecessor_id, dep.successor_id))
+                              .toList();
 
-                      nodeEditorKey.currentState?.loadNodesAndConnections(machines, connections.cast<Connection>());
-                    }
-                  }
-                },
+                            
+                            print('--- CONEXIONES AL SELECCIONAR DEL DROPDOWN ---');
+                            for (final conn in connections) {
+                              print('predecessor_id: ${conn.source}, successor_id: ${conn.target}');
+                            }
+
+                            nodeEditorKey.currentState?.loadNodesAndConnections(machines, connections);
+                          }
+                        }
+                      },
           isExpanded: true,
           underline: Container(
             height: 0,
@@ -125,7 +145,7 @@ class OrderList extends StatelessWidget {
                   child: Center(child: dropdown),
                 ),
                 if (state.selectedProcess != null)
-                  // El SequenceEditorPanel ahora ocupa todo el espacio disponible restante
+                  
                   Expanded(
                     child: SequenceEditorPanel(
                       nameController: nameController,

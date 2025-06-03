@@ -14,7 +14,7 @@ enum ToolMode { addConnection, deleteNode, deleteConnection }
 
 class NodeEditorState extends State<NodeEditor> {
   final Map<int, Offset> nodePositions = {};
-  final Map<int, MachineTypeEntity> nodeMachines = {}; // Guarda la entidad completa
+  final Map<int, MachineTypeEntity> nodeMachines = {};
   final List<Connection> connections = [];
 
   int? connectingFrom;
@@ -22,13 +22,11 @@ class NodeEditorState extends State<NodeEditor> {
   ToolMode currentMode = ToolMode.addConnection;
 
 
-    void loadNodesAndConnections(List<MachineTypeEntity> machines, List<Connection> connectionsList) {
+  void loadNodesAndConnections(List<MachineTypeEntity> machines, List<Connection> connectionsList) {
     setState(() {
       nodePositions.clear();
       nodeMachines.clear();
       connections.clear();
-
-      // Distribuye los nodos en posiciones automáticas (puedes mejorar esto)
       double x = 100;
       double y = 100;
       for (final machine in machines) {
@@ -49,7 +47,7 @@ class NodeEditorState extends State<NodeEditor> {
     if (nodePositions.containsKey(machine.id)) return;
     setState(() {
       nodePositions[machine.id!] = const Offset(100, 100);
-      nodeMachines[machine.id!] = machine; // Guarda la entidad completa
+      nodeMachines[machine.id!] = machine;
     });
   }
 
@@ -67,7 +65,7 @@ class NodeEditorState extends State<NodeEditor> {
         connectingFrom != to &&
         nodePositions.containsKey(connectingFrom) &&
         nodePositions.containsKey(to)) {
-      // Verifica que no exista ya una conexión igual
+      
       final exists = connections.any((c) => c.source == connectingFrom && c.target == to);
       if (!exists) {
         setState(() {
@@ -133,14 +131,14 @@ class NodeEditorState extends State<NodeEditor> {
     return null;
   }
 
-  // --- NUEVO: Métodos para obtener nodos y conexiones para guardar el grafo ---
+ 
 
-  /// Devuelve la lista de MachineTypeEntity de los nodos actuales
+  
   List<MachineTypeEntity> getNodes() {
     return nodeMachines.values.toList();
   }
 
-  /// Devuelve la lista de conexiones actuales
+  
   List<Connection> getConnections() {
     return List<Connection>.from(connections);
   }
@@ -149,7 +147,7 @@ class NodeEditorState extends State<NodeEditor> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // No hay botones aquí, solo el área de edición
+        
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -254,7 +252,7 @@ class NodeEditorState extends State<NodeEditor> {
   }
 }
 
-// --- Widgets auxiliares ---
+
 class DraggableNode extends StatefulWidget {
   final int id;
   final Offset offset;
@@ -385,21 +383,21 @@ class ConnectionPainter extends CustomPainter {
   }
 
   void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
-    // Usa el radio horizontal del nodo (la mitad del ancho visual)
-    const double nodeRadius = 40; // Mitad del ancho del nodo
+    
+    const double nodeRadius = 40;
     final double arrowSize = 16;
     final double angle = atan2(end.dy - start.dy, end.dx - start.dx);
 
-    // Calcula el nuevo punto final (antes de llegar al borde del nodo destino)
+    
     final adjustedEnd = Offset(
       end.dx - nodeRadius * cos(angle),
       end.dy - nodeRadius * sin(angle),
     );
 
-    // Dibuja la línea principal
+   
     canvas.drawLine(start, adjustedEnd, paint);
 
-    // Dibuja la cabeza de la flecha (dos líneas en "V")
+    
     final arrowAngle = pi / 7;
     final p1 = Offset(
       adjustedEnd.dx - arrowSize * cos(angle - arrowAngle),

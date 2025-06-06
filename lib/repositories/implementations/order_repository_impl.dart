@@ -1,7 +1,9 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/daos/interfaces/sequences_dao.dart';
+import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/daos/interfaces/tasks_dao.dart';
+import 'package:production_planning/repositories/models/task_dependency_model.dart';
 import 'package:production_planning/repositories/models/task_model.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/daos/interfaces/dispatch_rules_dao.dart';
@@ -23,20 +25,22 @@ class OrderRepositoryImpl implements OrderRepository{
   final DispatchRulesDao dispatchRulesDao;
   final SequencesDao sequencesDao;
   final TasksDao tasksDao;
+  final TaskDependencyDao taskDependencyDao;
 
-  OrderRepositoryImpl({
+    OrderRepositoryImpl({
     required this.orderDao, 
     required this.jobDao, 
     required this.enviromentDao, 
     required this.dispatchRulesDao,
     required this.sequencesDao,
     required this.tasksDao,
+    required this.taskDependencyDao
   });
 
   @override
   Future<Either<Failure, List<OrderEntity>>> getAllOrders() async {
     try {
-      // 1. Obtener todas las órdenes
+      
       final orderModels = await orderDao.getAllOrders();
       List<OrderEntity> orders = [];
 
@@ -46,7 +50,7 @@ class OrderRepositoryImpl implements OrderRepository{
         for(final model in jobs){
           final sequenceModel = await sequencesDao.getSequenceById(model.sequenceId);
           final List<TaskModel> tasks = await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
-
+          //final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesByTaskId(sequenceModel.sequenceId!);
           jobsEntities.add(
             JobEntity(
               model.jobId, 
@@ -54,6 +58,7 @@ class OrderRepositoryImpl implements OrderRepository{
                 sequenceModel.sequenceId, 
                 tasks.map((mod)=> mod.toEntity()).toList(),
                 sequenceModel.name
+                //,dependenciesM.map((dep) => dep.toEntity()).toList()
               ), 
               model.amount, 
               model.dueDate, 
@@ -93,7 +98,7 @@ class OrderRepositoryImpl implements OrderRepository{
       for(final model in jobs){
         final sequenceModel = await sequencesDao.getSequenceById(model.sequenceId);
         final List<TaskModel> tasks = await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
-
+       // final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesByTaskId(sequenceModel.sequenceId!);
         jobsEntities.add(
           JobEntity(
             model.jobId, 
@@ -101,6 +106,7 @@ class OrderRepositoryImpl implements OrderRepository{
               sequenceModel.sequenceId, 
               tasks.map((mod)=> mod.toEntity()).toList(),
               sequenceModel.name
+              //,dependenciesM.map((dep) => dep.toEntity()).toList()  
             ), 
             model.amount, 
             model.dueDate, 

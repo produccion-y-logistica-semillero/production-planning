@@ -27,7 +27,7 @@ class OrdersService {
     final List<JobEntity> jobs = model
         .map((jobModel) => JobEntity(
             null,
-            SequenceEntity(jobModel.sequenceId, null, ""),
+            SequenceEntity(jobModel.sequenceId, null, "",/*--*/ /*null*/),
             jobModel.amount,
             jobModel.dueDate,
             jobModel.priority,

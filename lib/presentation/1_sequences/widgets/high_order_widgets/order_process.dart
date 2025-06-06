@@ -82,6 +82,7 @@ class OrderProcess extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          /*
                           Text(
                             'Tarea ${process.tasks![machineIndex].execOrder}',
                             style: TextStyle(
@@ -90,6 +91,7 @@ class OrderProcess extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                          */
                           const SizedBox(height: 8),
                           Text(
                             process.tasks![machineIndex].machineName!,

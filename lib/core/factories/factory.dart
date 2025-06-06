@@ -2,6 +2,7 @@ import 'package:production_planning/daos/interfaces/machine_dao.dart';
 import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
 import 'package:production_planning/daos/interfaces/status_dao.dart';
 import 'package:production_planning/daos/interfaces/sequences_dao.dart';
+import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/daos/interfaces/tasks_dao.dart';
 import 'package:production_planning/daos/interfaces/dispatch_rules_dao.dart';
 import 'package:production_planning/daos/interfaces/enviroment_dao.dart';
@@ -18,6 +19,8 @@ abstract class Factory{
   JobDao getJobDao();
   EnviromentDao getEnviromentDao();
   DispatchRulesDao getDispatchRulesDao();
+  TaskDependencyDao getTaskDependencyDao();
 
   void closeDatabase();
+
 }

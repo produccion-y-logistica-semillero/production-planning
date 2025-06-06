@@ -60,11 +60,11 @@ class AddJobState extends State<AddJobWidget> {
         if (label == 'Seleccione fecha de disponibilidad') {
           widget.availableDate = picked;
           availableDate = picked;
-          availableHour = picked as TimeOfDay?;
+          //availableHour = picked as TimeOfDay?;
         } else {
           widget.dueDate = picked;
           dueDate = picked;
-          dueHour = picked as TimeOfDay?;
+          //dueHour = picked as TimeOfDay?;
         }
       });
     }

@@ -1,7 +1,6 @@
 
 class TaskEntity{
   int? id;
-  final int execOrder;
   final Duration processingUnits;
   final String description;
   final int machineTypeId;
@@ -9,7 +8,6 @@ class TaskEntity{
 
   TaskEntity({
     this.id,
-    required this.execOrder,
     required this.processingUnits,
     required this.description,
     required this.machineTypeId,

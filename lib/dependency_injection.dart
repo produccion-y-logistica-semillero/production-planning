@@ -47,6 +47,7 @@ Future<void> initDependencies(String workspace) async {
       sequencesDao: daoFactory.getSequenceDao(), 
       tasksDao: daoFactory.getTaskDao(),
       machineTypeDao: daoFactory.getMachineTypeDao()
+      ,taskDependencyDao: daoFactory.getTaskDependencyDao()
     );
     final ordersRepo = OrderRepositoryImpl(
       orderDao: daoFactory.getOrderDao(), 
@@ -55,6 +56,7 @@ Future<void> initDependencies(String workspace) async {
       dispatchRulesDao: daoFactory.getDispatchRulesDao(),
       sequencesDao: daoFactory.getSequenceDao(),
       tasksDao: daoFactory.getTaskDao()
+      ,taskDependencyDao: daoFactory.getTaskDependencyDao()
     );
   
     //services

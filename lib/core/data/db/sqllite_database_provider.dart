@@ -63,7 +63,6 @@ class SQLLiteDatabaseProvider{
         await db.execute('''
           CREATE TABLE tasks (
               task_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              exec_order INTEGER NOT NULL,
               n_proc_units TIMESTAMP NOT NULL,
               description VARCHAR(100),
               sequence_id INTEGER NOT NULL,
@@ -71,6 +70,21 @@ class SQLLiteDatabaseProvider{
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id)
           );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE TaskDependency (
+            id SERIAL PRIMARY KEY,
+            predecessor_id INT NOT NULL,
+            successor_id INT NOT NULL,
+            sequence_id INT NOT NULL,
+            FOREIGN KEY (predecessor_id) REFERENCES tasks(id),
+            FOREIGN KEY (successor_id) REFERENCES tasks(id),
+            FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
+            CONSTRAINT unique_dependency UNIQUE (predecessor_id, successor_id),
+            CONSTRAINT no_self_dependency CHECK (predecessor_id <> successor_id)
+          );
+
         ''');
 
         await db.execute('''
@@ -145,14 +159,14 @@ class SQLLiteDatabaseProvider{
           INSERT INTO sequences (name) VALUES ('Sequence Gamma');
 
           -- Insert default tasks
-          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (1, '2024-09-08 09:00:00', 'Task 1 description', 1, 1);
+          INSERT INTO tasks ( n_proc_units, description, sequence_id, machine_type_id)
+          VALUES ('2024-09-08 09:00:00', 'Task 1 description', 1, 1);
 
-          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (2, '2024-09-08 10:00:00', 'Task 2 description', 2, 2);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
+          VALUES ('2024-09-08 10:00:00', 'Task 2 description', 2, 2);
 
-          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (3, '2024-09-08 11:00:00', 'Task 3 description', 3, 3);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
+          VALUES ('2024-09-08 11:00:00', 'Task 3 description', 3, 3);
 
           ---------------------------------------------------------------------------------------------------------------------------
           --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
@@ -335,11 +349,11 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
           INSERT INTO sequences (name) VALUES ('Coser pantalon'); --sequence ID = 4
           INSERT INTO sequences (name) VALUES ('Coser camiseta'); --sequence ID = 5
 
-          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (1, '2024-09-08 04:30:00', 'Coser pantalon', 4, 4);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
+          VALUES ('2024-09-08 04:30:00', 'Coser pantalon', 4, 4);
 
-          INSERT INTO tasks (exec_order, n_proc_units, description, sequence_id, machine_type_id)
-          VALUES (1, '2024-09-08 06:30:00', 'Coser camiseta', 5, 4);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
+          VALUES ('2024-09-08 06:30:00', 'Coser camiseta', 5, 4);
 
           INSERT INTO orders (reg_date) VALUES ('2024-10-08');  --order ID = 4
 

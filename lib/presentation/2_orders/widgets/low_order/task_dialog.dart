@@ -74,10 +74,10 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Secuencia", task.sequenceName),
           _buildInfoRow("ID tarea", task.taskId.toString()),
           _buildInfoRow("Tiempo procesamiento", '${taskInfo.processingUnits.inHours.toString().padLeft(2,'0')}:${(taskInfo.processingUnits.inMinutes- (taskInfo.processingUnits.inHours*60)).toString().padLeft(2,'0') }'),
-          _buildInfoRow(
+         /* _buildInfoRow(
             "Número ejecución",
             "${taskInfo.execOrder} de ${job.sequence!.tasks!.length}",
-          ),
+          ),*/
           _buildInfoRow("Cantidad", job.amount.toString()),
           _buildInfoRow(
             "Fechas",

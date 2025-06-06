@@ -37,7 +37,7 @@ class AddOrderForm extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Campo para el nombre del trabajo
+
               Container(
                 height: 60,
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
@@ -61,8 +61,7 @@ class AddOrderForm extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              // Contenedor para las máquinas seleccionadas
+              const SizedBox(height: 20),              
               Container(
                 constraints: const BoxConstraints(maxHeight: 500),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -95,7 +94,7 @@ class AddOrderForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              // Botón Guardar
+              
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -143,7 +142,7 @@ class AddOrderForm extends StatelessWidget {
     );
   }
 
-  // Función para construir la lista de máquinas con flechas intercaladas
+ 
   List<Widget> _buildMachineList(List<NewTaskModel>? machines, BuildContext context) {
     List<Widget> machineWidgets = [];
 
@@ -230,7 +229,7 @@ class AddOrderForm extends StatelessWidget {
     return machineWidgets;
   }
 
-  // Función para guardar la orden
+ 
   void _saveOrder(String name, List<MachineTypeEntity> selectedMachines, BuildContext context) {
     if (name.isNotEmpty) {
       onSave(name);
@@ -239,7 +238,7 @@ class AddOrderForm extends StatelessWidget {
     }
   }
 
-  // Función para mostrar los modales sobre toda la pantalla
+ 
   Widget _buildOverlay(Widget modal, BuildContext context) {
     return Positioned.fill(
       child: Stack(

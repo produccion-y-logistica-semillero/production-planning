@@ -63,6 +63,7 @@ class _SequencesPageState extends State<SequencesPage> {
                     const SnackBar(content: Text('Por favor ingresa un nombre para la secuencia')),
                   );
                 }
+
               },
               machines: state.machines ?? [],
               nodeEditorKey: nodeEditorKey,
@@ -125,5 +126,21 @@ class _SequencesPageState extends State<SequencesPage> {
     final nodes = nodeEditorKey.currentState?.getNodes() ?? [];
     final connections = nodeEditorKey.currentState?.getConnections() ?? [];
     BlocProvider.of<SequencesBloc>(context).saveProcess(name, nodes, connections);
+    showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Ruta de proceso creada'),
+      content: const Text('La ruta de proceso ha sido guardada exitosamente.'),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            GetIt.instance.get<SequencesBloc>().useMode(false);
+          },
+          child: const Text('Aceptar'),
+        ),
+      ],
+    ),
+  );
   }
 }

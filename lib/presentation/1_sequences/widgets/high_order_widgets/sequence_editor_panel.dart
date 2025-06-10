@@ -7,6 +7,7 @@ class SequenceEditorPanel extends StatelessWidget {
   final VoidCallback onSave;
   final List<MachineTypeEntity> machines;
   final GlobalKey<NodeEditorState> nodeEditorKey;
+  final bool onlyGraph; // NUEVO
 
   const SequenceEditorPanel({
     super.key,
@@ -14,6 +15,7 @@ class SequenceEditorPanel extends StatelessWidget {
     required this.onSave,
     required this.machines,
     required this.nodeEditorKey,
+    this.onlyGraph = false, // NUEVO
   });
 
   @override
@@ -24,38 +26,44 @@ class SequenceEditorPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: nameController,
-            decoration: InputDecoration(
-              labelText: 'Nombre de la secuencia',
-              labelStyle: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+          if (!onlyGraph) ...[
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: 'Nombre de la secuencia',
+                labelStyle: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+                border: const OutlineInputBorder(),
               ),
-              border: const OutlineInputBorder(),
             ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: onSave,
-              icon: const Icon(Icons.save),
-              label: const Text('Guardar Trabajo'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primaryContainer,
-                foregroundColor: colorScheme.onPrimaryContainer,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: onSave,
+                icon: const Icon(Icons.save),
+                label: const Text('Guardar Trabajo'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primaryContainer,
+                  foregroundColor: colorScheme.onPrimaryContainer,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Flexible(
             fit: FlexFit.loose,
-            child: NodeEditor(key: nodeEditorKey, machines: machines),
+            child: NodeEditor(
+              key: nodeEditorKey,
+              machines: machines,
+              onlyGraph: onlyGraph, // PASA EL NUEVO PARAMETRO
+            ),
           ),
         ],
       ),

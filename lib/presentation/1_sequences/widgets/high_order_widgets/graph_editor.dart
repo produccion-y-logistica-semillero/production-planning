@@ -4,7 +4,9 @@ import 'package:production_planning/entities/machine_type_entity.dart';
 
 class NodeEditor extends StatefulWidget {
   final List<MachineTypeEntity> machines;
-  const NodeEditor({super.key, required this.machines});
+  final bool onlyGraph; // NUEVO
+
+  const NodeEditor({super.key, required this.machines, this.onlyGraph = false});
 
   @override
   NodeEditorState createState() => NodeEditorState();
@@ -20,7 +22,6 @@ class NodeEditorState extends State<NodeEditor> {
   int? connectingFrom;
   Offset? cursorPosition;
   ToolMode currentMode = ToolMode.addConnection;
-
 
   void loadNodesAndConnections(List<MachineTypeEntity> machines, List<Connection> connectionsList) {
     setState(() {
@@ -41,7 +42,6 @@ class NodeEditorState extends State<NodeEditor> {
       connections.addAll(connectionsList);
     });
   }
-
 
   void addNodeForMachine(MachineTypeEntity machine) {
     if (nodePositions.containsKey(machine.id)) return;
@@ -65,7 +65,6 @@ class NodeEditorState extends State<NodeEditor> {
         connectingFrom != to &&
         nodePositions.containsKey(connectingFrom) &&
         nodePositions.containsKey(to)) {
-      
       final exists = connections.any((c) => c.source == connectingFrom && c.target == to);
       if (!exists) {
         setState(() {
@@ -131,14 +130,10 @@ class NodeEditorState extends State<NodeEditor> {
     return null;
   }
 
- 
-
-  
   List<MachineTypeEntity> getNodes() {
     return nodeMachines.values.toList();
   }
 
-  
   List<Connection> getConnections() {
     return List<Connection>.from(connections);
   }
@@ -147,7 +142,6 @@ class NodeEditorState extends State<NodeEditor> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -225,33 +219,33 @@ class NodeEditorState extends State<NodeEditor> {
             },
           ),
         ),
-        BottomAppBar(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.add_link),
-                onPressed: () => setState(() => currentMode = ToolMode.addConnection),
-                color: currentMode == ToolMode.addConnection ? Colors.blue : null,
-              ),
-              IconButton(
-                icon: const Icon(Icons.indeterminate_check_box),
-                onPressed: () => setState(() => currentMode = ToolMode.deleteNode),
-                color: currentMode == ToolMode.deleteNode ? Colors.red : null,
-              ),
-              IconButton(
-                icon: const Icon(Icons.link_off),
-                onPressed: () => setState(() => currentMode = ToolMode.deleteConnection),
-                color: currentMode == ToolMode.deleteConnection ? Colors.red : null,
-              ),
-            ],
+        if (!widget.onlyGraph)
+          BottomAppBar(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.add_link),
+                  onPressed: () => setState(() => currentMode = ToolMode.addConnection),
+                  color: currentMode == ToolMode.addConnection ? Colors.blue : null,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.indeterminate_check_box),
+                  onPressed: () => setState(() => currentMode = ToolMode.deleteNode),
+                  color: currentMode == ToolMode.deleteNode ? Colors.red : null,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.link_off),
+                  onPressed: () => setState(() => currentMode = ToolMode.deleteConnection),
+                  color: currentMode == ToolMode.deleteConnection ? Colors.red : null,
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
 }
-
 
 class DraggableNode extends StatefulWidget {
   final int id;
@@ -383,21 +377,17 @@ class ConnectionPainter extends CustomPainter {
   }
 
   void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
-    
     const double nodeRadius = 40;
     final double arrowSize = 16;
     final double angle = atan2(end.dy - start.dy, end.dx - start.dx);
 
-    
     final adjustedEnd = Offset(
       end.dx - nodeRadius * cos(angle),
       end.dy - nodeRadius * sin(angle),
     );
 
-   
     canvas.drawLine(start, adjustedEnd, paint);
 
-    
     final arrowAngle = pi / 7;
     final p1 = Offset(
       adjustedEnd.dx - arrowSize * cos(angle - arrowAngle),

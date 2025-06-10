@@ -1,11 +1,14 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/entities/environment_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/job_entity.dart';
 import 'package:production_planning/entities/order_entity.dart';
+import 'package:production_planning/entities/task_dependency_entity.dart';
+import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
@@ -60,6 +63,10 @@ class OrdersService {
     );
     if(fail != null) return Left(fail!);
 
+
+
+
+
     //this stores some kind of matrix of the machine types id's of each job
     final List<List<int>> machineTypesId = order.orderJobs!
       .map(
@@ -110,6 +117,31 @@ class OrdersService {
       }
     }
 
+
+        //Check out if there are relationships's precedence in the tasks
+    bool isOpenShop = true;
+    List<JobEntity>? jobs = order.orderJobs;
+    for(var job in jobs!){
+      //Verify each relationship in the node
+      List<TaskEntity>? tasks = job.sequence?.tasks; 
+      List<TaskDependencyEntity>? dependencies = job.sequence!.dependencies;
+      
+      for(TaskEntity task in tasks!){
+        if(dependencies == null || dependencies.isEmpty) continue;
+        for(TaskDependencyEntity dependency in dependencies!){
+          if(dependency.predecessor_id == task.id || dependency.successor_id == task.id){
+            //if the predecessor is the same as the task, then we have a precedence relationship
+            isOpenShop = false;
+            break;
+          }
+        }
+      }
+    }
+    if(isOpenShop) {
+      //if we have an open shop, then we return the environment
+      return orderRepo.getEnvironmentByName('OPEN SHOP');
+    }
+
     String enviroment;
     if(differentMachine && !allOne) {
       enviroment = 'FLEXIBLE JOB SHOP';
@@ -131,6 +163,8 @@ class OrdersService {
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => Right(await FlexibleJobShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleJobShopAdapter(sch.value1, sch.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
+
+
 
       
       

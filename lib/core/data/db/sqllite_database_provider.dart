@@ -178,6 +178,7 @@ class SQLLiteDatabaseProvider{
           INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');   --ID 4
           INSERT INTO environments (name) VALUES('JOB SHOP');             --ID 5
           INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
+          INSERT INTO environments (name) VALUES('OPEN SHOP');            --ID 7
 
           -- Insert dispatch rules
           ------ SINGLE MACHINE RULES

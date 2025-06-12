@@ -50,22 +50,24 @@ class OrderRepositoryImpl implements OrderRepository{
         for(final model in jobs){
           final sequenceModel = await sequencesDao.getSequenceById(model.sequenceId);
           final List<TaskModel> tasks = await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
-          //final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesByTaskId(sequenceModel.sequenceId!);
-          jobsEntities.add(
-            JobEntity(
-              model.jobId, 
-              SequenceEntity(
-                sequenceModel.sequenceId, 
-                tasks.map((mod)=> mod.toEntity()).toList(),
-                sequenceModel.name
-                //,dependenciesM.map((dep) => dep.toEntity()).toList()
-              ), 
-              model.amount, 
-              model.dueDate, 
-              model.priority, 
-              model.availableDate
-            )
+          final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesBySequenceId(sequenceModel.sequenceId!);
+          JobEntity jobEntity = JobEntity(
+            model.jobId, 
+            SequenceEntity(
+              sequenceModel.sequenceId, 
+              tasks.map((mod)=> mod.toEntity()).toList(),
+              sequenceModel.name,
+              dependenciesM.map((dep) => dep.toEntity()).toList()
+              
+            ), 
+            model.amount, 
+            model.dueDate, 
+            model.priority, 
+            model.availableDate
           );
+           
+          jobsEntities.add(jobEntity);
+
         }
         orders.add(OrderEntity(orderModel.orderId, orderModel.regDate, jobsEntities));
       }
@@ -81,7 +83,7 @@ class OrderRepositoryImpl implements OrderRepository{
     try{
       final EnviromentModel env = await enviromentDao.getEnviromentByName(name);
       final dispatchRules = await dispatchRulesDao.getDispatchRules(env.id);
-      print(dispatchRules);
+      
       return Right(EnvironmentEntity(env.id, env.name, dispatchRules));
     }
     on Failure catch(error){
@@ -98,22 +100,35 @@ class OrderRepositoryImpl implements OrderRepository{
       for(final model in jobs){
         final sequenceModel = await sequencesDao.getSequenceById(model.sequenceId);
         final List<TaskModel> tasks = await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
-       // final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesByTaskId(sequenceModel.sequenceId!);
-        jobsEntities.add(
-          JobEntity(
-            model.jobId, 
-            SequenceEntity(
-              sequenceModel.sequenceId, 
-              tasks.map((mod)=> mod.toEntity()).toList(),
-              sequenceModel.name
-              //,dependenciesM.map((dep) => dep.toEntity()).toList()  
-            ), 
-            model.amount, 
-            model.dueDate, 
-            model.priority, 
-            model.availableDate
-          )
+        final List<TaskDependencyModel> dependenciesM = await taskDependencyDao.getDependenciesBySequenceId(sequenceModel.sequenceId!);
+
+          print("Secuencia ${sequenceModel.sequenceId} tiene dependencias?:");
+          if(dependenciesM.isEmpty) {
+            print("  No tiene dependencias.");
+          } else {
+            print("  Tiene ${dependenciesM.length} dependencias.");
+            for (final dep in dependenciesM) {
+                print("  Predecessor: ${dep.predecessor_id}, Successor: ${dep.successor_id}");
+            }
+          }
+          
+
+
+        JobEntity jobEntity = JobEntity(
+          model.jobId, 
+          SequenceEntity(
+            sequenceModel.sequenceId, 
+            tasks.map((mod)=> mod.toEntity()).toList(),
+            sequenceModel.name,
+            dependenciesM.map((dep) => dep.toEntity()).toList()
+          ), 
+          model.amount, 
+          model.dueDate, 
+          model.priority, 
+          model.availableDate
         );
+        
+        jobsEntities.add(jobEntity);
       }
       return Right(
         OrderEntity(order.orderId, order.regDate, jobsEntities)

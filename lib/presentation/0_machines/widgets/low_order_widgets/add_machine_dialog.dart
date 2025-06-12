@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/hour_field.dart';
 import 'package:production_planning/shared/widgets/input_field_custom.dart';
+import 'package:intl/intl.dart';
 
 class AddMachineDialog extends StatelessWidget{
   final String machineTypeName;
@@ -11,6 +12,7 @@ class AddMachineDialog extends StatelessWidget{
   final TextEditingController restTimeController;
   final TextEditingController continueController;
   final TextEditingController nameController;
+  final TextEditingController availabilityDateTimeController;  // Nuevo controlador
   final void Function() addMachineHandle;
 
   const AddMachineDialog(
@@ -22,6 +24,7 @@ class AddMachineDialog extends StatelessWidget{
       required this.preparationController,
       required this.restTimeController,
       required this.continueController,
+      required this.availabilityDateTimeController,  // Requerido en constructor
       required this.addMachineHandle,
     }
   );
@@ -31,8 +34,8 @@ class AddMachineDialog extends StatelessWidget{
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(20),
-        height: 540, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
-        width:  800,//MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
+        height: 600, // Un poco más alto para el nuevo campo
+        width:  800,
         child: Column(
           children: [
             Row(
@@ -89,6 +92,48 @@ class AddMachineDialog extends StatelessWidget{
                 )
               ],
             ),
+
+            // NUEVO CAMPO DISPONIBILIDAD
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Disponibilidad desde Y: "),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 220,
+                  child: TextField(
+                    readOnly: true,
+                    controller: availabilityDateTimeController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.all(10),
+                    ),
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                        lastDate: DateTime(2100),
+                        initialDate: DateTime.now(),
+                      );
+                      if (date == null) return;
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (time == null) return;
+                      final fullDateTime = DateTime(
+                        date.year, date.month, date.day, time.hour, time.minute,
+                      );
+                      availabilityDateTimeController.text =
+                          DateFormat('yyyy-MM-dd HH:mm').format(fullDateTime);
+                    },
+                  ),
+                ),
+              ],
+            ),
+
             const SizedBox(height: 40,),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -96,8 +141,7 @@ class AddMachineDialog extends StatelessWidget{
                 TextButton(
                   onPressed: ()=>Navigator.of(context).pop(),   
                   style: const ButtonStyle(
-                    padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
-                   // backgroundColor: WidgetStatePropertyAll(Colors.red),
+                    padding: MaterialStatePropertyAll(EdgeInsets.all(20)),
                   ),
                   child: const Text("Cancelar"),
                 ),
@@ -105,8 +149,7 @@ class AddMachineDialog extends StatelessWidget{
                 TextButton(
                   onPressed: addMachineHandle,
                   style: const ButtonStyle(
-                    padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
-                   // backgroundColor: WidgetStatePropertyAll(const Color.fromARGB(255, 177, 218, 179)),
+                    padding: MaterialStatePropertyAll(EdgeInsets.all(20)),
                   ),
                   child: const Text("Agregar"),
                 ),

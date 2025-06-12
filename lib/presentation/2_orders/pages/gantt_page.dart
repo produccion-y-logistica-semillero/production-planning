@@ -9,6 +9,7 @@ import 'package:production_planning/presentation/2_orders/widgets/high_order/gan
 class GanttPage extends StatelessWidget {
   final int orderId;
   final int number;
+  
 
   const GanttPage({
     super.key,
@@ -32,6 +33,7 @@ class GanttPage extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
 
+
             final List<Widget> content = [];
             if (state.enviroment != null && state is! GanttPlanningSuccess) {
               content.add(
@@ -48,74 +50,8 @@ class GanttPage extends StatelessWidget {
                   ),
                 ),
               );
-              content.add(
-                Padding(
-                  padding: const EdgeInsets.all(80),
-                  child: DropdownButtonFormField<int>(
-                    value: state.selectedRule,
-                    hint: Text(
-                      'Selecciona una opción',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    icon: Icon(
-                      Icons.arrow_drop_down,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    iconSize: 24,
-                    elevation: 4,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outlineVariant
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outlineVariant
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    onChanged: (int? id) {
-                      if (id != null) {
-                        BlocProvider.of<GanttBloc>(context).selectRule(id);
-                      }
-                    },
-                    items: state.enviroment!.rules.map((value) {
-                      return DropdownMenuItem<int>(
-                        value: value.value1,
-                        child: Text(
-                          value.value2,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              );
             }
+
             if (state is GanttPlanningLoading) {
               content.add(const Center(child: CircularProgressIndicator()));
             }

@@ -84,7 +84,7 @@ class FlexibleJobShopAdapter {
     }
 
     // Ejecutar el algoritmo Flexible Job Shop
-    final output = FlexibleFlowShop(
+    final output = FlexibleJobShop(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,

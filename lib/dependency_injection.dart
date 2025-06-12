@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/core/factories/sqllite_factory.dart';
+import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metrics_bloc.dart';
 import 'package:production_planning/repositories/implementations/machine_repository_impl.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
@@ -94,6 +95,11 @@ Future<void> initDependencies(String workspace) async {
     depIn.registerFactory<TaskBloc>(
       ()=> TaskBloc(ordersRepo)
     );
+
+    depIn.registerFactory<MetricsBloc>(
+      ()=> MetricsBloc(ordersService)
+    );
+    
   }
   catch(e){
     //to implement file logging later if needed

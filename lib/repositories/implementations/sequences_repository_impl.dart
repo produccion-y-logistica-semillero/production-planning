@@ -37,7 +37,7 @@ class SequencesRepositoryImpl implements SequencesRepository{
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences() async{
     try{
       final list = (await sequencesDao.getSequences()).map(
-        (model) => SequenceEntity(model.sequenceId, null, model.name/*, model.dependencies*/)
+        (model) => SequenceEntity(model.sequenceId, null, model.name, null)
       ).toList();
       return Right(list);
     }
@@ -104,7 +104,6 @@ Future<Either<Failure, SequenceEntity?>> getFullSequence(int id) async {
 
   @override
   Future<void> createTaskDependencyForSequence(TaskDependencyEntity dep) async {
-    print("Antes de la tragedia");
     await taskDependencyDao.createTaskDependency(dep.toModel());
     print('Task dependency created: ${dep.predecessor_id} -> ${dep.successor_id} for sequence ID: ${dep.sequenceId}');
   }

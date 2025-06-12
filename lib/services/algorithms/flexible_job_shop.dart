@@ -1,13 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/shared/types/rnage.dart';
+import 'dart:math';
 
-// Clase Range para definir inicio y fin
-class Range {
-  final DateTime start;
-  final DateTime end;
-
-  Range(this.start, this.end);
-}
 
 class FlexibleJobInput {
   final int jobId;
@@ -29,14 +24,14 @@ class FlexibleJobOutput {
   FlexibleJobOutput(this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
 }
 
-class FlexibleFlowShop {
+class FlexibleJobShop {
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule;
   List<FlexibleJobInput> inputJobs = [];
   Map<int, DateTime> machinesAvailability;
   List<FlexibleJobOutput> output = [];
 
-  FlexibleFlowShop(
+  FlexibleJobShop(
     this.startDate,
     this.workingSchedule,
     this.inputJobs,
@@ -44,23 +39,183 @@ class FlexibleFlowShop {
     String rule,
   ) {
     switch (rule) {
+      case "FIFO":
+        scheduleFlexibleJobShopFIFO();
+        break;
       case "SPT":
-        scheduleFlexibleJobShop();
+        scheduleFlexibleJobShopSPT();
         break;
       case "LPT":
         scheduleFlexibleJobShopLPT();
+        break;
+      case "EDD":
+        scheduleFlexibleJobShopEDD();
+        break;
+      case "WSPT":
+        scheduleFlexibleJobShopWSPT();
+        break;
+      case "MWR":
+        scheduleFlexibleJobShopMWR();
+        break;  
+      case "ATCS": 
+        scheduleFlexibleJobShopATCS();
+        break;
+      case "MS":
+        scheduleFlexibleJobShopMS();
+        break;
+      case "CR":
+        scheduleFlexibleJobShopCR();
         break;
     }
   }
 
   late Map<int, int> jobOperationIndex;
 
-  void scheduleFlexibleJobShop() {
+  void scheduleFlexibleJobShopFIFO() {
+    _schedule((a, b) => a.job.jobId.compareTo(b.job.jobId)); // FIFO basado en el orden de llegada
+  }
+
+  void scheduleFlexibleJobShopSPT() {
     _schedule((a, b) => a.duration.compareTo(b.duration));
   }
 
   void scheduleFlexibleJobShopLPT() {
     _schedule((a, b) => b.duration.compareTo(a.duration));
+  }
+
+  void scheduleFlexibleJobShopEDD() {
+    _schedule((a, b) => a.job.dueDate.compareTo(b.job.dueDate));
+  }
+
+  void scheduleFlexibleJobShopWSPT() {
+    _schedule((a, b) {
+      final wsptA = a.job.priority / a.duration.inMinutes;
+      final wsptB = b.job.priority / b.duration.inMinutes;
+      return wsptB.compareTo(wsptA); // mayor primero
+    });
+  }
+
+  void scheduleFlexibleJobShopMWR() {
+    _schedule((a, b) {
+      final remainingA = _remainingWork(a.job, jobOperationIndex[a.job.jobId]!);
+      final remainingB = _remainingWork(b.job, jobOperationIndex[b.job.jobId]!);
+      return remainingB.compareTo(remainingA); // más trabajo primero
+    });
+  }
+
+  int _remainingWork(FlexibleJobInput job, int currentOpIndex) {
+    int totalMinutes = 0;
+
+    for (int i = currentOpIndex; i < job.taskSequence.length; i++) {
+      final task = job.taskSequence[i];
+      final avgDuration = task.value2.values
+          .map((d) => d.inMinutes)
+          .reduce((a, b) => a + b) ~/ task.value2.length;
+      totalMinutes += avgDuration;
+    }
+
+    return totalMinutes;
+  }
+
+  void scheduleFlexibleJobShopMS() {
+    int accumulatedProcessingTime = 0;  // Acumulamos el tiempo aquí
+
+    _schedule((a, b) {
+      final accumulatedProcessingTimeA = _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
+      final accumulatedProcessingTimeB = _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
+
+      final slackA = _calculateSlack(a.job, a.duration, accumulatedProcessingTimeA);
+      final slackB = _calculateSlack(b.job, b.duration, accumulatedProcessingTimeB);
+
+      return slackA.compareTo(slackB); 
+    });
+  }
+  
+  int _accumulatedProcessingTimeForJob(FlexibleJobInput job, int currentAccumulatedTime) {
+    int totalProcessingTime = currentAccumulatedTime; // Empezamos desde el tiempo acumulado
+
+    final opIndex = jobOperationIndex[job.jobId]!; 
+
+    for (int i = 0; i < opIndex; i++) {
+      final task = job.taskSequence[i];
+      final avgDuration = task.value2.values
+          .map((d) => d.inMinutes)
+          .reduce((a, b) => a + b) ~/ task.value2.length;
+      totalProcessingTime += avgDuration;
+    }
+
+    return totalProcessingTime;
+  }
+
+  double _calculateSlack(FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
+    final dj = job.dueDate;
+    final pj = duration;
+    final slack = dj.difference(DateTime.now()).inMinutes - pj.inMinutes - accumulatedProcessingTime;
+    return slack < 0 ? 0 : slack.toDouble();
+  }
+
+  void scheduleFlexibleJobShopCR() {
+    int accumulatedProcessingTime = 0;  // Inicializamos el acumulado en cada llamada
+
+    _schedule((a, b) {
+      final accumulatedProcessingTimeA = _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
+      final accumulatedProcessingTimeB = _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
+
+      final crA = _calculateCR(a.job, a.duration, accumulatedProcessingTimeA);
+      final crB = _calculateCR(b.job, b.duration, accumulatedProcessingTimeB);
+
+      return crA.compareTo(crB);
+    });
+  }
+  
+  double _calculateCR(FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
+    final dj = job.dueDate;
+    final pj = duration;
+    final cr = (dj.difference(DateTime.now()).inMinutes - accumulatedProcessingTime) / pj.inMinutes;
+    return cr < 0 ? 0 : cr;
+  }
+  
+  void scheduleFlexibleJobShopATCS() {
+    int accumulatedProcessingTime = 0;  // Inicializamos el acumulado en cada llamada
+
+    _schedule((a, b) {
+      final accumulatedProcessingTimeA = _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
+      final accumulatedProcessingTimeB = _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
+
+      final atcsA = _calculateATCS(a.job, a.duration, accumulatedProcessingTimeA);
+      final atcsB = _calculateATCS(b.job, b.duration, accumulatedProcessingTimeB);
+
+      return atcsB.compareTo(atcsA); // Invertido para asignar el mayor ATCS primero
+    });
+  }
+
+  double _calculateATCS(FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
+    final dj = job.dueDate;
+    final pj = duration;
+    final wj = job.priority.toDouble();  // Asumimos que el "peso" es el valor de la prioridad del trabajo
+    final pPromedio = _averageProcessingTime();  // Promedio de tiempos de procesamiento
+
+    final maxSlack = max(dj.difference(DateTime.now()).inMinutes - pj.inMinutes - accumulatedProcessingTime, 0);
+    final k = 1.0;  // Este parámetro k puede ser ajustado
+    final exponent = -(maxSlack / (k * pPromedio));
+    final atcs = (wj / pj.inMinutes) * exp(exponent);
+
+    return atcs;
+  }
+
+  double _averageProcessingTime() {
+    double totalProcessingTime = 0;
+    int taskCount = 0;
+
+    for (var job in inputJobs) {
+      for (var task in job.taskSequence) {
+        for (var duration in task.value2.values) {
+          totalProcessingTime += duration.inMinutes.toDouble();
+          taskCount++;
+        }
+      }
+    }
+    return taskCount > 0 ? totalProcessingTime / taskCount : 1;
   }
 
   void _schedule(int Function(dynamic, dynamic) comparator) {
@@ -90,6 +245,7 @@ class FlexibleFlowShop {
 
       for (var job in inputJobs) {
         final opIndex = jobOperationIndex[job.jobId]!;
+
         if (opIndex >= job.taskSequence.length) continue;
 
         final task = job.taskSequence[opIndex];
@@ -131,7 +287,7 @@ class FlexibleFlowShop {
       machinesAvailability[selected.machineId] = adjustedEnd;
       jobAvailability[selected.job.jobId] = adjustedEnd;
       jobOperationIndex[selected.job.jobId] =
-          jobOperationIndex[selected.job.jobId]! + 1;
+        (jobOperationIndex[selected.job.jobId] ?? 0) + 1;
     }
 
     for (var job in inputJobs) {
@@ -188,40 +344,40 @@ class FlexibleFlowShop {
 // ---------- MAIN ----------
 void main() {
   final start = DateTime(2025, 1, 1, 8);
-  const workingHours = Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0));
+  final workingHours = Tuple2(TimeOfDay(hour: 8, minute: 0), TimeOfDay(hour: 17, minute: 0));
 
   final jobs = [
     FlexibleJobInput(
       1,
-      start.add(const Duration(days: 1)),
+      start.add(Duration(days: 1)),
       1,
       start,
       [
-        const Tuple2(1, {1: Duration(hours: 3), 2: Duration(hours: 3)}),
-        const Tuple2(2, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
-        const Tuple2(3, {5: Duration(hours: 2), 6: Duration(hours: 2)}),
+        Tuple2(1, {1: Duration(hours: 3), 2: Duration(hours: 3)}),
+        Tuple2(2, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
+        Tuple2(3, {5: Duration(hours: 2), 6: Duration(hours: 2)}),
       ],
     ),
     FlexibleJobInput(
       2,
-      start.add(const Duration(days: 1)),
+      start.add(Duration(days: 1)),
       1,
       start,
       [
-        const Tuple2(1, {1: Duration(hours: 1), 2: Duration(hours: 1)}),
-        const Tuple2(2, {5: Duration(hours: 5), 6: Duration(hours: 5)}),
-        const Tuple2(3, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
+        Tuple2(1, {1: Duration(hours: 1), 2: Duration(hours: 1)}),
+        Tuple2(2, {5: Duration(hours: 5), 6: Duration(hours: 5)}),
+        Tuple2(3, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
       ],
     ),
     FlexibleJobInput(
       3,
-      start.add(const Duration(days: 1)),
+      start.add(Duration(days: 1)),
       1,
       start,
       [
-        const Tuple2(1, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
-        const Tuple2(2, {1: Duration(hours: 2), 2: Duration(hours: 2)}),
-        const Tuple2(3, {5: Duration(hours: 3), 6: Duration(hours: 3)}),
+        Tuple2(1, {3: Duration(hours: 3), 4: Duration(hours: 3)}),
+        Tuple2(2, {1: Duration(hours: 2), 2: Duration(hours: 2)}),
+        Tuple2(3, {5: Duration(hours: 3), 6: Duration(hours: 3)}),
       ],
     ),
   ];
@@ -235,7 +391,11 @@ void main() {
     6: start,
   };
 
-  final scheduler = FlexibleFlowShop(start, workingHours, jobs, machinesAvailability, "LPT");
+  final scheduler = FlexibleJobShop(start, workingHours, jobs, machinesAvailability, "LPT");
+  // final scheduler = FlexibleJobShop(start, workingHours, jobs, machinesAvailability, "SPT");
+  // final scheduler = FlexibleJobShop(start, workingHours, jobs, machinesAvailability, "EDD");
+  // final scheduler = FlexibleJobShop(start, workingHours, jobs, machinesAvailability, "WSPT");
+
 
   for (var output in scheduler.output) {
     print('Job ${output.jobId}');

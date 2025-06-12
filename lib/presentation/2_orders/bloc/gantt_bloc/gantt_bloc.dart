@@ -30,4 +30,28 @@ class GanttBloc extends Cubit<GanttState>{
     response.fold((f)=>emit(GanttPlanningError(state.orderId, state.enviroment, state.selectedRule)), 
     (result)=> emit(GanttPlanningSuccess(state.orderId, state.enviroment, result!.value1, result.value2, state.selectedRule)));
   }
+
+  void selectRuleByIndex(int index) {
+    final env = state.enviroment;
+    if (env != null && index >= 0 && index < env.rules.length) {
+      final ruleId = env.rules[index].value1;
+      selectRule(ruleId);
+    }
+  }
+
+  Future<void> assignOrderAndSelectRuleByIndex(int orderId, int index) async {
+    final response = await service.getOrderEnvironment(orderId);
+    response.fold(
+      (f) => emit(GanttOrderRetrieveError(null, null, null)),
+      (env) {
+        emit(GanttOrderRetrieved(orderId, env, null));
+        if (index >= 0 && index < env.rules.length) {
+          final ruleId = env.rules[index].value1;
+          selectRule(ruleId);
+        }
+      },
+    );
+  }
 }
+
+

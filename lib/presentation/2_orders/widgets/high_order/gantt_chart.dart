@@ -182,15 +182,7 @@ class _GanttChartState extends State<GanttChart> {
       children: [
         DropdownButton<int>(
           value: _selectedRule,
-          hint: const Text('Selecciona una regla'),
-          icon: const Icon(Icons.arrow_downward),
-          iconSize: 24,
-          elevation: 16,
-          style: const TextStyle(color: Colors.deepPurple),
-          underline: Container(
-            height: 2,
-            color: Colors.deepPurpleAccent,
-          ),
+          items: widget.items.where((item) => item.value == _selectedRule).toList(),
           onChanged: (int? id) {
             if (id != null) {
               setState(() {
@@ -199,8 +191,8 @@ class _GanttChartState extends State<GanttChart> {
               BlocProvider.of<GanttBloc>(context).selectRule(id);
             }
           },
-          items: widget.items,
         ),
+
         const SizedBox(width: 16),
         Text('Inicio: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
         const SizedBox(width: 16),
@@ -213,10 +205,10 @@ class _GanttChartState extends State<GanttChart> {
           child: const Text('Rango de fechas'),
         ),
         const SizedBox(width: 16),
-        TextButton(
-          onPressed: () => _showMetrics(widget.metrics, context),
-          child: const Text('Métricas'),
-        ),
+        //TextButton(
+         // onPressed: () => _showMetrics(widget.metrics, context),
+        //  child: const Text('Métricas'),
+       // ),
       ],
     );
   }

@@ -8,6 +8,7 @@ class MachineEntity{
   Duration? restTime;
   String name;
   int continueCapacity;
+  DateTime? availabilityDateTime;
 
   MachineEntity({
     this.id,
@@ -17,7 +18,8 @@ class MachineEntity{
     required this.processingTime,
     required this.preparationTime,
     required this.restTime,
-    required this.continueCapacity
+    required this.continueCapacity,
+    this.availabilityDateTime,
   });
 
   factory MachineEntity.defaultMachine(){
@@ -27,7 +29,8 @@ class MachineEntity{
       processingTime: Duration.zero, 
       preparationTime: null, 
       restTime: null, 
-      continueCapacity: 0
+      continueCapacity: 0,
+      availabilityDateTime: null
     );
   }
 

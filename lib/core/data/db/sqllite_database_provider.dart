@@ -48,6 +48,7 @@ class SQLLiteDatabaseProvider{
               status_id INTEGER NOT NULL,
               processing_time DATETIME NOT NULL,
               preparation_time DATETIME NOT NULL,
+              availability_time DATETIME NOT NULL,
               rest_time DATETIME,
               continue_capacity INTEGER,
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
@@ -144,14 +145,14 @@ class SQLLiteDatabaseProvider{
           INSERT INTO machine_types (name, description) VALUES ('Type C', 'High capacity machine type C');
 
           -- Insert default machines
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (1,'type A 1', 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5);
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
+          VALUES (1,'type A 1', 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5, '2024-09-08 10:00:00');
 
-          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (2, 'type B 1', 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3);
+          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
+          VALUES (2, 'type B 1', 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3, '2024-09-08 11:00:00');
 
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (3,'type C 1', 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7);
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
+          VALUES (3,'type C 1', 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7, '2024-09-08 12:00:00');
 
           -- Insert default sequences
           INSERT INTO sequences (name) VALUES ('Sequence Alpha');
@@ -178,6 +179,7 @@ class SQLLiteDatabaseProvider{
           INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');   --ID 4
           INSERT INTO environments (name) VALUES('JOB SHOP');             --ID 5
           INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
+          INSERT INTO environments (name) VALUES('OPEN SHOP');            --ID 7
 
           -- Insert dispatch rules
           ------ SINGLE MACHINE RULES
@@ -208,12 +210,9 @@ class SQLLiteDatabaseProvider{
 
           ------ FLOW SHOP RULES
           INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 23
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON3'); --ID 24
-          INSERT INTO dispatch_rules (name) VALUES('CDS');      --ID 25
-
           ------ FLEXIBLE FLOW SHOP RULES
-          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES');
-          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');      
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES'); --ID 24
+          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');       --ID 25 
 
 -- Insert types_x_rules
 ------- SINGLE MACHINE RULES
@@ -265,18 +264,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 10);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 11);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 13);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 14);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 15);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 16);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 17);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 18);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 19);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 20);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 21);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 22);
+
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 23);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 24);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 25);
+
 
 
 ------- FLEXIBLE FLOW SHOP MACHINE RULES
@@ -290,28 +281,24 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 7);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 8);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 9);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 10);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 11);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 13);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 14);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 15);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 16);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 17);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 18);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 19);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 20);
+
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 21);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 22);
+
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 23);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 24);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 25);
--- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 26);
--- INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 27);
 
 -------- FLEXIBLE JOB SHOP MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 1);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
-
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 4);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 13);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
 
           ---------------------------------------------------------------------------------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------
@@ -342,8 +329,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
           INSERT INTO machine_types (name, description) VALUES ('Maquina coser', 'Maquina para coser prendas de vestir');
 
           --machine ID = 4
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity)
-          VALUES (4,'Maquina de coser pro', 1, '2024-09-08 01:00:00', '2024-09-08 00:00:00', '2024-09-08 00:00:00', 1);
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
+          VALUES (4,'Maquina de coser pro', 1, '2024-09-08 01:00:00', '2024-09-08 00:00:00', '2024-09-08 00:00:00', 1, '2024-09-08 01:00:00');
 
 
           INSERT INTO sequences (name) VALUES ('Coser pantalon'); --sequence ID = 4

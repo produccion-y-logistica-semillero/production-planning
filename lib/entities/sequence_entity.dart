@@ -7,5 +7,5 @@ class SequenceEntity{
   final String name;
   List<TaskEntity>? tasks;
   List<TaskDependencyEntity>? dependencies;
-  SequenceEntity(this.id, this.tasks, this.name/* , this.dependencies*/);
+  SequenceEntity(this.id, this.tasks, this.name, this.dependencies);
 }

@@ -23,7 +23,7 @@ class SequencesService {
               machineName: null)
           ).toList();
           
-    final SequenceEntity seq = SequenceEntity(null, tasks, name/*--*//* ,null*/);
+    final SequenceEntity seq = SequenceEntity(null, tasks, name,/*--- */ null);
     return repository.createSequence(seq);
   }
 
@@ -47,7 +47,7 @@ class SequencesService {
     try {
       print("....................Add Sequence with Graph....................");
       // 1. Crea la secuencia y obtén el ID
-      final SequenceEntity seq = SequenceEntity(null, [], processName);
+      final SequenceEntity seq = SequenceEntity(null, [], processName, null);
       final int sequenceId = await repository.createSequenceAndReturnId(seq);
       print('Sequence created with ID: $sequenceId');
 

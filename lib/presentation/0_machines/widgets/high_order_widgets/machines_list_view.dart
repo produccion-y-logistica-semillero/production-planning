@@ -206,7 +206,8 @@ class MachinesListView extends StatelessWidget{
     final TextEditingController controllerRestTime = TextEditingController();
     final TextEditingController controllerContinue = TextEditingController();
     final TextEditingController nameController = TextEditingController();
-
+    final TextEditingController availabilityDateTimeController = TextEditingController(); 
+    print("** ______________**");
     await showDialog(
       context: context, 
       builder: (dialogContext){
@@ -217,17 +218,21 @@ class MachinesListView extends StatelessWidget{
           preparationController: controllerPreparation,
           restTimeController: controllerRestTime,
           continueController: controllerContinue,
+          availabilityDateTimeController: availabilityDateTimeController,
           addMachineHandle: ()async{
+            print("__________**_________Adding new machine with typeId: $machineId");
             if(
               controllerCapacity.text.length != 5 || 
               controllerPreparation.text.length != 5 || 
               controllerRestTime.text.length != 5 || 
               nameController.text.isEmpty ||
-              controllerContinue.text.isEmpty
+              controllerContinue.text.isEmpty ||
+              availabilityDateTimeController.text.isEmpty
             ){
               //if not all the fields have been added then we show another dialog showing the message
               //we could try to have a custom field in the same dialog that shows the message, but that would imply
               //to handle state in the dialog, and I don't want to deal with that
+              print("___________________Not all fields have been filled");
               await showDialog(
                 context: dialogContext,
                 builder: (subDialogContext){
@@ -240,7 +245,8 @@ class MachinesListView extends StatelessWidget{
             }
             //else if to check if the inputs are correct, for instance, no 12:85
             else {
-              BlocProvider.of<MachineBloc>(context).addNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerContinue.text, controllerRestTime.text, nameController.text, machineId); 
+              print("___________________Adding new machine with typeId: $machineId");
+              BlocProvider.of<MachineBloc>(context).addNewMachine(controllerCapacity.text, controllerPreparation.text,  controllerContinue.text, controllerRestTime.text, nameController.text, machineId, availabilityDateTimeController.text); 
               Navigator.of(dialogContext).pop();
             }
           },

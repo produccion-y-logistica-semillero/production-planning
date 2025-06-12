@@ -6,6 +6,7 @@ import 'package:production_planning/presentation/2_orders/bloc/orders_bloc/order
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/presentation/2_orders/pages/gantt_page_container.dart';
 import 'package:production_planning/presentation/2_orders/pages/new_order_page.dart';
+import 'package:production_planning/presentation/2_orders/pages/order_metrics_page.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
@@ -107,16 +108,16 @@ class OrdersPage extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                   children: [
                                     TextButton(
-                                      onPressed: () => planificate(context, state.orders[index].orderId!),
+                                      onPressed: () => getMetrics(context, state.orders[index].orderId!),
                                       style: TextButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        backgroundColor: colorScheme.secondary,
-                                        foregroundColor: colorScheme.onSecondary,
+                                        backgroundColor: colorScheme.tertiary,
+                                        foregroundColor: colorScheme.onTertiary,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                       ),
-                                      child: const Text("Programar"),
+                                      child: const Text("programar"),
                                     ),
                                     IconButton(
                                       icon: Icon(Icons.delete, color: colorScheme.error),
@@ -166,4 +167,13 @@ class OrdersPage extends StatelessWidget {
       ),
     );
   }
+
+   void getMetrics(BuildContext context, int id) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => OrderMetrics(orderId: id),
+      ),
+    );
+  }
+
 }

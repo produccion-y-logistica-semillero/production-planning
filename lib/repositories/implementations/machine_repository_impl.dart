@@ -124,7 +124,8 @@ class MachineRepositoryImpl implements MachineRepository {
       "processing_time"   : '1970-01-01 $proccesing',
       "preparation_time"  : preparation != null ? '1970-01-01 $preparation' : null,
       "rest_time"         : rest != null ? '1970-01-01 $rest' : null,
-      "continue_capacity" : entity.continueCapacity
+      "continue_capacity" : entity.continueCapacity,
+      "availability_time" : entity.availabilityDateTime.toString()
     };
   }
 

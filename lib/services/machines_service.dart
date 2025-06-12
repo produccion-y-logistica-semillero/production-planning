@@ -22,7 +22,7 @@ class MachinesService {
     ); 
   }
 
-  Future<Either<Failure, MachineEntity>> addMachine(int machineTypeId, String name, String? status, Duration processingTime, Duration preparationTime, Duration restTime, int continueCapacity) async{
+  Future<Either<Failure, MachineEntity>> addMachine(int machineTypeId, String name, String? status, Duration processingTime, Duration preparationTime, Duration restTime, int continueCapacity, DateTime availabilityDateTime) async{
     final machine = MachineEntity(
       machineTypeId: machineTypeId,
       name:    name,
@@ -30,8 +30,10 @@ class MachinesService {
       processingTime  : processingTime, 
       preparationTime : preparationTime, 
       restTime        : restTime, 
-      continueCapacity: continueCapacity
+      continueCapacity: continueCapacity,
+      availabilityDateTime: availabilityDateTime,  
     );
+    print("Adding new machine: $machine");
     final response = await repository.insertMachine(machine);
     return response.fold(
       (f) => Left(f),

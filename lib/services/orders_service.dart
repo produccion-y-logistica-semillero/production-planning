@@ -30,13 +30,18 @@ class OrdersService {
     final List<JobEntity> jobs = model
         .map((jobModel) => JobEntity(
             null,
-            SequenceEntity(jobModel.sequenceId, null, "",/*--*/ /*null*/),
+            SequenceEntity(jobModel.sequenceId, null, "",/*--*/ null),
             jobModel.amount,
             jobModel.dueDate,
             jobModel.priority,
             jobModel.availableDate)
           )
         .toList();
+
+    print("Creando orden con los siguientes jobs:");
+    for (final job in jobs) {
+      print("Job: ${job.jobId}, SequenceId: ${job.sequence?.id}");
+    }
 
     // order entity.
     final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs);
@@ -54,105 +59,140 @@ class OrdersService {
   }
 
   Future<Either<Failure, EnvironmentEntity>> getOrderEnvironment(int orderId) async {
-    final response = await orderRepo.getFullOrder(orderId);
-    Failure? fail;
-    late OrderEntity order;
-    response.fold(
-      (failure)=> fail = failure,
-      (success) => order = success,
-    );
-    if(fail != null) return Left(fail!);
+  final response = await orderRepo.getFullOrder(orderId);
+  Failure? fail;
+  late OrderEntity order;
+  response.fold(
+    (failure) => fail = failure,
+    (success) => order = success,
+  );
+  if (fail != null) return Left(fail!);
 
-
-
-
-
-    //this stores some kind of matrix of the machine types id's of each job
-    final List<List<int>> machineTypesId = order.orderJobs!
-      .map(
-        (job)=> job.sequence!.tasks!.map(
-          (task)=> task.machineTypeId
-        ).toList()
-      ).toList();
-    
-    bool differentMachine = false;
-    int max = 0;
-    for (var row in machineTypesId) {
-      print('dist: ${row.length}');
-      if(row.length > max) max = row.length;
-    }
-    List<int> commonMachinesId = [];
-    //we will iterate over the max lenght of machines of 1 job found
-    for(int i = 0; i < max; i++){
-      //for each iteration, we will iterate over all the jobs, to check if this 
-      //positions (in sequence) machineId is the same for all of them
-      for(final row in machineTypesId){
-        //if the lenght of the row is lower than the index, then just with this we know that not all the jobs share the machines
-        if(row.length >= i+1){
-
-          if(commonMachinesId.length <= i){
-            //if we are the first ones of this index, we add the new item with our machine id
-            commonMachinesId.add(row[i]);
-          }
-          else{
-            //if there's already a machine in this position, we check if we have the same one, if not, then we don't share machines, therefore job shop
-            if(row[i] != commonMachinesId[i]){
-              differentMachine = true;
-              break;
-            }
-          }
-        }else{
-          differentMachine = true;
-          break;
-        }
-      }
-      if(differentMachine) break;
-    }
-
-    bool allOne = true;
-    for(final row in machineTypesId){
-      for(final machineType in row){
-        final response = await machineRepo.countMachinesOf(machineType);
-        response.fold((f) => allOne = false, (number){if(number != 1) allOne = false;});
+  print("Analizando orden ${order.orderId}");
+  for (final job in order.orderJobs ?? []) {
+    print("Job ${job.jobId} - Secuencia ${job.sequence?.id}:");
+    final deps = job.sequence?.dependencies;
+    if (deps == null || deps.isEmpty) {
+      print("  Sin dependencias");
+    } else {
+      for (final dep in deps) {
+        print("  Dependencia: ${dep.predecessor_id} -> ${dep.successor_id}");
       }
     }
+  }
 
+  // Validación básica
+  if (order.orderJobs == null || order.orderJobs!.isEmpty) {
+    print("La orden no tiene trabajos asociados");
+  }
+  if (order.orderJobs!.any((job) => job.sequence == null || job.sequence!.tasks == null || job.sequence!.tasks!.isEmpty)) {
+    print("Al menos un trabajo no tiene tareas asociadas");
 
-        //Check out if there are relationships's precedence in the tasks
-    bool isOpenShop = true;
-    List<JobEntity>? jobs = order.orderJobs;
-    for(var job in jobs!){
-      //Verify each relationship in the node
-      List<TaskEntity>? tasks = job.sequence?.tasks; 
-      List<TaskDependencyEntity>? dependencies = job.sequence!.dependencies;
-      
-      for(TaskEntity task in tasks!){
-        if(dependencies == null || dependencies.isEmpty) continue;
-        for(TaskDependencyEntity dependency in dependencies!){
-          if(dependency.predecessor_id == task.id || dependency.successor_id == task.id){
-            //if the predecessor is the same as the task, then we have a precedence relationship
-            isOpenShop = false;
+  }
+
+  // Matriz de tipos de máquina por job
+  final List<List<int>> machineTypesId = order.orderJobs!
+      .map((job) => job.sequence!.tasks!.map((task) => task.machineTypeId).toList())
+      .toList();
+
+  bool differentMachine = false;
+  int max = 0;
+  for (var row in machineTypesId) {
+    if (row.length > max) max = row.length;
+  }
+  List<int> commonMachinesId = [];
+  for (int i = 0; i < max; i++) {
+    for (final row in machineTypesId) {
+      if (row.length >= i + 1) {
+        if (commonMachinesId.length <= i) {
+          commonMachinesId.add(row[i]);
+        } else {
+          if (row[i] != commonMachinesId[i]) {
+            differentMachine = true;
             break;
           }
         }
+      } else {
+        differentMachine = true;
+        break;
       }
     }
-    if(isOpenShop) {
-      //if we have an open shop, then we return the environment
-      return orderRepo.getEnvironmentByName('OPEN SHOP');
+    if (differentMachine) break;
+  }
+
+  bool allOne = true;
+  for (final row in machineTypesId) {
+    for (final machineType in row) {
+      final response = await machineRepo.countMachinesOf(machineType);
+      response.fold((f) => allOne = false, (number) {
+        if (number != 1) allOne = false;
+      });
+    }
+  }
+
+  bool hasPrecedence = false;
+  for (var job in order.orderJobs!) {
+    final dependencies = job.sequence?.dependencies ?? [];
+    final taskIds = job.sequence?.tasks?.map((t) => t.id).toSet() ?? {};
+
+    for (final dep in dependencies) {
+      
+      if (dep.predecessor_id != null &&
+          dep.successor_id != null &&
+          dep.predecessor_id != dep.successor_id &&
+          taskIds.contains(dep.predecessor_id) &&
+          taskIds.contains(dep.successor_id)) {
+        hasPrecedence = true;
+        print("Precedencia detectada: ${dep.predecessor_id} -> ${dep.successor_id}");
+        break;
+      }
     }
 
-    String enviroment;
-    if(differentMachine && !allOne) {
-      enviroment = 'FLEXIBLE JOB SHOP';
-    } else if(differentMachine && allOne) enviroment = 'JOB SHOP';
-    else if(!differentMachine && max > 1 && !allOne) enviroment = 'FLEXIBLE FLOW SHOP';
-    else if(!differentMachine && max > 1 && allOne) enviroment = 'FLOW SHOP';
-    else if(!differentMachine && max == 1 && !allOne) enviroment = 'PARALLEL MACHINES';
-    else enviroment = 'SINGLE MACHINE';
-
-    return orderRepo.getEnvironmentByName(enviroment);
+    if (hasPrecedence) break;
   }
+
+
+
+  //Detectar Open Shop: más de un job, cada job con más de una tarea, y SIN precedencia
+  bool isOpenShop = !hasPrecedence &&
+      order.orderJobs!.length > 1 &&
+      
+      order.orderJobs!.every((job) => job.sequence != null && job.sequence!.tasks != null && job.sequence!.tasks!.length > 1);
+  //Detectar Single Machine y Parallel Machines
+  bool isSingleMachine = !differentMachine && max == 1 && allOne;
+  bool isParallelMachines = !differentMachine && max == 1 && !allOne;
+
+  //Detectar Flow Shop y Flexible Flow Shop (no requieren precedencias explícitas)
+  bool isFlowShop = !differentMachine && max > 1 && allOne && hasPrecedence;
+  bool isFlexibleFlowShop = !differentMachine && max > 1 && !allOne && hasPrecedence;
+
+  // Detectar Job Shop y Flexible Job Shop (requieren precedencias)
+  bool isJobShop = differentMachine && allOne && hasPrecedence;
+  bool isFlexibleJobShop = differentMachine && !allOne && hasPrecedence;
+
+  String enviroment;
+
+  if (isOpenShop) {
+    enviroment = 'OPEN SHOP';
+  } else if (isJobShop) {
+    enviroment = 'JOB SHOP';
+  } else if (isFlexibleJobShop) {
+    enviroment = 'FLEXIBLE JOB SHOP';
+  } else if (isFlowShop) {
+    enviroment = 'FLOW SHOP';
+  } else if (isFlexibleFlowShop) {
+    enviroment = 'FLEXIBLE FLOW SHOP';
+  } else if (isSingleMachine) {
+    enviroment = 'SINGLE MACHINE';
+  } else if (isParallelMachines) {
+    enviroment = 'PARALLEL MACHINES';
+  } else {
+    enviroment = 'OPEN SHOP'; // fallback
+  }
+
+  print('Ambiente detectado: $enviroment');
+  return orderRepo.getEnvironmentByName(enviroment);
+}
 
 
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>> scheduleOrder(Tuple3<int, String, String> sch) async{  //tuple < orderid, rule name, enviroment name>

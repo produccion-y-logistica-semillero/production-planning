@@ -91,7 +91,7 @@ class NewOrderPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Agregar Trabajo'),
+                      child: const Text('Agregar Job'),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(

@@ -1,12 +1,16 @@
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/entities/task_dependency_entity.dart';
+import 'package:production_planning/repositories/models/task_dependency_model.dart';
 
 class SequenceModel{
   int? sequenceId;
   final String name;
+  final List<TaskDependencyModel>? dependencies;
 
   SequenceModel({
     this.sequenceId,
-    required this.name
+    required this.name,
+    this.dependencies
   });
 
   factory SequenceModel.fromEntity(SequenceEntity entity){
@@ -23,10 +27,9 @@ class SequenceModel{
     );
   }
 
-  get dependencies => null;
 
-  SequenceEntity toEntity(){
-    return SequenceEntity(sequenceId, null, name/*, null*/);
+  SequenceEntity toEntity() {
+    return SequenceEntity(sequenceId, null, name, dependencies?.map((e) => e.toEntity()).toList());
   }
 
   Map<String, dynamic> toJson(){

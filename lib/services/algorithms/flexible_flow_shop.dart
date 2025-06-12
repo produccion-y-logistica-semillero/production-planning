@@ -79,6 +79,10 @@ class FlexibleFlowShop {
       case "ATCS":
         atcRule();
         break;
+      case "JOHNSON":
+        _applyJohnsonRuleFlexible(inputJobs);
+      case "CDS": 
+        cdsAlgorithm();
     }
   }
 
@@ -518,3 +522,4 @@ class FlexibleFlowShop {
     return makespanEndTime.difference(startDate).inMinutes;
   }
 }   
+

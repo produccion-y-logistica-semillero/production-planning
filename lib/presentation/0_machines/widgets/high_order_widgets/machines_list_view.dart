@@ -221,6 +221,7 @@ class _MachinesListViewState extends State<MachinesListView> {
     final TextEditingController controllerContinue = TextEditingController();
     final TextEditingController nameController = TextEditingController();
     final TextEditingController availabilityDateTimeController = TextEditingController();
+    final TextEditingController quantityController = TextEditingController(text: "1"); // default 1
 
     await showDialog(
       context: context,
@@ -233,54 +234,82 @@ class _MachinesListViewState extends State<MachinesListView> {
           restTimeController: controllerRestTime,
           continueController: controllerContinue,
           availabilityDateTimeController: availabilityDateTimeController,
+          quantityController: quantityController,
           addMachineHandle: () async {
-            // check fields
-            if (
-              controllerCapacity.text.length != 5 ||
-              controllerPreparation.text.length != 5 ||
-              controllerRestTime.text.length != 5 ||
-              nameController.text.isEmpty ||
-              controllerContinue.text.isEmpty ||
-              availabilityDateTimeController.text.isEmpty
-            ) {
-              // If they are not complete, display a warning dialog box
-              await showDialog(
-                context: dialogContext,
-                builder: (subDialogContext) {
-                  return const AlertDialog(
-                    icon: Icon(Icons.dangerous_outlined, color: Colors.red),
-                    content: Text("Asegúrese de llenar todos los campos correctamente"),
-                  );
-                },
-              );
-              return;
-            }
+          final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
 
-            // If they are complete, add new machine
+          if (
+            controllerCapacity.text.length != 5 ||
+            controllerPreparation.text.length != 5 ||
+            controllerRestTime.text.length != 5 ||
+            // Used .trim() to ensure inputs with only spaces are treated as empty
+            nameController.text.trim().isEmpty ||
+            controllerContinue.text.trim().isEmpty ||
+            availabilityDateTimeController.text.trim().isEmpty ||
+            quantity <= 0
+          ) {
+            // If they are not complete, display a warning dialog box
+            await showDialog(
+              context: dialogContext,
+              builder: (subDialogContext) {
+                return const AlertDialog(
+                  icon: Icon(Icons.dangerous_outlined, color: Colors.red),
+                  content: Text("Asegúrese de llenar todos los campos correctamente"),
+                );
+              },
+            );
+            return;
+          }
+
+          //Get existing machines from the current state
+          final state = context.read<MachineBloc>().state;
+          final existingMachines = state is MachinesRetrievingSuccess ? state.machines ?? [] : [];
+          final existingNames = existingMachines.map((m) => m.name).toList();
+
+          // Determine the starting index for auto-generated names
+          final baseName = nameController.text.trim();
+          final regex = RegExp('^${RegExp.escape(baseName)}(?: (\\d+))?\$');
+          int maxIndex = 0;
+
+          // Find the highest existing suffix number for machines with the same base name
+          for (final name in existingNames) {
+            final match = regex.firstMatch(name);
+            if (match != null) {
+              final group = match.group(1);
+              final index = group != null ? int.tryParse(group) ?? 1 : 1;
+              if (index > maxIndex) maxIndex = index;
+            }
+          }
+
+          // Add new machines with auto-generated names
+          for (int i = 1; i <= quantity; i++) {
+            final suffix = (maxIndex + i) == 1 ? '' : ' ${maxIndex + i}';
+            final newName = '$baseName$suffix';
+
             BlocProvider.of<MachineBloc>(context).addNewMachine(
               controllerCapacity.text,
               controllerPreparation.text,
               controllerContinue.text,
               controllerRestTime.text,
-              nameController.text,
+              newName,
               machineId,
               availabilityDateTimeController.text,
             );
+          }
 
-            // close create machine dialog
-            Navigator.of(dialogContext).pop();
+          // Close the dialog after adding machines
+          Navigator.of(dialogContext).pop();
 
-            //Wait to make sure it has been processed correctly
-            await Future.delayed(const Duration(milliseconds: 200));
-
-            if (expandedTypes.contains(machineId)) {
-              BlocProvider.of<MachineBloc>(context).retrieveMachines(machineId);
-            } else {
-              setState(() {
-                expandedTypes.add(machineId);
-              });
-            }
-          },
+          // Wait and refresh list
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (expandedTypes.contains(machineId)) {
+            BlocProvider.of<MachineBloc>(context).retrieveMachines(machineId);
+          } else {
+            setState(() {
+              expandedTypes.add(machineId);
+            });
+          }
+        },
         );
       },
     );

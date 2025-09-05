@@ -60,7 +60,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                   children = state.machines!.map(
                     (machine) => MachineDisplayTile(
                       machine,
-                      () => _deleteMachine(context, machine.id!),
+                      () => _deleteMachine(context, machine.id!, machineType.id!),
                     ),
                   ).toList();
                 } else {
@@ -172,30 +172,46 @@ class _MachinesListViewState extends State<MachinesListView> {
     );
   }
 
-  void _deleteMachine(BuildContext context, int machineId) async {
+  void _deleteMachine(BuildContext context, int machineId, int machineTypeId) async {
+    // Show confirmation dialog before deleting
     await showDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           icon: const Icon(Icons.dangerous, color: Colors.red),
-          title: const Text("¿Estas seguro de eliminar la maquina?"),
+          title: const Text("Are you sure you want to delete this machine?"),
           actions: [
+            // Cancel button (closes the dialog)
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text("Cancelar"),
+              child: const Text("Cancel"),
             ),
+            // Confirm button – deletes the machine and refreshes the list 
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                // Delete the machine 
                 BlocProvider.of<MachineBloc>(context).deleteMachine(machineId);
+
+                // Close the confirmation dialog
                 Navigator.of(dialogContext).pop();
+
+                // Wait a short moment to ensure deletion completes before refreshing
+                await Future.delayed(const Duration(milliseconds: 200));
+
+                // If the machine type is currently expanded, refresh its machine list
+                if (expandedTypes.contains(machineTypeId)) {
+                  BlocProvider.of<MachineBloc>(context).retrieveMachines(machineTypeId);
+                }
               },
-              child: const Text("Confirmar"),
+              child: const Text("Confirm"),
             ),
           ],
         );
       },
     );
   }
+
+
 
   void _addNewMachine(BuildContext context, int machineId, String machineTypeName) async {
     // Create field controllers

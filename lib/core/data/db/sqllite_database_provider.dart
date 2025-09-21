@@ -3,15 +3,14 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-class SQLLiteDatabaseProvider{
+class SQLLiteDatabaseProvider {
   static Database? _database;
 
-  static Future<Database> open(String workspace) async{
+  static Future<Database> open(String workspace) async {
     final databasePath = await getDatabasesPath();
     final path = join(databasePath, '${workspace.replaceAll(' ', '')}.db');
 
-
-     // Get the directory of the current executable (.exe)
+    // Get the directory of the current executable (.exe)
     final exeDir = File(Platform.resolvedExecutable).parent.path;
 
     // Create a text file in the same directory as the .exe
@@ -23,24 +22,22 @@ class SQLLiteDatabaseProvider{
     //the best way, but anyways, it works for me at the moment, can comment the line while we don't need it
     print(path);
 
-    _database = await openDatabase(
-      path,
-      version: 1,
-      onCreate: (Database db, int version) async {
-        await db.execute('''
+    _database = await openDatabase(path, version: 1,
+        onCreate: (Database db, int version) async {
+      await db.execute('''
           CREATE TABLE STATUS (
               status_id INTEGER PRIMARY KEY AUTOINCREMENT,
               status VARCHAR(100) NOT NULL
           );
         ''');
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE MACHINE_TYPES(
             machine_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT
           );
         ''');
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
               machine_name VARCHAR(100) NOT NULL,
@@ -51,17 +48,18 @@ class SQLLiteDatabaseProvider{
               availability_time DATETIME NOT NULL,
               rest_time DATETIME,
               continue_capacity INTEGER,
+              support_preemption BOOLEAN DEFAULT FALSE,
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
         ''');
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE sequences (
               sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE tasks (
               task_id INTEGER PRIMARY KEY AUTOINCREMENT,
               n_proc_units TIMESTAMP NOT NULL,
@@ -73,7 +71,7 @@ class SQLLiteDatabaseProvider{
           );
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE TaskDependency (
             id SERIAL PRIMARY KEY,
             predecessor_id INT NOT NULL,
@@ -88,21 +86,21 @@ class SQLLiteDatabaseProvider{
 
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE environments (
               environment_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE dispatch_rules (
               dispatch_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE types_x_rules (
               type_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
               environment_id INTEGER NOT NULL,
@@ -112,13 +110,13 @@ class SQLLiteDatabaseProvider{
           );
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE orders (
               order_id INTEGER PRIMARY KEY AUTOINCREMENT,
               reg_date DATE NOT NULL
           );
         ''');
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE jobs (
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
               sequence_id INTEGER NOT NULL,
@@ -127,13 +125,14 @@ class SQLLiteDatabaseProvider{
               due_date DATE NOT NULL,
               available_date DATE NOT NULL,
               priority INTEGER NOT NULL,
+              is_preemptible BOOLEAN DEFAULT FALSE,
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
               FOREIGN KEY (order_id) REFERENCES orders(order_id)
           );
         ''');
 
-        //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
-        await db.execute('''
+      //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
+      await db.execute('''
           -- Insert default statuses
           INSERT INTO status (status) VALUES ('Active');
           INSERT INTO status (status) VALUES ('Inactive');
@@ -354,16 +353,14 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
           VALUES (5, 4, 7, '2024-10-21', 1, '2024-10-10 22:30');
 
         ''');
-      }
-    );
+    });
     return _database!;
   }
 
-  static Future<void> closeDatabaseConnection() async{
-    if(_database != null){
+  static Future<void> closeDatabaseConnection() async {
+    if (_database != null) {
       await _database!.close();
       _database = null;
     }
   }
-
 }

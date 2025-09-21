@@ -10,6 +10,12 @@ class JobEntity {
   final DateTime availableDate;
   final DateTime dueDate;
   final int priority;
+  bool isPreemptible =
+      false; //Variable creada para saber si el job es preemptible
 
-  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority, this.availableDate);
+  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority,
+      this.availableDate);
+
+  JobEntity.withPreemptible(this.sequence, this.amount, this.dueDate,
+      this.priority, this.availableDate, this.isPreemptible);
 }

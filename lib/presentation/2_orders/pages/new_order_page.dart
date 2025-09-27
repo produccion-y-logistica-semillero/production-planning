@@ -26,6 +26,7 @@ class NewOrderPage extends StatelessWidget {
               if (state.justSaved != null) {
                 showDialog(
                   context: context,
+                  barrierDismissible: false, // Evitar cerrar accidentalmente
                   builder: (subcontext) {
                     return AlertDialog(
                       title: Text(
@@ -34,12 +35,18 @@ class NewOrderPage extends StatelessWidget {
                       ),
                       content: Text(
                         state.justSaved!
-                            ? "La orden ha sido guardada"
+                            ? "La orden ha sido guardada exitosamente"
                             : "Hubo un error guardando la orden",
                       ),
                       actions: [
                         TextButton(
-                          onPressed: () => Navigator.of(subcontext).pop(),
+                          onPressed: () {
+
+                            Navigator.of(subcontext).pop(); // cierra el diálogo
+                            // Siempre regresar con el resultado del guardado
+
+                            Navigator.of(context).pop(state.justSaved);
+                          },
                           child: const Text("OK"),
                         ),
                       ],
@@ -66,11 +73,11 @@ class NewOrderPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        IconButton(onPressed: ()=>printInfo(context, 
-                          title: 'Crear orden', 
-                          content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de "produccion empanadas"'
-                        ), 
-                          icon: const Icon(Icons.info)
+                        IconButton(onPressed: ()=>printInfo(context,
+                            title: 'Crear orden',
+                            content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de "produccion empanadas"'
+                        ),
+                            icon: const Icon(Icons.info)
                         )
                       ],
                     ),
@@ -96,44 +103,10 @@ class NewOrderPage extends StatelessWidget {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
-                        bool dialog = false;
-                        if (state is NewOrdersState && state.jobs.isNotEmpty) {
-                          for (final wid in state.jobs) {
-                            if (dialog) break;
-                            if (wid.priorityController?.text.isEmpty ?? true) {
-                              dialog = true;
-                            } else if (wid.quantityController?.text.isEmpty ?? true) {
-                              dialog = true;
-                            } else if (wid.availableDate == null) {
-                              dialog = true;
-                            } else if (wid.dueDate == null) {
-                              dialog = true;
-                            } else if (wid.selectedSequence == null) {
-                              dialog = true;
-                            }
-                          }
-                        } else {
-                          dialog = true;
-                        }
-                        if (dialog) {
-                          showDialog(
-                            context: context,
-                            builder: (subcontext) {
-                              return AlertDialog(
-                                title: Text(
-                                  "Cuidado",
-                                  style: TextStyle(color: colorScheme.error),
-                                ),
-                                content: const Text("Asegúrese de llenar todos los jobs"),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(subcontext).pop(),
-                                    child: const Text("OK"),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
+                        bool isValid = _validateForm(state);
+
+                        if (!isValid) {
+                          _showValidationDialog(context, colorScheme);
                         } else {
                           provider.saveOrder();
                         }
@@ -155,6 +128,41 @@ class NewOrderPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  bool _validateForm(NewOrderState state) {
+    if (state is NewOrdersState && state.jobs.isNotEmpty) {
+      for (final job in state.jobs) {
+        if (job.priorityController?.text.isEmpty ?? true) return false;
+        if (job.quantityController?.text.isEmpty ?? true) return false;
+        if (job.availableDate == null) return false;
+        if (job.dueDate == null) return false;
+        if (job.selectedSequence == null) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  void _showValidationDialog(BuildContext context, ColorScheme colorScheme) {
+    showDialog(
+      context: context,
+      builder: (subcontext) {
+        return AlertDialog(
+          title: Text(
+            "Campos Incompletos",
+            style: TextStyle(color: colorScheme.error),
+          ),
+          content: const Text("Asegúrese de llenar todos los campos de todos los jobs antes de crear el programa de producción."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(subcontext).pop(),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

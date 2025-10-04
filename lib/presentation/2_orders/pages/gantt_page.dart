@@ -9,7 +9,7 @@ import 'package:production_planning/presentation/2_orders/widgets/high_order/gan
 class GanttPage extends StatelessWidget {
   final int orderId;
   final int number;
-  
+
 
   const GanttPage({
     super.key,
@@ -19,69 +19,82 @@ class GanttPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: BlocBuilder<GanttBloc, GanttState>(
-          builder: (context, state) {
-            if (state is GanttOrderRetrieveError) {
-              return const Text("Hubo un error encontrando la orden");
-            }
+    final colorScheme = Theme.of(context).colorScheme;
 
-            if (state.orderId == null) {
-              BlocProvider.of<GanttBloc>(context).assignOrderId(orderId);
-              return const Center(child: CircularProgressIndicator());
-            }
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        title: const Text(
+          'Diagrama de Gantt',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: BlocBuilder<GanttBloc, GanttState>(
+            builder: (context, state) {
+              if (state is GanttOrderRetrieveError) {
+                return const Text("Hubo un error encontrando la orden");
+              }
+
+              if (state.orderId == null) {
+                BlocProvider.of<GanttBloc>(context).assignOrderId(orderId);
+                return const Center(child: CircularProgressIndicator());
+              }
 
 
-            final List<Widget> content = [];
-            if (state.enviroment != null && state is! GanttPlanningSuccess) {
-              content.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  child: Text(
-                    state.enviroment!.name,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
+              final List<Widget> content = [];
+              if (state.enviroment != null && state is! GanttPlanningSuccess) {
+                content.add(
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(
+                      state.enviroment!.name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
-              );
-            }
+                );
+              }
 
-            if (state is GanttPlanningLoading) {
-              content.add(const Center(child: CircularProgressIndicator()));
-            }
-            if (state is GanttPlanningError) {
-              content.add(const Center(
-                  child: Text("Hubo problemas planificando la orden")));
-            }
-            if (state is GanttPlanningSuccess) {
-              content.add(
-                GanttChart(
-                  number: number,
-                  machines: state.planningMachines,
-                  selectedRule: state.selectedRule,
-                  metrics: state.metrics,
-                  schedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
-                  items: state.enviroment!.rules.map((value) {
-                    return DropdownMenuItem<int>(
-                      value: value.value1,
-                      child: Text(value.value2),
-                    );
-                  }).toList(),
-                ),
-              );
-            }
+              if (state is GanttPlanningLoading) {
+                content.add(const Center(child: CircularProgressIndicator()));
+              }
+              if (state is GanttPlanningError) {
+                content.add(const Center(
+                    child: Text("Hubo problemas planificando la orden")));
+              }
+              if (state is GanttPlanningSuccess) {
+                content.add(
+                  GanttChart(
+                    number: number,
+                    machines: state.planningMachines,
+                    selectedRule: state.selectedRule,
+                    metrics: state.metrics,
+                    schedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
+                    items: state.enviroment!.rules.map((value) {
+                      return DropdownMenuItem<int>(
+                        value: value.value1,
+                        child: Text(value.value2),
+                      );
+                    }).toList(),
+                  ),
+                );
+              }
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: content,
-            );
-          },
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: content,
+              );
+            },
+          ),
         ),
       ),
     );

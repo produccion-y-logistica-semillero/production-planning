@@ -144,7 +144,7 @@ class _GanttChartState extends State<GanttChart> {
     _hourWidth = dayWidth / (endingHour-initialHour);
 
     return Column(
-      mainAxisSize: MainAxisSize.min, 
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildTopControls(),
         const SizedBox(height: 8),
@@ -206,9 +206,9 @@ class _GanttChartState extends State<GanttChart> {
         ),
         const SizedBox(width: 16),
         //TextButton(
-         // onPressed: () => _showMetrics(widget.metrics, context),
+        // onPressed: () => _showMetrics(widget.metrics, context),
         //  child: const Text('Métricas'),
-       // ),
+        // ),
       ],
     );
   }
@@ -276,7 +276,7 @@ class _GanttChartState extends State<GanttChart> {
           left: 5,
           child: Container(
             height: 40.0 * _verticalZoom,
-            width: 130, 
+            width: 130,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.tertiaryContainer,
@@ -324,7 +324,7 @@ class _GanttChartState extends State<GanttChart> {
           controller: _horizontalScrollController,
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            width: chartTotalWidth + 60, 
+            width: chartTotalWidth + 60,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

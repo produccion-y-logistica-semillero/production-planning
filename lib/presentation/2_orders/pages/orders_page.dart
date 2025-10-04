@@ -9,6 +9,8 @@ import 'package:production_planning/presentation/2_orders/pages/new_order_page.d
 import 'package:production_planning/presentation/2_orders/pages/order_metrics_page.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
+import 'package:production_planning/presentation/2_orders/pages/algorithm_picker_page.dart';
+
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -209,11 +211,24 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  void getMetrics(BuildContext context, int id) {
-    Navigator.of(context).push(
+  Future<void> getMetrics(BuildContext context, int id) async {
+    final selected = await Navigator.of(context).push<List<int>>(
       MaterialPageRoute(
-        builder: (context) => OrderMetrics(orderId: id),
+        builder: (_) => AlgorithmPickerPage(orderId: id),
       ),
     );
+
+    if (selected != null && selected.isNotEmpty) {
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OrderMetrics(
+            orderId: id,
+            selectedRuleIndexes: selected,
+          ),
+        ),
+      );
+    }
   }
+
 }

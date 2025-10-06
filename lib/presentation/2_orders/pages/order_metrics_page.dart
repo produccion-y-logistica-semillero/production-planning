@@ -4,9 +4,10 @@ import 'package:get_it/get_it.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metrics_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metrics_state.dart';
-import 'package:production_planning/presentation/2_orders/pages/gantt_page_container.dart';
 import 'package:production_planning/presentation/2_orders/pages/gantt_page.dart';
+import 'package:production_planning/presentation/2_orders/pages/gantt_data_table_page.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
+import 'package:production_planning/entities/metrics.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
@@ -25,7 +26,7 @@ class OrderMetrics extends StatefulWidget {
 class _OrderMetricsState extends State<OrderMetrics> {
   late MetricsBloc _metricsBloc;
   late GanttBloc _ganttBloc;
-  late List<int> visibleToOriginalIndex;
+  List<int> _visibleToOriginalIndex = const [];
 
   @override
   void initState() {
@@ -44,6 +45,13 @@ class _OrderMetricsState extends State<OrderMetrics> {
     super.dispose();
   }
 
+  /// Devuelve una cadena para el retardo promedio.
+  /// Si la clase Metrics no tiene ese campo, retorna '-'.
+  String _fmtAverageDelay(Metrics m) {
+    // Ajusta aquí si tu clase Metrics tiene otro nombre para ese valor.
+    return '-';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -51,45 +59,21 @@ class _OrderMetricsState extends State<OrderMetrics> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text(
-          'Métricas de Planificación',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          'Métricas de la orden #${widget.orderId}',
+          style: TextStyle(color: colorScheme.onSurface),
         ),
         backgroundColor: colorScheme.surface,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _metricsBloc.getTable(widget.orderId);
-              _ganttBloc.assignOrderId(widget.orderId);
-            },
-            tooltip: 'Actualizar métricas',
-          ),
-        ],
       ),
-      body: MultiBlocProvider(
-        providers: [
-          BlocProvider.value(value: _metricsBloc),
-          BlocProvider.value(value: _ganttBloc),
-        ],
+      body: SafeArea(
         child: BlocBuilder<MetricsBloc, MetricsState>(
+          bloc: _metricsBloc,
           builder: (context, state) {
             if (state is MetricsLoadingState) {
               return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: colorScheme.primary),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Calculando métricas...',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
+                child: CircularProgressIndicator(
+                  color: colorScheme.primary,
                 ),
               );
             } else if (state is MetricsErrorState) {
@@ -102,21 +86,14 @@ class _OrderMetricsState extends State<OrderMetrics> {
                       size: 64,
                       color: colorScheme.error,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     Text(
-                      'Error al cargar las métricas',
+                      state.message ??
+                          'Ocurrió un error al cargar las métricas',
                       style: TextStyle(
-                        color: colorScheme.error,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      state.message,
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 14,
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -133,40 +110,51 @@ class _OrderMetricsState extends State<OrderMetrics> {
               final allMetrics = state.metrics;
 
               return BlocBuilder<GanttBloc, GanttState>(
+                bloc: _ganttBloc,
                 builder: (context, ganttState) {
                   final env = ganttState.enviroment;
 
                   final allRuleNames = env != null
-                      ? env.rules.map((r) => r.value2?.toString() ?? 'Sin nombre').toList()
+                      ? env.rules
+                          .map((r) => r.value2?.toString() ?? 'Sin nombre')
+                          .toList()
                       : List.generate(
-                    allMetrics.length,
-                        (index) => 'Algoritmo ${index + 1}',
-                  );
+                          allMetrics.length,
+                          (index) => 'Algoritmo ${index + 1}',
+                        );
 
                   // Filtrado de métricas según selección
-                  List metricsList;
-                  List<String> ruleNames;
+                  final filteredMetrics = <Metrics>[];
+                  final filteredRuleNames = <String>[];
+                  final filteredIndexes = <int>[];
 
-                  if (widget.selectedRuleIndexes != null &&
-                      widget.selectedRuleIndexes!.isNotEmpty) {
-                    // Filtrar solo las métricas seleccionadas
-                    visibleToOriginalIndex = List.from(widget.selectedRuleIndexes!);
-                    metricsList = [
-                      for (final i in widget.selectedRuleIndexes!)
-                        if (i >= 0 && i < allMetrics.length) allMetrics[i]
-                    ];
-                    ruleNames = [
-                      for (final i in widget.selectedRuleIndexes!)
-                        if (i >= 0 && i < allRuleNames.length) allRuleNames[i]
-                    ];
+                  final selectedIndexes = widget.selectedRuleIndexes;
+
+                  if (selectedIndexes != null && selectedIndexes.isNotEmpty) {
+                    for (final index in selectedIndexes) {
+                      if (index < 0 || index >= allMetrics.length) continue;
+
+                      filteredIndexes.add(index);
+                      filteredMetrics.add(allMetrics[index]);
+                      filteredRuleNames.add(
+                        index < allRuleNames.length
+                            ? allRuleNames[index]
+                            : 'Algoritmo ${index + 1}',
+                      );
+                    }
                   } else {
-                    // Mostrar todos
-                    visibleToOriginalIndex = List<int>.generate(allMetrics.length, (i) => i);
-                    metricsList = allMetrics;
-                    ruleNames = allRuleNames;
+                    for (var index = 0; index < allMetrics.length; index++) {
+                      filteredIndexes.add(index);
+                      filteredMetrics.add(allMetrics[index]);
+                      filteredRuleNames.add(
+                        index < allRuleNames.length
+                            ? allRuleNames[index]
+                            : 'Algoritmo ${index + 1}',
+                      );
+                    }
                   }
 
-                  if (metricsList.isEmpty) {
+                  if (filteredMetrics.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -174,7 +162,8 @@ class _OrderMetricsState extends State<OrderMetrics> {
                           Icon(
                             Icons.analytics_outlined,
                             size: 64,
-                            color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                            color:
+                                colorScheme.onSurfaceVariant.withOpacity(0.6),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -189,6 +178,8 @@ class _OrderMetricsState extends State<OrderMetrics> {
                       ),
                     );
                   }
+
+                  _visibleToOriginalIndex = filteredIndexes;
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,8 +208,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Orden ID: ${widget.orderId}',
+                                    'Orden #${widget.orderId}',
                                     style: TextStyle(
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                       color: colorScheme.onSurface,
                                     ),
@@ -244,7 +236,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '${metricsList.length} algoritmos',
+                                '${filteredMetrics.length} algoritmos',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -273,12 +265,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
                               ),
                               child: DataTable(
                                 headingRowColor: WidgetStateProperty.all(
-                                  colorScheme.primaryContainer.withOpacity(0.5),
+                                  colorScheme.surfaceContainerHighest,
                                 ),
                                 dataRowMinHeight: 56,
                                 dataRowMaxHeight: 72,
-                                columnSpacing: 24,
-                                horizontalMargin: 16,
                                 columns: [
                                   DataColumn(
                                     label: Text(
@@ -290,8 +280,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                     ),
                                   ),
                                   DataColumn(
+                                    numeric: true,
                                     label: Text(
-                                      'Tiempo\nmuerto',
+                                      'Ociosidad',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: colorScheme.primary,
@@ -299,35 +290,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                     ),
                                   ),
                                   DataColumn(
+                                    numeric: true,
                                     label: Text(
                                       'Trabajos',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Tardanza\nmáx',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Flujo\nprom',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Tardanza\nprom',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: colorScheme.primary,
@@ -354,7 +319,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   ),
                                   DataColumn(
                                     label: Text(
-                                      'Gantt',
+                                      'Visualización',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: colorScheme.primary,
@@ -363,15 +328,16 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   ),
                                 ],
                                 rows: List<DataRow>.generate(
-                                  metricsList.length,
-                                      (index) {
-                                    final m = metricsList[index];
+                                  filteredMetrics.length,
+                                  (index) {
+                                    final m = filteredMetrics[index];
                                     final isEvenRow = index % 2 == 0;
 
                                     return DataRow(
                                       color: WidgetStateProperty.all(
                                         isEvenRow
-                                            ? colorScheme.surface.withOpacity(0.5)
+                                            ? colorScheme.surface
+                                                .withOpacity(0.5)
                                             : Colors.transparent,
                                       ),
                                       cells: [
@@ -382,14 +348,17 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                               vertical: 6,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: colorScheme.tertiaryContainer,
-                                              borderRadius: BorderRadius.circular(20),
+                                              color:
+                                                  colorScheme.tertiaryContainer,
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                             ),
                                             child: Text(
-                                              ruleNames[index],
+                                              filteredRuleNames[index],
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w500,
-                                                color: colorScheme.onTertiaryContainer,
+                                                color: colorScheme
+                                                    .onTertiaryContainer,
                                                 fontSize: 12,
                                               ),
                                             ),
@@ -415,48 +384,19 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                         ),
                                         DataCell(
                                           Text(
-                                            '${m.maxDelay.inMinutes} min',
+                                            _fmtAverageDelay(m),
                                             style: TextStyle(
-                                              color: m.maxDelay.inMinutes > 0
-                                                  ? colorScheme.error
-                                                  : colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.avarageProcessingTime.inMinutes} min',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.avarageDelayTime.inMinutes} min',
-                                            style: TextStyle(
-                                              color: m.avarageDelayTime.inMinutes > 0
-                                                  ? Colors.orange
-                                                  : colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.avarageLatenessTime.inMinutes} min',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
                                             ),
                                           ),
                                         ),
                                         DataCell(
                                           Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 '${m.delayedJobs}',
@@ -470,7 +410,8 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                               Text(
                                                 '(${m.percentageDelayedJobs.toStringAsFixed(1)}%)',
                                                 style: TextStyle(
-                                                  color: colorScheme.onSurfaceVariant,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
                                                   fontSize: 11,
                                                 ),
                                               ),
@@ -478,25 +419,82 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                           ),
                                         ),
                                         DataCell(
-                                          FilledButton.icon(
-                                            onPressed: () {
-                                              final originalIndex = visibleToOriginalIndex[index];
-                                              _navigateToGantt(originalIndex);
+                                          Builder(
+                                            builder: (context) {
+                                              final originalIndex =
+                                                  _visibleToOriginalIndex[
+                                                      index];
+
+                                              return Wrap(
+                                                spacing: 4,
+                                                runSpacing: 4,
+                                                children: [
+                                                  FilledButton.icon(
+                                                    onPressed: () =>
+                                                        _navigateToGantt(
+                                                            originalIndex),
+                                                    icon: const Icon(
+                                                        Icons.bar_chart,
+                                                        size: 16),
+                                                    label: const Text('Gantt'),
+                                                    style:
+                                                        FilledButton.styleFrom(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 6,
+                                                      ),
+                                                      backgroundColor:
+                                                          colorScheme.tertiary,
+                                                      foregroundColor:
+                                                          colorScheme
+                                                              .onTertiary,
+                                                      textStyle:
+                                                          const TextStyle(
+                                                              fontSize: 12),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  FilledButton.icon(
+                                                    onPressed: () =>
+                                                        _navigateToGanttData(
+                                                            originalIndex),
+                                                    icon: const Icon(
+                                                        Icons.table_chart,
+                                                        size: 16),
+                                                    label:
+                                                        const Text('Detalle'),
+                                                    style:
+                                                        FilledButton.styleFrom(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 6,
+                                                      ),
+                                                      backgroundColor:
+                                                          colorScheme
+                                                              .primaryContainer,
+                                                      foregroundColor: colorScheme
+                                                          .onPrimaryContainer,
+                                                      textStyle:
+                                                          const TextStyle(
+                                                              fontSize: 12),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
                                             },
-                                            icon: const Icon(Icons.bar_chart, size: 18),
-                                            label: const Text('Ver'),
-                                            style: FilledButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 6,
-                                              ),
-                                              backgroundColor: colorScheme.tertiary,
-                                              foregroundColor: colorScheme.onTertiary,
-                                              textStyle: const TextStyle(fontSize: 12),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                            ),
                                           ),
                                         ),
                                       ],
@@ -522,14 +520,13 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     Icon(
                       Icons.hourglass_empty,
                       size: 64,
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                      color: colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     Text(
-                      'Esperando datos...',
+                      'Cargando...',
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 16,
                       ),
                     ),
                   ],
@@ -556,6 +553,25 @@ class _OrderMetricsState extends State<OrderMetrics> {
           child: GanttPage(
             orderId: widget.orderId,
             number: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToGanttData(int originalIndex) {
+    _ganttBloc.assignOrderAndSelectRuleByIndex(
+      widget.orderId,
+      originalIndex,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BlocProvider.value(
+          value: _ganttBloc,
+          child: GanttDataTablePage(
+            orderId: widget.orderId,
           ),
         ),
       ),

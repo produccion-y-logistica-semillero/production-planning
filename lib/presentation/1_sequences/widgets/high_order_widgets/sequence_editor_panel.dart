@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'graph_editor.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 
@@ -44,11 +42,7 @@ class SequenceEditorPanel extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  onSave();
-                  // load sequences
-                  BlocProvider.of<SeeProcessBloc>(context).retrieveSequences();
-                },
+                onPressed: onSave,
                 icon: const Icon(Icons.save),
                 label: const Text('Guardar Trabajo'),
                 style: ElevatedButton.styleFrom(

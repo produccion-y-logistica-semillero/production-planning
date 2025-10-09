@@ -13,6 +13,8 @@ class AddMachineDialog extends StatelessWidget{
   final TextEditingController continueController;
   final TextEditingController nameController;
   final TextEditingController availabilityDateTimeController;  // Nuevo controlador
+  final TextEditingController quantityController; 
+
   final void Function() addMachineHandle;
 
   const AddMachineDialog(
@@ -24,8 +26,9 @@ class AddMachineDialog extends StatelessWidget{
       required this.preparationController,
       required this.restTimeController,
       required this.continueController,
-      required this.availabilityDateTimeController,  // Requerido en constructor
+      required this.availabilityDateTimeController,  
       required this.addMachineHandle,
+      required this.quantityController,
     }
   );
 
@@ -34,7 +37,7 @@ class AddMachineDialog extends StatelessWidget{
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(20),
-        height: 600, // Un poco más alto para el nuevo campo
+        height: 650, 
         width:  800,
         child: Column(
           children: [
@@ -133,6 +136,33 @@ class AddMachineDialog extends StatelessWidget{
                 ),
               ],
             ),
+            
+
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Cantidad de máquinas a crear: "),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.all(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
 
             const SizedBox(height: 40,),
             Row(

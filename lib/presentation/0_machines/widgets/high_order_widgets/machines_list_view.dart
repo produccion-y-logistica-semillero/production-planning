@@ -7,6 +7,7 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 // Changed to StatefulWidget to manage list expanded state 
 class MachinesListView extends StatefulWidget {
@@ -223,6 +224,14 @@ class _MachinesListViewState extends State<MachinesListView> {
     final TextEditingController availabilityDateTimeController = TextEditingController();
     final TextEditingController quantityController = TextEditingController(text: "1"); // default 1
 
+    double? parsePercentage(String text) {
+      final normalized = text.replaceAll(',', '.').trim();
+      if (normalized.isEmpty) {
+        return null;
+      }
+      return double.tryParse(normalized);
+    }
+
     await showDialog(
       context: context,
       builder: (dialogContext) {
@@ -237,17 +246,25 @@ class _MachinesListViewState extends State<MachinesListView> {
           quantityController: quantityController,
           addMachineHandle: () async {
           final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
+          final processingPercent = parsePercentage(controllerCapacity.text);
+          final preparationPercent = parsePercentage(controllerPreparation.text);
+          final restPercent = parsePercentage(controllerRestTime.text);
+          final continueCapacity = int.tryParse(controllerContinue.text.trim());
 
-          if (
-            controllerCapacity.text.length != 5 ||
-            controllerPreparation.text.length != 5 ||
-            controllerRestTime.text.length != 5 ||
-            // Used .trim() to ensure inputs with only spaces are treated as empty
-            nameController.text.trim().isEmpty ||
-            controllerContinue.text.trim().isEmpty ||
-            availabilityDateTimeController.text.trim().isEmpty ||
-            quantity <= 0
-          ) {
+          final hasInvalidFields =
+              processingPercent == null ||
+              processingPercent <= 0 ||
+              preparationPercent == null ||
+              preparationPercent < 0 ||
+              restPercent == null ||
+              restPercent < 0 ||
+              nameController.text.trim().isEmpty ||
+              continueCapacity == null ||
+              continueCapacity <= 0 ||
+              availabilityDateTimeController.text.trim().isEmpty ||
+              quantity <= 0;
+
+          if (hasInvalidFields) {
             // If they are not complete, display a warning dialog box
             await showDialog(
               context: dialogContext,
@@ -260,6 +277,10 @@ class _MachinesListViewState extends State<MachinesListView> {
             );
             return;
           }
+
+          final processingDuration = percentageOfBaseDuration(processingPercent);
+          final preparationDuration = percentageOfBaseDuration(preparationPercent);
+          final restDuration = percentageOfBaseDuration(restPercent);
 
           //Get existing machines from the current state
           final state = context.read<MachineBloc>().state;
@@ -287,10 +308,10 @@ class _MachinesListViewState extends State<MachinesListView> {
             final newName = '$baseName$suffix';
 
             BlocProvider.of<MachineBloc>(context).addNewMachine(
-              controllerCapacity.text,
-              controllerPreparation.text,
-              controllerContinue.text,
-              controllerRestTime.text,
+              processingDuration,
+              preparationDuration,
+              continueCapacity,
+              restDuration,
               newName,
               machineId,
               availabilityDateTimeController.text,

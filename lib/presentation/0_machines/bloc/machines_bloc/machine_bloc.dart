@@ -18,28 +18,23 @@ class MachineBloc extends Cubit<MachinesState> {
     );
   }
 
-  void addNewMachine(String capacity, String preparation, String continueCapacity, String rest, String machineName, int typeId,  String availabilityDateTimeStr)async{
+  void addNewMachine(
+    Duration processingTime,
+    Duration preparationTime,
+    int continueCapacity,
+    Duration restTime,
+    String machineName,
+    int typeId,
+    String availabilityDateTimeStr,
+  ) async {
     List<MachineEntity> machines = [];
     print("Adding new machine with typeId: $typeId");
     if(state is MachinesRetrievingSuccess) machines = state.machines??[];
-    final proc = Duration(
-      hours: int.parse(capacity.substring(0,2)),
-      minutes: int.parse(capacity.substring(3,5)),
-    );
-    final prep = Duration(
-      hours: int.parse(preparation.substring(0,2)),
-      minutes: int.parse(preparation.substring(3,5)),
-    );
-    final rst = Duration(
-      hours: int.parse(rest.substring(0,2)),
-      minutes: int.parse(rest.substring(3,5)),
-    );
-    final continueCap = int.parse(continueCapacity);
     final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
     //here we should call domain and get as response the machine entity to ad
     print("------------------------------------------------");
-    print("Adding new machine with name: $machineName, typeId: $typeId, proc: $proc, prep: $prep, rst: $rst, continueCap: $continueCap, availabilityDateTime: $availabilityDateTime");
-    final response = await service.addMachine(typeId, machineName, null, proc, prep, rst, continueCap, availabilityDateTime);
+    print("Adding new machine with name: $machineName, typeId: $typeId, proc: $processingTime, prep: $preparationTime, rst: $restTime, continueCap: $continueCapacity, availabilityDateTime: $availabilityDateTime");
+    final response = await service.addMachine(typeId, machineName, null, processingTime, preparationTime, restTime, continueCapacity, availabilityDateTime);
     print("Response from service: $response");
     response.fold(
       (f)=> MachinesRetrievingSuccess(machines, state.typeId), 

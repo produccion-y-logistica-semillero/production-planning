@@ -95,36 +95,43 @@ class OrderList extends StatelessWidget {
                     Expanded(child: Text(seq.name)),
                     GestureDetector(
                       onTap: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('¿Eliminar ruta?'),
-                            content: Text('¿Estás seguro de eliminar "${seq.name}"?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text('Cancelar'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text('Eliminar'),
-                              ),
-                            ],
-                          ),
-                        );
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('¿Eliminar ruta?'),
+                          content: Text('¿Estás seguro de eliminar "${seq.name}"?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancelar'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Eliminar'),
+                            ),
+                          ],
+                        ),
+                      );
 
-                        if (confirm == true) {
-                          BlocProvider.of<SeeProcessBloc>(context).deleteSequence(seq.id!);
-                        }
-                      },
+                      if (confirm == true) {
+                        final bloc = BlocProvider.of<SeeProcessBloc>(context);
+                        bloc.deleteSequence(seq.id!);
+
+                        // Cierra el popup después de eliminar
+                        Navigator.of(context).pop(); // Cierra el PopupMenu
+
+                     
+                      }
+                    },
+
                       child: AbsorbPointer(
                         child: Icon(Icons.delete, color: colorScheme.error),
                       ),
                     ),
-
                   ],
                 ),
               );
+
             }).toList();
           },
           child: Row(

@@ -86,7 +86,7 @@ Future<void> initDependencies(String workspace) async {
       ()=> OrderBloc(ordersService)
     );
     depIn.registerFactory<NewOrderBloc>(
-      ()=> NewOrderBloc(ordersService, seqService)
+      ()=> NewOrderBloc(ordersService, seqService, machinesService)
     );
     depIn.registerFactory<GanttBloc>(
       ()=> GanttBloc(ordersService)

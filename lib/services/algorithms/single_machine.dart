@@ -1,6 +1,9 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 
+import 'dart:math';
+
+
 class SingleMachineInput{
   final int jobId;
   final Duration machineDuration;
@@ -60,6 +63,8 @@ class SingleMachine {
       case "WSPT_ADAPTADO": wsptRuleAdapted(); break;
       case "MINSLACK": scheduleMinimumSlack(); break;
       case "CR": scheduleCriticalRatio(); break;
+      case "GENETICS": scheduleGeneticAlgorithm(); break;
+
     }
   }
 
@@ -235,4 +240,151 @@ class SingleMachine {
     int remainingMinutes = job.dueDate.difference(job.availableDate).inMinutes;
     return remainingMinutes / job.machineDuration.inMinutes;
   }
+
+
+  //ALGORITMO DE GENÉTICA Y SUS FUNCIONAS AUXILIARES 
+
+  //Busca el mejor orden posible de ejecución de trabajos para minimizar el makespan 
+  //(minimiza tiempo total desde que se inicia hasta que termina el último trabajo)
+  void scheduleGeneticAlgorithm() {
+    print("EJECUTANDO ALGORITMO GENÉTICO EN SINGLE MACHINE");
+
+    //Soluciones por generación
+    const int populationSize = 50; 
+    //# veces que se repite el ciclo de evolución
+    const int generations = 100;
+    //probabilidad de que un hijo sufra una mutación
+    const double mutationRate = 0.1;
+
+    //Cada individuo es una lista ordenada de jobs
+    List<List<SingleMachineInput>> population = _initializePopulation(populationSize);
+
+    //Se guarda el mejor individuo y su valor
+    List<SingleMachineInput> bestIndividual = [];
+    Duration bestFitness = Duration(days: 9999);
+
+    //para el numero de generaciones definido anteriormente
+    for (int generation = 0; generation < generations; generation++) {
+      //Se evalúa cada individuo de la población
+      List<Tuple2<List<SingleMachineInput>, Duration>> evaluated = population.map((individual) {
+        return Tuple2(individual, _evaluateFitness(individual));
+      }).toList();
+
+      //Se ordena -> primero los de menor duración
+      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
+
+
+      //Si el mejor de esta nueva generación es mejor que el de todas las anteriores, se cambia
+      if (evaluated.first.value2 < bestFitness) {
+        bestFitness = evaluated.first.value2;
+        bestIndividual = evaluated.first.value1;
+      }
+
+      //Se genera nueva población con mejores individuos actuales
+      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+    }
+
+    // se asignan los trabajos en el orden del mejor individuo
+    input = bestIndividual;
+    eddRuleAdapted(); // para asignación de tiempos y mostrar en pantalla
+  }
+
+
+  //Genera secuencias aleatorias de los jobs para comenzar con la evolución
+  List<List<SingleMachineInput>> _initializePopulation(int size) {
+    List<List<SingleMachineInput>> population = [];
+
+    for (int i = 0; i < size; i++) {
+      List<SingleMachineInput> shuffled = List.from(input);
+      shuffled.shuffle();
+      population.add(shuffled);
+    }
+
+    return population;
+  }
+
+  //Evalúa cuando tiempo tarda una secuencia en completarse
+  Duration _evaluateFitness(List<SingleMachineInput> jobSequence) {
+    //representa hora a la que empieza a trabajar la máquina (dentro del horario laboral)
+    DateTime current = _getStartTime(jobSequence.first.availableDate);
+    //inicia tiempo total en 0 
+    Duration totalTime = Duration.zero;
+
+    //simula que los jobs se ejecutan uno por uno en el orden dado
+    for (var job in jobSequence) {
+      //por cada uno revisa que lo hago en una hora válida
+      current = _getAvailableStartTime(current, job.machineDuration);
+      DateTime end = current.add(job.machineDuration);
+      totalTime += end.difference(startDate);
+      current = end;
+    }
+
+    return totalTime; // menor makespan
+  }
+
+  //para cada individuo selecciona dos padres, los cruza para crear un hijo
+  List<List<SingleMachineInput>> _generateNewPopulation(
+  List<Tuple2<List<SingleMachineInput>, Duration>> evaluated,
+    int size,
+    double mutationRate,
+  ) {
+    List<List<SingleMachineInput>> newPop = [];
+
+    for (int i = 0; i < size; i++) {
+      final parent1 = _selectParent(evaluated);
+      final parent2 = _selectParent(evaluated);
+
+      List<SingleMachineInput> child = _crossover(parent1, parent2);
+
+      if (Random().nextDouble() < mutationRate) {
+        child = _mutate(child);
+      }
+
+      newPop.add(child);
+    }
+
+    return newPop;
+  }
+
+  //torneo binario para seleccionar individuo padre
+  List<SingleMachineInput> _selectParent(List<Tuple2<List<SingleMachineInput>, Duration>> evaluated) {
+    int k = 5;
+    //elige k individuos aleatorios y forma una lista
+    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+    selected.sort((a, b) => a.value2.compareTo(b.value2));
+    //selecciona el de menor tiempo
+    return selected.first.value1;
+  }
+
+  List<SingleMachineInput> _crossover(List<SingleMachineInput> p1, List<SingleMachineInput> p2) {
+    final length = p1.length;
+    //toma un punto de corte aleatorio 
+    final int point = Random().nextInt(length);
+    final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
+
+    //copia los trabajos de p1 desde 0 hasta el punto de corte
+    final List<SingleMachineInput> child = [
+      ...p1.sublist(0, point),
+      //completa con los trabajos de p2 que no estén repetidos
+      ...p2.where((j) => !jobIds.contains(j.jobId)),
+    ];
+
+    return child;
+  }
+  //intercambia de orden dos trabajos de un mismo individuio
+  List<SingleMachineInput> _mutate(List<SingleMachineInput> individual) {
+    if (individual.length < 2) return individual;
+    //se escogen dos posiciones aleatorias
+    int i = Random().nextInt(individual.length);
+    int j = Random().nextInt(individual.length);
+    //intercambia el orden de dos trabajos
+    final temp = individual[i];
+    individual[i] = individual[j];
+    individual[j] = temp;
+    return individual;
+  }
+
+
+
+
 }

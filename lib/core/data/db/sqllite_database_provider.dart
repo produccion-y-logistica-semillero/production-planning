@@ -214,6 +214,9 @@ class SQLLiteDatabaseProvider{
           --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES'); --ID 24
           --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');       --ID 25 
 
+          --GENETICS ALGORITHM
+          INSERT INTO dispatch_rules (name) VALUES('GENETICS');  --ID 24 (los anteriores están comentados)
+
 -- Insert types_x_rules
 ------- SINGLE MACHINE RULES
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
@@ -229,6 +232,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 24);
 
 ------- PARALLEL MACHINE RULES
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
@@ -249,6 +253,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 19);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 20);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 21);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 22);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 24);
 
 ------- FLOW SHOP MACHINE RULES (SPT,EDD,LPT,FIFO,WSPT,SPTA,EDDA,LPTA,FIFOA,WSPTA,CR, MS,ATCS,JOHNSON,JOHNSON3,CDS)
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);

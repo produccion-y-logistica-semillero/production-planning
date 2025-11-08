@@ -118,13 +118,6 @@ class NodeEditorState extends State<NodeEditor> {
   @override
   void initState() {
     super.initState();
-    // Si nos pasan máquinas por constructor y aún no hay estado cargado,
-    // dibujamos sin conexiones inicialmente.
-    if (widget.machines != null &&
-        widget.machines!.isNotEmpty &&
-        _machineById.isEmpty) {
-      loadNodesAndConnections(widget.machines!, const <Connection>[]);
-    }
   }
 
   @override
@@ -181,8 +174,26 @@ class NodeEditorState extends State<NodeEditor> {
   /// Retorna las entidades de máquina presentes (para persistencia).
   List<MachineTypeEntity> getNodes() => _machineById.values.toList();
 
-  /// Retorna las conexiones actuales.
-  List<Connection> getConnections() => List.unmodifiable(_connections);
+  /// Retorna las conexiones actuales (copia defensiva para evitar problemas al guardar).
+  List<Connection> getConnections() {
+    // Limpiar estados transitorios antes de retornar
+    _clearTransientBeforeSave();
+    return List.unmodifiable(_connections);
+  }
+
+  /// Limpia estados transitorios antes de guardar para evitar inconsistencias.
+  void _clearTransientBeforeSave() {
+    if (_dragMode != _DragMode.none ||
+        _connectingFrom != null ||
+        _cursor != null) {
+      setState(() {
+        _dragMode = _DragMode.none;
+        _connectingFrom = null;
+        _cursor = null;
+        _dragEdgeIndex = null;
+      });
+    }
+  }
 
   /// Compat: algunos flujos llaman a esto para agregar un nodo suelto.
   /// - Si `position` no se indica, se ubica en la siguiente celda de una grilla simple.
@@ -339,10 +350,12 @@ class NodeEditorState extends State<NodeEditor> {
   //   TECLADO: ESC PARA ELIMINAR
   // =======================================
 
-  /// Atajo: Supr -> borrar selección.
+  /// Atajo: Supr/Delete/Backspace -> borrar selección.
   Map<ShortcutActivator, Intent> get _shortcuts => {
     // Supr (Delete) borra nodo/arista seleccionada
     const SingleActivator(LogicalKeyboardKey.delete): const _DeleteIntent(),
+    // Backspace como alternativa (algunos teclados)
+    const SingleActivator(LogicalKeyboardKey.backspace): const _DeleteIntent(),
   };
   /// Acción asociada a Supr.
   Map<Type, Action<Intent>> get _actions => {
@@ -356,23 +369,35 @@ class NodeEditorState extends State<NodeEditor> {
   /// - Nodo: elimina el nodo y sus aristas incidentes.
   /// - Arista: elimina solo esa arista.
   void _deleteSelection() {
+    if (_sel.type == _SelectionType.none) return;
+
     setState(() {
       switch (_sel.type) {
         case _SelectionType.none:
           return;
         case _SelectionType.node:
-          final id = _sel.nodeId!;
+          final id = _sel.nodeId;
+          if (id == null) return;
+
+          // Verificar que el nodo existe antes de eliminarlo
+          if (!_nodePos.containsKey(id)) return;
+
           _nodePos.remove(id);
           _machineById.remove(id);
           _connections.removeWhere((e) => e.source == id || e.target == id);
           _sel = const _Selection.none();
           _connectingFrom = null;
+          _cursor = null;
+          break;
+
         case _SelectionType.edge:
-          final idx = _sel.edgeIndex!;
-          if (idx >= 0 && idx < _connections.length) {
-            _connections.removeAt(idx);
-          }
+          final idx = _sel.edgeIndex;
+          if (idx == null || idx < 0 || idx >= _connections.length) return;
+
+          _connections.removeAt(idx);
           _sel = const _Selection.none();
+          _cursor = null;
+          break;
       }
     });
   }
@@ -448,6 +473,14 @@ class NodeEditorState extends State<NodeEditor> {
         child: Focus(
           focusNode: _focusNode,
           autofocus: true, // para que Esc funcione sin clicks previos
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque, // IMPORTANTE: captura todos los eventos
+             onTap: () {
+            // Recuperar el foco al hacer clic en cualquier parte
+             if (!_focusNode.hasFocus) {
+            _focusNode.requestFocus();
+              }
+            },
           child: MouseRegion(
             onHover: (e) {
               final isConnecting = _connectingFrom != null;
@@ -554,6 +587,7 @@ class NodeEditorState extends State<NodeEditor> {
                 );
               },
             ),
+          ),
           ),
         ),
       ),

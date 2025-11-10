@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
@@ -99,6 +100,14 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         return machines;
       },
     );
+  }
+
+  MachineStandardTimes getStandardTimesForType(int machineTypeId) {
+    return machinesService.getStandardTimesForType(machineTypeId);
+  }
+
+  void updateStandardTimesForType(int machineTypeId, MachineStandardTimes times) {
+    machinesService.updateStandardTimesForType(machineTypeId, times);
   }
 
   Future<void> saveOrder() async {

@@ -1,11 +1,13 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 
 class MachinesService {
   final MachineRepository repository;
+  final Map<int, MachineStandardTimes> _standardTimesCache = {};
 
   MachinesService(this.repository);
 
@@ -57,7 +59,32 @@ class MachinesService {
   }
 
 
-  Future<Either<Failure, List<MachineEntity>>> getMachines(int typeId) {
-    return repository.getAllMachinesFromType(typeId);
+  Future<Either<Failure, List<MachineEntity>>> getMachines(int typeId) async {
+    final response = await repository.getAllMachinesFromType(typeId);
+    return response.map((machines) {
+      if (machines.isNotEmpty) {
+        final fallback = _standardTimesCache[typeId];
+        final candidate = MachineStandardTimes.fromMachine(
+          machines.first,
+          fallback: fallback,
+        );
+
+        _standardTimesCache[typeId] = fallback == null
+            ? candidate
+            : fallback.copyWith(
+                preparation: fallback.preparation ?? candidate.preparation,
+                rest: fallback.rest ?? candidate.rest,
+              );
+      }
+      return machines;
+    });
+  }
+
+  MachineStandardTimes getStandardTimesForType(int machineTypeId) {
+    return _standardTimesCache[machineTypeId] ?? MachineStandardTimes.defaults();
+  }
+
+  void updateStandardTimesForType(int machineTypeId, MachineStandardTimes times) {
+    _standardTimesCache[machineTypeId] = times;
   }
 }

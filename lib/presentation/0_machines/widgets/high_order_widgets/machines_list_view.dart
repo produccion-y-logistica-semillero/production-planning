@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
@@ -278,9 +279,21 @@ class _MachinesListViewState extends State<MachinesListView> {
             return;
           }
 
-          final processingDuration = percentageOfBaseDuration(processingPercent);
-          final preparationDuration = percentageOfBaseDuration(preparationPercent);
-          final restDuration = percentageOfBaseDuration(restPercent);
+          final machinesService = context.read<MachineBloc>().service;
+          final baseTimes = machinesService.getStandardTimesForType(machineId);
+
+          final processingDuration = percentageOfBaseDuration(
+            processingPercent,
+            base: baseTimes.processing,
+          );
+          final preparationDuration = percentageOfBaseDuration(
+            preparationPercent,
+            base: baseTimes.preparationOrDefault,
+          );
+          final restDuration = percentageOfBaseDuration(
+            restPercent,
+            base: baseTimes.restOrDefault,
+          );
 
           //Get existing machines from the current state
           final state = context.read<MachineBloc>().state;

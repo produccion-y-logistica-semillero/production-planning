@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
@@ -37,30 +38,6 @@ class AddJobWidget extends StatefulWidget {
   AddJobState createState() => AddJobState();
 }
 
-class StationTimes {
-  final Duration? processing;
-  final Duration? preparation;
-  final Duration? rest;
-
-  const StationTimes({this.processing, this.preparation, this.rest});
-
-  StationTimes copyWith({Duration? processing, Duration? preparation, Duration? rest}) {
-    return StationTimes(
-      processing: processing ?? this.processing,
-      preparation: preparation ?? this.preparation,
-      rest: rest ?? this.rest,
-    );
-  }
-
-  factory StationTimes.fromMachine(MachineEntity machine) {
-    return StationTimes(
-      processing: machine.processingTime,
-      preparation: machine.preparationTime,
-      rest: machine.restTime,
-    );
-  }
-}
-
 class AddJobState extends State<AddJobWidget> {
   int? selectedSequenceValue;
   DateTime? availableDate;
@@ -71,7 +48,7 @@ class AddJobState extends State<AddJobWidget> {
   bool _loadingStations = false;
   final Map<int, List<MachineEntity>> _machinesByType = {};
   final Map<int, MachineEntity?> _selectedMachines = {};
-  final Map<int, StationTimes> _stationTimes = {};
+  final Map<int, MachineStandardTimes> _stationTimes = {};
 
   @override
   void initState() {
@@ -136,6 +113,16 @@ class AddJobState extends State<AddJobWidget> {
     if (sequence != null) {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
+      final Map<int, MachineStandardTimes> initialTimes = {};
+      for (final task in tasks) {
+        final current = bloc.getStandardTimesForType(task.machineTypeId);
+        final updated = current.copyWith(processing: task.processingUnits);
+        initialTimes[task.machineTypeId] = updated;
+      }
+      initialTimes.forEach((key, value) {
+        bloc.updateStandardTimesForType(key, value);
+      });
+
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
             .map((id) async => dartz.Tuple2(id, await bloc.getMachinesForType(id)))
@@ -149,11 +136,13 @@ class AddJobState extends State<AddJobWidget> {
         setState(() {
           _sequenceDetails = sequence;
           _machinesByType.addAll(machinesMap);
+          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
         });
       } else {
         setState(() {
           _sequenceDetails = sequence;
+          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
         });
       }
@@ -393,7 +382,7 @@ class AddJobState extends State<AddJobWidget> {
           ),
           const SizedBox(width: 12),
           IconButton(
-            onPressed: (_stationTimes.containsKey(machineTypeId) || selectedMachine != null)
+            onPressed: _stationTimes.containsKey(machineTypeId)
                 ? () => _showStationTimeDialog(task, machineTypeId)
                 : null,
             icon: const Icon(Icons.schedule_outlined),
@@ -451,20 +440,32 @@ class AddJobState extends State<AddJobWidget> {
 
     if (!mounted || selected == null) return;
 
+    final bloc = context.read<NewOrderBloc>();
     setState(() {
       _selectedMachines[task.machineTypeId] = selected;
-      _stationTimes[task.machineTypeId] = StationTimes.fromMachine(selected);
+      final fallback = _stationTimes[task.machineTypeId];
+      final updated = MachineStandardTimes.fromMachine(
+        selected,
+        fallback: fallback,
+      );
+      _stationTimes[task.machineTypeId] = updated;
+      bloc.updateStandardTimesForType(task.machineTypeId, updated);
     });
   }
 
   Future<void> _showStationTimeDialog(TaskEntity task, int machineTypeId) async {
-    StationTimes localTimes = _stationTimes[machineTypeId] ?? const StationTimes();
+    final bloc = context.read<NewOrderBloc>();
+    MachineStandardTimes localTimes =
+        _stationTimes[machineTypeId] ?? bloc.getStandardTimesForType(machineTypeId);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            Future<void> updateTime(Duration? Function(StationTimes) getter, StationTimes Function(StationTimes, Duration) updater) async {
+            Future<void> updateTime(
+              Duration? Function(MachineStandardTimes) getter,
+              MachineStandardTimes Function(MachineStandardTimes, Duration) updater,
+            ) async {
               final current = getter(localTimes);
               final newDuration = await _pickDuration(current);
               if (newDuration != null) {
@@ -474,6 +475,7 @@ class AddJobState extends State<AddJobWidget> {
                   setState(() {
                     _stationTimes[machineTypeId] = localTimes;
                   });
+                  bloc.updateStandardTimesForType(machineTypeId, localTimes);
                 }
               }
             }
@@ -521,6 +523,7 @@ class AddJobState extends State<AddJobWidget> {
                         _stationTimes[machineTypeId] = localTimes;
                       });
                     }
+                    bloc.updateStandardTimesForType(machineTypeId, localTimes);
                     Navigator.of(dialogContext).pop();
                   },
                   child: const Text('Aceptar'),

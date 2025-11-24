@@ -70,4 +70,19 @@ class MachineDaoSqllite implements MachineDao{
       throw LocalStorageFailure();
     }
   }
+
+  @override
+  Future<bool> updateMachine(int machineId, Map<String, dynamic> values) async {
+    try {
+      final updated = await db.update(
+        'MACHINES',
+        values,
+        where: 'machine_id = ?',
+        whereArgs: [machineId],
+      );
+      return updated > 0;
+    } catch (_) {
+      throw LocalStorageFailure();
+    }
+  }
 }

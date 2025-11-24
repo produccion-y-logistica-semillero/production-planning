@@ -1,4 +1,5 @@
 import 'package:production_planning/daos/interfaces/machine_dao.dart';
+import 'package:production_planning/daos/interfaces/machine_inactivity_dao.dart';
 import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
 import 'package:production_planning/daos/interfaces/status_dao.dart';
 import 'package:production_planning/daos/interfaces/sequences_dao.dart';
@@ -12,6 +13,7 @@ import 'package:production_planning/daos/interfaces/order_dao.dart';
 abstract class Factory{
   MachineTypeDao getMachineTypeDao();
   MachineDao getMachineDao();
+  MachineInactivityDao getMachineInactivityDao();
   SequencesDao getSequenceDao();
   TasksDao getTaskDao();
   StatusDao getStatusDao();

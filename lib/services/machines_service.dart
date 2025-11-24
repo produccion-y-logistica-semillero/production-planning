@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
@@ -86,5 +87,33 @@ class MachinesService {
 
   void updateStandardTimesForType(int machineTypeId, MachineStandardTimes times) {
     _standardTimesCache[machineTypeId] = times;
+  }
+
+  Future<Either<Failure, bool>> updateAutomaticInactivity({
+    required int machineId,
+    required int continueCapacity,
+    Duration? restTime,
+  }) {
+    return repository.updateAutomaticInactivity(
+      machineId: machineId,
+      continueCapacity: continueCapacity,
+      restTime: restTime,
+    );
+  }
+
+  Future<Either<Failure, List<MachineInactivityEntity>>> getMachineInactivities(int machineId) {
+    return repository.getMachineInactivities(machineId);
+  }
+
+  Future<Either<Failure, MachineInactivityEntity>> addMachineInactivity(MachineInactivityEntity inactivity) {
+    return repository.insertMachineInactivity(inactivity);
+  }
+
+  Future<Either<Failure, MachineInactivityEntity>> updateMachineInactivity(MachineInactivityEntity inactivity) {
+    return repository.updateMachineInactivity(inactivity);
+  }
+
+  Future<Either<Failure, bool>> deleteMachineInactivity(int inactivityId) {
+    return repository.deleteMachineInactivity(inactivityId);
   }
 }

@@ -116,7 +116,15 @@ class AddJobState extends State<AddJobWidget> {
       final Map<int, MachineStandardTimes> initialTimes = {};
       for (final task in tasks) {
         final current = bloc.getStandardTimesForType(task.machineTypeId);
-        final updated = current.copyWith(processing: task.processingUnits);
+        // Si ya hay tiempos estándar ajustados para el tipo de máquina,
+        // úsalo como base; de lo contrario, conserva el tiempo de la tarea
+        // como valor por defecto para evitar perder la información original.
+        final processingTime = current.processing !=
+                MachineStandardTimes.defaults().processing
+            ? current.processing
+            : task.processingUnits;
+
+        final updated = current.copyWith(processing: processingTime);
         initialTimes[task.machineTypeId] = updated;
       }
       initialTimes.forEach((key, value) {

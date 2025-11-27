@@ -139,7 +139,14 @@ class AddJobState extends State<AddJobWidget> {
         if (!mounted) return;
         final Map<int, List<MachineEntity>> machinesMap = {};
         for (final entry in results) {
-          machinesMap[entry.value1] = entry.value2;
+          final times = initialTimes[entry.value1];
+          if (times != null) {
+            machinesMap[entry.value1] = entry.value2
+                .map((machine) => _applyStandardTimes(machine, times))
+                .toList();
+          } else {
+            machinesMap[entry.value1] = entry.value2;
+          }
         }
         setState(() {
           _sequenceDetails = sequence;
@@ -458,6 +465,7 @@ class AddJobState extends State<AddJobWidget> {
       );
       _stationTimes[task.machineTypeId] = updated;
       bloc.updateStandardTimesForType(task.machineTypeId, updated);
+      _syncStandardTimesToMachines(task.machineTypeId, updated);
     });
   }
 
@@ -484,6 +492,7 @@ class AddJobState extends State<AddJobWidget> {
                     _stationTimes[machineTypeId] = localTimes;
                   });
                   bloc.updateStandardTimesForType(machineTypeId, localTimes);
+                  _syncStandardTimesToMachines(machineTypeId, localTimes);
                 }
               }
             }
@@ -532,6 +541,7 @@ class AddJobState extends State<AddJobWidget> {
                       });
                     }
                     bloc.updateStandardTimesForType(machineTypeId, localTimes);
+                    _syncStandardTimesToMachines(machineTypeId, localTimes);
                     Navigator.of(dialogContext).pop();
                   },
                   child: const Text('Aceptar'),
@@ -542,6 +552,36 @@ class AddJobState extends State<AddJobWidget> {
         );
       },
     );
+  }
+
+  MachineEntity _applyStandardTimes(
+    MachineEntity machine,
+    MachineStandardTimes times,
+  ) {
+    machine.processingTime = times.processing;
+    machine.preparationTime = times.preparation ?? machine.preparationTime;
+    machine.restTime = times.rest ?? machine.restTime;
+    return machine;
+  }
+
+  void _syncStandardTimesToMachines(
+    int machineTypeId,
+    MachineStandardTimes times,
+  ) {
+    final machines = _machinesByType[machineTypeId];
+    if (machines == null) return;
+
+    setState(() {
+      final updatedMachines = machines
+          .map((machine) => _applyStandardTimes(machine, times))
+          .toList();
+      _machinesByType[machineTypeId] = updatedMachines;
+
+      final selected = _selectedMachines[machineTypeId];
+      if (selected != null) {
+        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
+      }
+    });
   }
 
   Widget _buildTimeOption({required String title, required Duration? duration, required VoidCallback onPressed}) {

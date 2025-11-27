@@ -119,10 +119,10 @@ class AddJobState extends State<AddJobWidget> {
         // Si ya hay tiempos estándar ajustados para el tipo de máquina,
         // úsalo como base; de lo contrario, conserva el tiempo de la tarea
         // como valor por defecto para evitar perder la información original.
-        final processingTime = current.processing !=
-                MachineStandardTimes.defaults().processing
-            ? current.processing
-            : task.processingUnits;
+        final processingTime =
+            current.processing != MachineStandardTimes.defaults().processing
+                ? current.processing
+                : task.processingUnits;
 
         final updated = current.copyWith(processing: processingTime);
         initialTimes[task.machineTypeId] = updated;
@@ -133,7 +133,8 @@ class AddJobState extends State<AddJobWidget> {
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
-            .map((id) async => dartz.Tuple2(id, await bloc.getMachinesForType(id)))
+            .map((id) async =>
+                dartz.Tuple2(id, await bloc.getMachinesForType(id)))
             .toList();
         final results = await Future.wait(futures);
         if (!mounted) return;
@@ -188,7 +189,8 @@ class AddJobState extends State<AddJobWidget> {
               alignment: Alignment.topRight,
               child: IconButton(
                 onPressed: () {
-                  BlocProvider.of<NewOrderBloc>(context).removeJob(widget.index);
+                  BlocProvider.of<NewOrderBloc>(context)
+                      .removeJob(widget.index);
                 },
                 icon: Icon(Icons.delete, color: colorScheme.error),
               ),
@@ -249,19 +251,22 @@ class AddJobState extends State<AddJobWidget> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: selectDate('Seleccione fecha de disponibilidad', availableDate, availableHour),
+                  child: selectDate('Seleccione fecha de disponibilidad',
+                      availableDate, availableHour),
                 ),
                 const Expanded(flex: 2, child: SizedBox()),
                 Expanded(
                   flex: 3,
-                  child: selectDate('Seleccione fecha de entrega', dueDate, dueHour),
+                  child: selectDate(
+                      'Seleccione fecha de entrega', dueDate, dueHour),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             DropdownButton<int>(
               value: selectedSequenceValue,
-              hint: Text('Seleccionar ruta de proceso', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+              hint: Text('Seleccionar ruta de proceso',
+                  style: TextStyle(color: colorScheme.onSurfaceVariant)),
               onChanged: (int? newValue) {
                 if (newValue == null) return;
                 setState(() {
@@ -290,7 +295,8 @@ class AddJobState extends State<AddJobWidget> {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: CircularProgressIndicator(),
               ),
-            if (!_loadingStations && (_sequenceDetails?.tasks?.isNotEmpty ?? false))
+            if (!_loadingStations &&
+                (_sequenceDetails?.tasks?.isNotEmpty ?? false))
               ..._sequenceDetails!.tasks!.map(_buildStationRow),
           ],
         ),
@@ -360,13 +366,15 @@ class AddJobState extends State<AddJobWidget> {
       },
       child: hour == null
           ? const Text("Hora")
-          : Text("${hour.hour.toString().padLeft(2, '0')}:${hour.minute.toString().padLeft(2, '0')}")
+          : Text(
+              "${hour.hour.toString().padLeft(2, '0')}:${hour.minute.toString().padLeft(2, '0')}"),
     );
   }
 
   Widget _buildStationRow(TaskEntity task) {
     final machineTypeId = task.machineTypeId;
-    final machineOptions = _machinesByType[machineTypeId] ?? const <MachineEntity>[];
+    final machineOptions =
+        _machinesByType[machineTypeId] ?? const <MachineEntity>[];
     final selectedMachine = _selectedMachines[machineTypeId];
     final defaultLabel = _stationLabel(task);
 
@@ -380,7 +388,8 @@ class AddJobState extends State<AddJobWidget> {
                   ? null
                   : () => _showMachineSelectionDialog(task, machineOptions),
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
               ),
               child: Align(
                 alignment: Alignment.centerLeft,
@@ -420,12 +429,14 @@ class AddJobState extends State<AddJobWidget> {
     return 'Estación de ${normalized}';
   }
 
-  Future<void> _showMachineSelectionDialog(TaskEntity task, List<MachineEntity> options) async {
+  Future<void> _showMachineSelectionDialog(
+      TaskEntity task, List<MachineEntity> options) async {
     final selected = await showDialog<MachineEntity>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text('Selecciona máquina para ${task.machineName ?? 'la estación'}'),
+          title: Text(
+              'Selecciona máquina para ${task.machineName ?? 'la estación'}'),
           content: SizedBox(
             width: double.maxFinite,
             child: options.isEmpty
@@ -437,7 +448,8 @@ class AddJobState extends State<AddJobWidget> {
                       final machine = options[index];
                       return ListTile(
                         title: Text(machine.name),
-                        subtitle: Text('Tiempo estándar: ${_formatDuration(machine.processingTime)}'),
+                        subtitle: Text(
+                            'Tiempo estándar: ${_formatDuration(machine.processingTime)}'),
                         onTap: () => Navigator.of(dialogContext).pop(machine),
                       );
                     },
@@ -469,10 +481,11 @@ class AddJobState extends State<AddJobWidget> {
     });
   }
 
-  Future<void> _showStationTimeDialog(TaskEntity task, int machineTypeId) async {
+  Future<void> _showStationTimeDialog(
+      TaskEntity task, int machineTypeId) async {
     final bloc = context.read<NewOrderBloc>();
-    MachineStandardTimes localTimes =
-        _stationTimes[machineTypeId] ?? bloc.getStandardTimesForType(machineTypeId);
+    MachineStandardTimes localTimes = _stationTimes[machineTypeId] ??
+        bloc.getStandardTimesForType(machineTypeId);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -480,7 +493,8 @@ class AddJobState extends State<AddJobWidget> {
           builder: (context, setDialogState) {
             Future<void> updateTime(
               Duration? Function(MachineStandardTimes) getter,
-              MachineStandardTimes Function(MachineStandardTimes, Duration) updater,
+              MachineStandardTimes Function(MachineStandardTimes, Duration)
+                  updater,
             ) async {
               final current = getter(localTimes);
               final newDuration = await _pickDuration(current);
@@ -503,7 +517,8 @@ class AddJobState extends State<AddJobWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildTimeOption(
-                    title: 'El tiempo de procesamiento estándar de esta máquina para este trabajo es de:',
+                    title:
+                        'El tiempo de procesamiento estándar de esta máquina para este trabajo es de:',
                     duration: localTimes.processing,
                     onPressed: () => updateTime(
                       (times) => times.processing,
@@ -511,7 +526,8 @@ class AddJobState extends State<AddJobWidget> {
                     ),
                   ),
                   _buildTimeOption(
-                    title: 'El tiempo estándar de preparación de esta máquina para este trabajo es de:',
+                    title:
+                        'El tiempo estándar de preparación de esta máquina para este trabajo es de:',
                     duration: localTimes.preparation,
                     onPressed: () => updateTime(
                       (times) => times.preparation,
@@ -519,7 +535,8 @@ class AddJobState extends State<AddJobWidget> {
                     ),
                   ),
                   _buildTimeOption(
-                    title: 'El tiempo estándar de descanso de esta máquina para este trabajo es de:',
+                    title:
+                        'El tiempo estándar de descanso de esta máquina para este trabajo es de:',
                     duration: localTimes.rest,
                     onPressed: () => updateTime(
                       (times) => times.rest,
@@ -584,7 +601,10 @@ class AddJobState extends State<AddJobWidget> {
     });
   }
 
-  Widget _buildTimeOption({required String title, required Duration? duration, required VoidCallback onPressed}) {
+  Widget _buildTimeOption(
+      {required String title,
+      required Duration? duration,
+      required VoidCallback onPressed}) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -599,7 +619,9 @@ class AddJobState extends State<AddJobWidget> {
                 const SizedBox(height: 6),
                 FilledButton.tonal(
                   onPressed: onPressed,
-                  child: Text(duration == null ? 'Tiempo (HH:MM:SS)' : _formatDuration(duration)),
+                  child: Text(duration == null
+                      ? 'Tiempo (HH:MM:SS)'
+                      : _formatDuration(duration)),
                 ),
               ],
             ),
@@ -614,16 +636,52 @@ class AddJobState extends State<AddJobWidget> {
     );
   }
 
+  /// AQUÍ ES DONDE CAMBIA: ahora es un diálogo con TextField que auto-pone los :
   Future<Duration?> _pickDuration(Duration? initial) async {
-    final base = initial ?? Duration.zero;
-    final initialHour = base.inHours.clamp(0, 23).toInt();
-    final initialMinute = base.inMinutes % 60;
-    final time = await showTimePicker(
+    final initialText = initial != null ? _formatDuration(initial) : '';
+
+    final controller = TextEditingController(text: initialText);
+
+    final result = await showDialog<String>(
       context: context,
-      initialTime: TimeOfDay(hour: initialHour, minute: initialMinute),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Ingrese tiempo (HHMMSS)'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: 'HH:MM:SS'),
+            inputFormatters: [
+              _HhMmSsTextInputFormatter(),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(controller.text.trim());
+              },
+              child: const Text('Aceptar'),
+            ),
+          ],
+        );
+      },
     );
-    if (time == null) return null;
-    return Duration(hours: time.hour, minutes: time.minute);
+
+    if (result == null || result.isEmpty) return null;
+
+    // resultado viene como HH:MM:SS (gracias al formatter)
+    final parts = result.split(':');
+    if (parts.length != 3) return null;
+
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    final s = int.tryParse(parts[2]) ?? 0;
+
+    return Duration(hours: h, minutes: m, seconds: s);
   }
 
   String _formatDuration(Duration duration) {
@@ -631,5 +689,34 @@ class AddJobState extends State<AddJobWidget> {
     final minutes = duration.inMinutes % 60;
     final seconds = duration.inSeconds % 60;
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Formatter para que al escribir números se formen HH:MM:SS automáticamente.
+class _HhMmSsTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Solo dígitos
+    String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length > 6) {
+      digits = digits.substring(0, 6);
+    }
+
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if (i == 1 || i == 3) {
+        buffer.write(':');
+      }
+    }
+
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
   }
 }

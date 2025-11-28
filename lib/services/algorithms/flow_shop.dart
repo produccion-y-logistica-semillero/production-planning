@@ -13,13 +13,13 @@ class FlowShopInput {
   //in this map we have the durations, the id is the task id, and the duration is how long it takes (since we know there's only one machine, and we already have that time)
   final Map<int, Duration> taskTimesInMachines;
   FlowShopInput(
-    this.jobId,
-    this.dueDate,
-    this.priority,
-    this.availableDate,
-    this.taskSequence,
-    this.taskTimesInMachines,
-  );
+      this.jobId,
+      this.dueDate,
+      this.priority,
+      this.availableDate,
+      this.taskSequence,
+      this.taskTimesInMachines,
+      );
 }
 
 class FlowShopOutput {
@@ -30,12 +30,12 @@ class FlowShopOutput {
   //the output, the map has the key the machine id, the value is a tuple of <task id, range start to end time>
   final Map<int, Tuple2<int, Range>> machinesScheduling;
   FlowShopOutput(
-    this.jobId,
-    this.startDate,
-    this.dueDate,
-    this.endTime,
-    this.machinesScheduling,
-  );
+      this.jobId,
+      this.startDate,
+      this.dueDate,
+      this.endTime,
+      this.machinesScheduling,
+      );
 }
 
 class FlowShop {
@@ -67,12 +67,12 @@ class FlowShop {
   // job 2   |   <12:00, 13:45>    |   <17:00, 18:00>   |    <20:30, 21:30>   ....|
 
   FlowShop(
-    this.startDate,
-    this.workingSchedule,
-    this.inputJobs,
-    this.machinesAvailability,
-    String rule,
-  ) {
+      this.startDate,
+      this.workingSchedule,
+      this.inputJobs,
+      this.machinesAvailability,
+      String rule,
+      ) {
     switch (rule) {
       case "EDD":
         eddRule();
@@ -119,15 +119,18 @@ class FlowShop {
       case "ATCS":
         atcRule();
         break;
+      case "GENETICS":
+        scheduleGeneticAlgorithm();
+        break;
     }
   }
 
   void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptRule() => _schedule(
-    (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
   );
   void lptRule() => _schedule(
-    (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
   );
   void fifoRule() =>
       _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
@@ -138,10 +141,10 @@ class FlowShop {
   });
   void eddaRule() => dynamicRule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptaRule() => dynamicRule(
-    (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
   );
   void lptaRule() => dynamicRule(
-    (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
   );
   void fifoaRule() =>
       dynamicRule((a, b) => a.availableDate.compareTo(b.availableDate));
@@ -197,7 +200,7 @@ class FlowShop {
 
     while (remainingJobs.isNotEmpty) {
       remainingJobs.sort(
-        (a, b) => _calculateATCPriority(
+            (a, b) => _calculateATCPriority(
           b,
           currentTime,
           elapsedTime,
@@ -212,11 +215,11 @@ class FlowShop {
   }
 
   double _calculateATCPriority(
-    FlowShopInput job,
-    DateTime currentTime,
-    int elapsedTime,
-    double k,
-  ) {
+      FlowShopInput job,
+      DateTime currentTime,
+      int elapsedTime,
+      double k,
+      ) {
     int processingTime = _totalProcessingTime(job);
     double avgProcessingTime = processingTime / job.taskSequence.length;
     double timeDiff = job.dueDate.difference(currentTime).inMinutes.toDouble();
@@ -246,9 +249,9 @@ class FlowShop {
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
       DateTime startTime =
-          jobStartTime.isAfter(machineAvailable)
-              ? jobStartTime
-              : machineAvailable;
+      jobStartTime.isAfter(machineAvailable)
+          ? jobStartTime
+          : machineAvailable;
       startTime = _adjustForWorkingSchedule(startTime);
       DateTime endTime = startTime.add(duration);
       endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
@@ -272,7 +275,7 @@ class FlowShop {
   int _totalProcessingTime(FlowShopInput job) {
     return job.taskTimesInMachines.values.fold(
       0,
-      (sum, duration) => sum + duration.inMinutes,
+          (sum, duration) => sum + duration.inMinutes,
     );
   }
 
@@ -342,8 +345,8 @@ class FlowShop {
     DateTime currentTime = DateTime.now();
     int slack =
         job.dueDate.difference(currentTime).inMinutes -
-        totalProcessingTime -
-        accumulatedTime;
+            totalProcessingTime -
+            accumulatedTime;
 
     // Si el slack es negativo, lo consideramos como 0
     return slack < 0 ? 0 : slack;
@@ -377,31 +380,31 @@ class FlowShop {
 
     for (int k = 1; k < numMachines; k++) {
       List<FlowShopInput> tempJobs =
-          inputJobs.map((job) {
-            Duration sumA = Duration.zero;
-            Duration sumB = Duration.zero;
+      inputJobs.map((job) {
+        Duration sumA = Duration.zero;
+        Duration sumB = Duration.zero;
 
-            for (int i = 0; i < k; i++) {
-              int taskId = job.taskSequence[i].value1;
-              sumA += job.taskTimesInMachines[taskId]!;
-            }
+        for (int i = 0; i < k; i++) {
+          int taskId = job.taskSequence[i].value1;
+          sumA += job.taskTimesInMachines[taskId]!;
+        }
 
-            for (int i = k; i < numMachines; i++) {
-              int taskId = job.taskSequence[i].value1;
-              sumB += job.taskTimesInMachines[taskId]!;
-            }
+        for (int i = k; i < numMachines; i++) {
+          int taskId = job.taskSequence[i].value1;
+          sumB += job.taskTimesInMachines[taskId]!;
+        }
 
-            Map<int, Duration> reducedTimes = {0: sumA, 1: sumB};
+        Map<int, Duration> reducedTimes = {0: sumA, 1: sumB};
 
-            return FlowShopInput(
-              job.jobId,
-              job.dueDate,
-              job.priority,
-              job.availableDate,
-              [Tuple2(0, 0), Tuple2(1, 1)],
-              reducedTimes,
-            );
-          }).toList();
+        return FlowShopInput(
+          job.jobId,
+          job.dueDate,
+          job.priority,
+          job.availableDate,
+          [Tuple2(0, 0), Tuple2(1, 1)],
+          reducedTimes,
+        );
+      }).toList();
 
       // Aplicamos Johnson sobre trabajos ficticios
       List<FlowShopInput> ordered = _getJohnsonOrderedJobs(tempJobs);
@@ -409,9 +412,9 @@ class FlowShop {
 
       // Convertimos a la secuencia original
       List<FlowShopInput> orderedOriginal =
-          orderedIds
-              .map((id) => inputJobs.firstWhere((job) => job.jobId == id))
-              .toList();
+      orderedIds
+          .map((id) => inputJobs.firstWhere((job) => job.jobId == id))
+          .toList();
 
       // Calculamos el makespan con esa secuencia
       int makespan = _calculateMakespan(orderedOriginal);
@@ -444,12 +447,12 @@ class FlowShop {
     }
 
     conjuntoI.sort(
-      (a, b) => a.taskTimesInMachines[a.taskSequence[0].value1]!.compareTo(
+          (a, b) => a.taskTimesInMachines[a.taskSequence[0].value1]!.compareTo(
         b.taskTimesInMachines[b.taskSequence[0].value1]!,
       ),
     );
     conjuntoII.sort(
-      (a, b) => b.taskTimesInMachines[b.taskSequence[1].value1]!.compareTo(
+          (a, b) => b.taskTimesInMachines[b.taskSequence[1].value1]!.compareTo(
         a.taskTimesInMachines[a.taskSequence[1].value1]!,
       ),
     );
@@ -474,10 +477,10 @@ class FlowShop {
     }
 
     conjuntoI.sort(
-      (a, b) => a.taskTimesInMachines[0]!.compareTo(b.taskTimesInMachines[0]!),
+          (a, b) => a.taskTimesInMachines[0]!.compareTo(b.taskTimesInMachines[0]!),
     );
     conjuntoII.sort(
-      (a, b) => b.taskTimesInMachines[1]!.compareTo(a.taskTimesInMachines[1]!),
+          (a, b) => b.taskTimesInMachines[1]!.compareTo(a.taskTimesInMachines[1]!),
     );
 
     return [...conjuntoI, ...conjuntoII];
@@ -505,9 +508,9 @@ class FlowShop {
         DateTime machineAvailable =
             currentMachineAvailability[machineId] ?? startDate;
         DateTime startTime =
-            jobStartTime.isAfter(machineAvailable)
-                ? jobStartTime
-                : machineAvailable;
+        jobStartTime.isAfter(machineAvailable)
+            ? jobStartTime
+            : machineAvailable;
         startTime = _adjustForWorkingSchedule(startTime);
         DateTime endTime = startTime.add(duration);
         endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
@@ -517,11 +520,210 @@ class FlowShop {
       }
 
       makespanEndTime =
-          jobStartTime.isAfter(makespanEndTime)
-              ? jobStartTime
-              : makespanEndTime;
+      jobStartTime.isAfter(makespanEndTime)
+          ? jobStartTime
+          : makespanEndTime;
     }
 
     return makespanEndTime.difference(startDate).inMinutes;
+  }
+
+  ///////////////////////////////////////////////////
+  ///////////////ALGORITMO GENÉTICO//////////////////
+  ///////////////////////////////////////////////////
+
+  // Busca el mejor orden posible de ejecución de trabajos para minimizar el makespan
+  // en un entorno Flow Shop donde cada trabajo pasa por todas las máquinas en secuencia
+  void scheduleGeneticAlgorithm() {
+    print("EJECUTANDO ALGORITMO GENÉTICO EN FLOW SHOP");
+
+    // Parámetros del algoritmo genético
+    const int populationSize = 50;  // Soluciones por generación
+    const int generations = 100;     // Número de generaciones
+    const double mutationRate = 0.1; // Probabilidad de mutación
+
+    // Inicializar población con secuencias aleatorias
+    List<List<FlowShopInput>> population = _initializePopulation(populationSize);
+
+    // Variables para guardar el mejor individuo encontrado
+    List<FlowShopInput> bestIndividual = [];
+    int bestFitness = double.maxFinite.toInt();
+
+    // Proceso evolutivo
+    for (int generation = 0; generation < generations; generation++) {
+      // Evaluar fitness de cada individuo (makespan)
+      List<Tuple2<List<FlowShopInput>, int>> evaluated = population.map((individual) {
+        return Tuple2(individual, _evaluateFitnessFlowShop(individual));
+      }).toList();
+
+      // Ordenar por fitness (menor makespan es mejor)
+      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
+
+      // Actualizar mejor individuo si se encuentra uno mejor
+      if (evaluated.first.value2 < bestFitness) {
+        bestFitness = evaluated.first.value2;
+        bestIndividual = evaluated.first.value1;
+        print("Generación $generation: Mejor makespan = $bestFitness minutos");
+      }
+
+      // Generar nueva población mediante selección, cruce y mutación
+      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+    }
+
+    // Asignar el mejor orden encontrado y programar los trabajos
+    print("Mejor secuencia encontrada: ${bestIndividual.map((j) => j.jobId).toList()}");
+    print("Makespan óptimo: $bestFitness minutos");
+
+    inputJobs = bestIndividual;
+    _schedule((a, b) => 0); // Asignar trabajos en el orden encontrado
+  }
+
+  // Genera población inicial con secuencias aleatorias de trabajos
+  List<List<FlowShopInput>> _initializePopulation(int size) {
+    List<List<FlowShopInput>> population = [];
+
+    for (int i = 0; i < size; i++) {
+      List<FlowShopInput> shuffled = List.from(inputJobs);
+      shuffled.shuffle(); // Orden aleatorio
+      population.add(shuffled);
+    }
+
+    return population;
+  }
+
+  // Evalúa el fitness (makespan) de una secuencia de trabajos en Flow Shop
+  // El makespan es el tiempo total desde el inicio hasta que termina el último trabajo
+  int _evaluateFitnessFlowShop(List<FlowShopInput> jobSequence) {
+    // Mapa para rastrear cuándo cada máquina estará disponible
+    Map<int, DateTime> machineAvailability = {};
+
+    // Inicializar disponibilidad de todas las máquinas
+    for (var job in jobSequence) {
+      for (var task in job.taskSequence) {
+        int machineId = task.value2;
+        machineAvailability[machineId] = startDate;
+      }
+    }
+
+    DateTime makespanEndTime = startDate;
+
+    // Simular la ejecución de cada trabajo en Flow Shop
+    for (var job in jobSequence) {
+      DateTime jobStartTime = job.availableDate;
+
+      // Cada trabajo pasa por todas sus tareas/máquinas en secuencia
+      for (var task in job.taskSequence) {
+        int taskId = task.value1;
+        int machineId = task.value2;
+        Duration duration = job.taskTimesInMachines[taskId]!;
+
+        // Determinar cuándo puede comenzar esta tarea
+        // Debe esperar a:
+        // 1. Que el trabajo termine su tarea anterior (jobStartTime)
+        // 2. Que la máquina esté disponible (machineAvailability)
+        DateTime machineAvailable = machineAvailability[machineId] ?? startDate;
+        DateTime startTime = jobStartTime.isAfter(machineAvailable)
+            ? jobStartTime
+            : machineAvailable;
+
+        // Ajustar al horario laboral
+        startTime = _adjustForWorkingSchedule(startTime);
+        DateTime endTime = startTime.add(duration);
+        endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
+
+        // Actualizar disponibilidad de la máquina
+        machineAvailability[machineId] = endTime;
+
+        // El siguiente task de este job debe esperar a que termine este
+        jobStartTime = endTime;
+      }
+
+      // Actualizar makespan (tiempo en que termina el último trabajo)
+      if (jobStartTime.isAfter(makespanEndTime)) {
+        makespanEndTime = jobStartTime;
+      }
+    }
+
+    // Retornar el makespan total en minutos
+    return makespanEndTime.difference(startDate).inMinutes;
+  }
+
+  // Genera una nueva población mediante selección, cruce y mutación
+  List<List<FlowShopInput>> _generateNewPopulation(
+      List<Tuple2<List<FlowShopInput>, int>> evaluated,
+      int size,
+      double mutationRate,
+      ) {
+    List<List<FlowShopInput>> newPop = [];
+
+    for (int i = 0; i < size; i++) {
+      // Seleccionar dos padres mediante torneo
+      final parent1 = _selectParent(evaluated);
+      final parent2 = _selectParent(evaluated);
+
+      // Crear hijo mediante cruce
+      List<FlowShopInput> child = _crossover(parent1, parent2);
+
+      // Aplicar mutación con cierta probabilidad
+      if (Random().nextDouble() < mutationRate) {
+        child = _mutate(child);
+      }
+
+      newPop.add(child);
+    }
+
+    return newPop;
+  }
+
+  // Selección por torneo: elige k individuos al azar y retorna el mejor
+  List<FlowShopInput> _selectParent(List<Tuple2<List<FlowShopInput>, int>> evaluated) {
+    int k = 5; // Tamaño del torneo
+
+    // Seleccionar k individuos aleatorios
+    final selected = List.generate(
+        k,
+            (_) => evaluated[Random().nextInt(evaluated.length)]
+    );
+
+    // Ordenar por fitness (menor es mejor)
+    selected.sort((a, b) => a.value2.compareTo(b.value2));
+
+    // Retornar el mejor individuo del torneo
+    return selected.first.value1;
+  }
+
+  // Cruce de orden (Order Crossover - OX): combina dos padres para crear un hijo
+  List<FlowShopInput> _crossover(List<FlowShopInput> p1, List<FlowShopInput> p2) {
+    final length = p1.length;
+
+    // Seleccionar punto de corte aleatorio
+    final int point = Random().nextInt(length);
+
+    // Copiar primera parte del padre 1
+    final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
+
+    // Crear hijo: primera parte de p1 + resto de p2 sin repetir
+    final List<FlowShopInput> child = [
+      ...p1.sublist(0, point),
+      ...p2.where((j) => !jobIds.contains(j.jobId)),
+    ];
+
+    return child;
+  }
+
+  // Mutación por intercambio: cambia de posición dos trabajos aleatorios
+  List<FlowShopInput> _mutate(List<FlowShopInput> individual) {
+    if (individual.length < 2) return individual;
+
+    // Seleccionar dos posiciones aleatorias
+    int i = Random().nextInt(individual.length);
+    int j = Random().nextInt(individual.length);
+
+    // Intercambiar trabajos
+    final temp = individual[i];
+    individual[i] = individual[j];
+    individual[j] = temp;
+
+    return individual;
   }
 }

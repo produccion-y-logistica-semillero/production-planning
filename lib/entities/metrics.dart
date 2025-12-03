@@ -1,12 +1,16 @@
-class Metrics{
+class Metrics {
   final Duration idle;
   final int totalJobs;
   final Duration maxDelay;
   final Duration avarageProcessingTime;
-  final Duration avarageDelayTime;  //delay has to be positive, if it ended before then its 0
-  final Duration avarageLatenessTime;   //latness can be negative
+  final Duration
+      avarageDelayTime; //delay has to be positive, if it ended before then its 0
+  final Duration avarageLatenessTime; //latness can be negative
   final int delayedJobs;
   final double percentageDelayedJobs;
+  final Duration
+      makespan; // Difference between real end time and real start time
+  final Duration totalFlowTime; // Sum of each job's makespan
 
   Metrics({
     required this.idle,
@@ -15,8 +19,8 @@ class Metrics{
     required this.avarageProcessingTime,
     required this.avarageDelayTime,
     required this.avarageLatenessTime,
-    required this.delayedJobs
-  }): percentageDelayedJobs = (delayedJobs/totalJobs)*100;
-
-
+    required this.delayedJobs,
+    required this.makespan,
+    required this.totalFlowTime,
+  }) : percentageDelayedJobs = (delayedJobs / totalJobs) * 100;
 }

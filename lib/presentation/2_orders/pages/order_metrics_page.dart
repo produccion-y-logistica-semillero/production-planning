@@ -72,9 +72,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
           builder: (context, state) {
             if (state is MetricsLoadingState) {
               return Center(
-                child: CircularProgressIndicator(
-                  color: colorScheme.primary,
-                ),
+                child: CircularProgressIndicator(color: colorScheme.primary),
               );
             } else if (state is MetricsErrorState) {
               return Center(
@@ -116,7 +114,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
 
                   final allRuleNames = env != null
                       ? env.rules
-                          .map((r) => r.value2?.toString() ?? 'Sin nombre')
+                          .map((r) => r.value2.toString() ?? 'Sin nombre')
                           .toList()
                       : List.generate(
                           allMetrics.length,
@@ -162,8 +160,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                           Icon(
                             Icons.analytics_outlined,
                             size: 64,
-                            color:
-                                colorScheme.onSurfaceVariant.withOpacity(0.6),
+                            color: colorScheme.onSurfaceVariant.withOpacity(
+                              0.6,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -318,6 +317,26 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                     ),
                                   ),
                                   DataColumn(
+                                    numeric: true,
+                                    label: Text(
+                                      'Makespan',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: Text(
+                                      'Flujo Total',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
                                     label: Text(
                                       'Visualización',
                                       style: TextStyle(
@@ -328,179 +347,196 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   ),
                                 ],
                                 rows: List<DataRow>.generate(
-                                  filteredMetrics.length,
-                                  (index) {
-                                    final m = filteredMetrics[index];
-                                    final isEvenRow = index % 2 == 0;
+                                    filteredMetrics.length, (
+                                  index,
+                                ) {
+                                  final m = filteredMetrics[index];
+                                  final isEvenRow = index % 2 == 0;
 
-                                    return DataRow(
-                                      color: WidgetStateProperty.all(
-                                        isEvenRow
-                                            ? colorScheme.surface
-                                                .withOpacity(0.5)
-                                            : Colors.transparent,
+                                  return DataRow(
+                                    color: WidgetStateProperty.all(
+                                      isEvenRow
+                                          ? colorScheme.surface.withOpacity(0.5)
+                                          : Colors.transparent,
+                                    ),
+                                    cells: [
+                                      DataCell(
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                colorScheme.tertiaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            filteredRuleNames[index],
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                              color: colorScheme
+                                                  .onTertiaryContainer,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                      cells: [
-                                        DataCell(
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  colorScheme.tertiaryContainer,
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              filteredRuleNames[index],
+                                      DataCell(
+                                        Text(
+                                          '${m.idle}',
+                                          style: TextStyle(
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          '${m.totalJobs}',
+                                          style: TextStyle(
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _fmtAverageDelay(m),
+                                          style: TextStyle(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${m.delayedJobs}',
                                               style: TextStyle(
-                                                fontWeight: FontWeight.w500,
+                                                color: m.delayedJobs > 0
+                                                    ? colorScheme.error
+                                                    : colorScheme.onSurface,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            Text(
+                                              '(${m.percentageDelayedJobs.toStringAsFixed(1)}%)',
+                                              style: TextStyle(
                                                 color: colorScheme
-                                                    .onTertiaryContainer,
-                                                fontSize: 12,
+                                                    .onSurfaceVariant,
+                                                fontSize: 11,
                                               ),
                                             ),
+                                          ],
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _formatDuration(m.makespan),
+                                          style: TextStyle(
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        DataCell(
-                                          Text(
-                                            '${m.idle}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          _formatDuration(m.totalFlowTime),
+                                          style: TextStyle(
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        DataCell(
-                                          Text(
-                                            '${m.totalJobs}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            _fmtAverageDelay(m),
-                                            style: TextStyle(
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                '${m.delayedJobs}',
-                                                style: TextStyle(
-                                                  color: m.delayedJobs > 0
-                                                      ? colorScheme.error
-                                                      : colorScheme.onSurface,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              Text(
-                                                '(${m.percentageDelayedJobs.toStringAsFixed(1)}%)',
-                                                style: TextStyle(
-                                                  color: colorScheme
-                                                      .onSurfaceVariant,
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Builder(
-                                            builder: (context) {
-                                              final originalIndex =
-                                                  _visibleToOriginalIndex[
-                                                      index];
+                                      ),
+                                      DataCell(
+                                        Builder(
+                                          builder: (context) {
+                                            final originalIndex =
+                                                _visibleToOriginalIndex[index];
 
-                                              return Wrap(
-                                                spacing: 4,
-                                                runSpacing: 4,
-                                                children: [
-                                                  FilledButton.icon(
-                                                    onPressed: () =>
-                                                        _navigateToGantt(
-                                                            originalIndex),
-                                                    icon: const Icon(
-                                                        Icons.bar_chart,
-                                                        size: 16),
-                                                    label: const Text('Gantt'),
-                                                    style:
-                                                        FilledButton.styleFrom(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 6,
-                                                      ),
-                                                      backgroundColor:
-                                                          colorScheme.tertiary,
-                                                      foregroundColor:
-                                                          colorScheme
-                                                              .onTertiary,
-                                                      textStyle:
-                                                          const TextStyle(
-                                                              fontSize: 12),
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8),
+                                            return Wrap(
+                                              spacing: 4,
+                                              runSpacing: 4,
+                                              children: [
+                                                FilledButton.icon(
+                                                  onPressed: () =>
+                                                      _navigateToGantt(
+                                                    originalIndex,
+                                                  ),
+                                                  icon: const Icon(
+                                                    Icons.bar_chart,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text('Gantt'),
+                                                  style: FilledButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                    backgroundColor:
+                                                        colorScheme.tertiary,
+                                                    foregroundColor:
+                                                        colorScheme.onTertiary,
+                                                    textStyle: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        8,
                                                       ),
                                                     ),
                                                   ),
-                                                  FilledButton.icon(
-                                                    onPressed: () =>
-                                                        _navigateToGanttData(
-                                                            originalIndex),
-                                                    icon: const Icon(
-                                                        Icons.table_chart,
-                                                        size: 16),
-                                                    label:
-                                                        const Text('Detalle'),
-                                                    style:
-                                                        FilledButton.styleFrom(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 6,
-                                                      ),
-                                                      backgroundColor:
-                                                          colorScheme
-                                                              .primaryContainer,
-                                                      foregroundColor: colorScheme
-                                                          .onPrimaryContainer,
-                                                      textStyle:
-                                                          const TextStyle(
-                                                              fontSize: 12),
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8),
+                                                ),
+                                                FilledButton.icon(
+                                                  onPressed: () =>
+                                                      _navigateToGanttData(
+                                                    originalIndex,
+                                                  ),
+                                                  icon: const Icon(
+                                                    Icons.table_chart,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text('Detalle'),
+                                                  style: FilledButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                    backgroundColor: colorScheme
+                                                        .primaryContainer,
+                                                    foregroundColor: colorScheme
+                                                        .onPrimaryContainer,
+                                                    textStyle: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        8,
                                                       ),
                                                     ),
                                                   ),
-                                                ],
-                                              );
-                                            },
-                                          ),
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                      ),
+                                    ],
+                                  );
+                                }),
                               ),
                             ),
                           ),
@@ -525,9 +561,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     const SizedBox(height: 12),
                     Text(
                       'Cargando...',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -540,41 +574,34 @@ class _OrderMetricsState extends State<OrderMetrics> {
   }
 
   void _navigateToGantt(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-    );
+    _ganttBloc.assignOrderAndSelectRuleByIndex(widget.orderId, originalIndex);
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => BlocProvider.value(
           value: _ganttBloc,
-          child: GanttPage(
-            orderId: widget.orderId,
-            number: 1,
-          ),
+          child: GanttPage(orderId: widget.orderId, number: 1),
         ),
       ),
     );
   }
 
   void _navigateToGanttData(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-    );
+    _ganttBloc.assignOrderAndSelectRuleByIndex(widget.orderId, originalIndex);
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => BlocProvider.value(
           value: _ganttBloc,
-          child: GanttDataTablePage(
-            orderId: widget.orderId,
-          ),
+          child: GanttDataTablePage(orderId: widget.orderId),
         ),
       ),
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m ${duration.inSeconds.remainder(60)}s';
   }
 }

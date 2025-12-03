@@ -1,5 +1,6 @@
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 
-class MachineEntity{
+class MachineEntity {
   int? id;
   int? machineTypeId;
   String? status;
@@ -9,6 +10,7 @@ class MachineEntity{
   String name;
   int continueCapacity;
   DateTime? availabilityDateTime;
+  List<MachineInactivityEntity> scheduledInactivities;
 
   MachineEntity({
     this.id,
@@ -20,18 +22,19 @@ class MachineEntity{
     required this.restTime,
     required this.continueCapacity,
     this.availabilityDateTime,
+    this.scheduledInactivities = const [],
   });
 
-  factory MachineEntity.defaultMachine(){
+  factory MachineEntity.defaultMachine() {
     return MachineEntity(
-      status: null, 
-      name: '', 
-      processingTime: Duration.zero, 
-      preparationTime: null, 
-      restTime: null, 
+      status: null,
+      name: '',
+      processingTime: Duration.zero,
+      preparationTime: null,
+      restTime: null,
       continueCapacity: 0,
-      availabilityDateTime: null
+      availabilityDateTime: null,
+      scheduledInactivities: const [],
     );
   }
-
 }

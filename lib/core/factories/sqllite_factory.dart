@@ -1,10 +1,12 @@
 import 'package:production_planning/core/data/db/sqllite_database_provider.dart';
 import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/daos/implementations/machine_dao_sqllite.dart';
+import 'package:production_planning/daos/implementations/machine_inactivity_dao_sqllite.dart';
 import 'package:production_planning/daos/implementations/machine_type_dao_sqllite.dart';
 import 'package:production_planning/daos/implementations/status_dao_sqllite.dart';
 import 'package:production_planning/daos/implementations/task_dependency_dao_sqllite.dart';
 import 'package:production_planning/daos/interfaces/machine_dao.dart';
+import 'package:production_planning/daos/interfaces/machine_inactivity_dao.dart';
 import 'package:production_planning/daos/interfaces/machine_type_dao.dart';
 import 'package:production_planning/daos/interfaces/status_dao.dart';
 import 'package:production_planning/daos/implementations/sequences_dao_sqllite.dart';
@@ -22,8 +24,7 @@ import 'package:production_planning/daos/interfaces/job_dao.dart';
 import 'package:production_planning/daos/interfaces/order_dao.dart';
 import 'package:sqflite/sqflite.dart';
 
-class SqlLiteFactory implements Factory{
-
+class SqlLiteFactory implements Factory {
   final Database db;
   MachineTypeDaoSQLlite? machineTypeDaoSQLlite;
   MachineDaoSqllite? machineDaoSqllite;
@@ -35,11 +36,11 @@ class SqlLiteFactory implements Factory{
   DispatchRulesDao? dispatchRulesDao;
   EnviromentDao? enviromentDao;
   TaskDependencyDao? taskDependencyDao;
-
+  MachineInactivityDaoSqllite? machineInactivityDaoSqllite;
 
   //static factory constructor to perform async operation
-  static Future<SqlLiteFactory> create(String wrkspace) async{
-    Database db = await  SQLLiteDatabaseProvider.open(wrkspace);
+  static Future<SqlLiteFactory> create(String wrkspace) async {
+    Database db = await SQLLiteDatabaseProvider.open(wrkspace);
     return SqlLiteFactory(db);
   }
 
@@ -49,9 +50,15 @@ class SqlLiteFactory implements Factory{
   MachineTypeDao getMachineTypeDao() {
     return machineTypeDaoSQLlite ??= MachineTypeDaoSQLlite(db);
   }
+
   @override
-  MachineDao getMachineDao(){ 
+  MachineDao getMachineDao() {
     return machineDaoSqllite ??= MachineDaoSqllite(db);
+  }
+
+  @override
+  MachineInactivityDao getMachineInactivityDao() {
+    return machineInactivityDaoSqllite ??= MachineInactivityDaoSqllite(db);
   }
 
   @override
@@ -66,7 +73,7 @@ class SqlLiteFactory implements Factory{
 
   @override
   StatusDao getStatusDao() {
-     return statusDaoSqllite ??= StatusDaoSqllite(db);
+    return statusDaoSqllite ??= StatusDaoSqllite(db);
   }
 
   @override
@@ -78,16 +85,17 @@ class SqlLiteFactory implements Factory{
   OrderDao getOrderDao() {
     return orderDaoSqlLite ??= OrderDaoSqlLite(db);
   }
-  
+
   @override
   DispatchRulesDao getDispatchRulesDao() {
     return dispatchRulesDao ??= DispatchRulesDaoSqllite(db);
   }
-  
+
   @override
   EnviromentDao getEnviromentDao() {
     return enviromentDao ??= EnviromentDaoSqllite(db);
   }
+
   @override
   TaskDependencyDao getTaskDependencyDao() {
     return taskDependencyDao ??= TaskDependencyDaoSqllite(db);

@@ -31,7 +31,10 @@ class NewOrderPage extends StatelessWidget {
                     return AlertDialog(
                       title: Text(
                         state.justSaved! ? "Guardado!!" : "Error",
-                        style: TextStyle(color: state.justSaved! ? colorScheme.primary : colorScheme.error),
+                        style: TextStyle(
+                            color: state.justSaved!
+                                ? colorScheme.primary
+                                : colorScheme.error),
                       ),
                       content: Text(
                         state.justSaved!
@@ -41,7 +44,6 @@ class NewOrderPage extends StatelessWidget {
                       actions: [
                         TextButton(
                           onPressed: () {
-
                             Navigator.of(subcontext).pop(); // cierra el diálogo
                             // Siempre regresar con el resultado del guardado
 
@@ -73,12 +75,12 @@ class NewOrderPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        IconButton(onPressed: ()=>printInfo(context,
-                            title: 'Crear orden',
-                            content: 'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de "produccion empanadas"'
-                        ),
-                            icon: const Icon(Icons.info)
-                        )
+                        IconButton(
+                            onPressed: () => printInfo(context,
+                                title: 'Crear orden',
+                                content:
+                                    'La creacion de una orden implica seleccionar los productos que deben ser fabricados, la prioridad que se tiene para fabricarlos, desde cuando se tiene la disponibilidad para fabricarlos (por ejemplo, por insumos), y cual es la fecha limite.\n\nUn producto esta relacionado con una secuencia, pues una secuencia es la secuencia de produccion para producir un producto por ejemplo, una orden puede contener:\n\n100(cantidad) empanadas, se tendran los insumos dentro de 3 dias (fecha de disponibilidad), y la fecha de entrega es dentro de 8 dias (fehca de finalizacion), la prioridad que se tiene de cumplir con esto es de 5(osea, 5 veces mas importante que una de 1), y la secuencia sobre la cual se basa esto es la secuencia de "produccion empanadas"'),
+                            icon: const Icon(Icons.info))
                       ],
                     ),
                     Expanded(
@@ -93,7 +95,8 @@ class NewOrderPage extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.primary,
                         foregroundColor: colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -114,7 +117,8 @@ class NewOrderPage extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.secondary,
                         foregroundColor: colorScheme.onSecondary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -154,7 +158,8 @@ class NewOrderPage extends StatelessWidget {
             "Campos Incompletos",
             style: TextStyle(color: colorScheme.error),
           ),
-          content: const Text("Asegúrese de llenar todos los campos de todos los jobs antes de crear el programa de producción."),
+          content: const Text(
+              "Asegúrese de llenar todos los campos de todos los jobs antes de crear el programa de producción."),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(subcontext).pop(),

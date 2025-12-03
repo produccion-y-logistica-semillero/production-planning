@@ -6,6 +6,7 @@ import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metr
 import 'package:production_planning/repositories/implementations/machine_repository_impl.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_cubit.dart';
 import 'package:production_planning/repositories/implementations/sequences_repository_impl.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
@@ -24,7 +25,6 @@ final depIn = GetIt.instance;
 TimeOfDay START_SCHEDULE = const TimeOfDay(hour: 8, minute: 0);
 TimeOfDay END_SCHEDULE = const TimeOfDay(hour: 17, minute: 0);
 
-
 Future<void> initDependencies(String workspace) async {
   try {
     // Initialize the sqflite FFI loader for desktop platforms
@@ -37,71 +37,54 @@ Future<void> initDependencies(String workspace) async {
     //creating DAO's factory
     final Factory daoFactory = await SqlLiteFactory.create(workspace);
 
-
     //repositories
-    final machineRepo   = MachineRepositoryImpl(
+    final machineRepo = MachineRepositoryImpl(
       machineTypeDao: daoFactory.getMachineTypeDao(),
-      machineDao:  daoFactory.getMachineDao(),
-      statusDao: daoFactory.getStatusDao()
+      machineDao: daoFactory.getMachineDao(),
+      statusDao: daoFactory.getStatusDao(),
+      machineInactivityDao: daoFactory.getMachineInactivityDao(),
     );
-    final sequencesRepo =  SequencesRepositoryImpl(
-      sequencesDao: daoFactory.getSequenceDao(), 
-      tasksDao: daoFactory.getTaskDao(),
-      machineTypeDao: daoFactory.getMachineTypeDao()
-      ,taskDependencyDao: daoFactory.getTaskDependencyDao()
-    );
+    final sequencesRepo = SequencesRepositoryImpl(
+        sequencesDao: daoFactory.getSequenceDao(),
+        tasksDao: daoFactory.getTaskDao(),
+        machineTypeDao: daoFactory.getMachineTypeDao(),
+        taskDependencyDao: daoFactory.getTaskDependencyDao());
     final ordersRepo = OrderRepositoryImpl(
-      orderDao: daoFactory.getOrderDao(), 
-      jobDao: daoFactory.getJobDao(),
-      enviromentDao: daoFactory.getEnviromentDao(),
-      dispatchRulesDao: daoFactory.getDispatchRulesDao(),
-      sequencesDao: daoFactory.getSequenceDao(),
-      tasksDao: daoFactory.getTaskDao()
-      ,taskDependencyDao: daoFactory.getTaskDependencyDao()
-    );
-  
+        orderDao: daoFactory.getOrderDao(),
+        jobDao: daoFactory.getJobDao(),
+        enviromentDao: daoFactory.getEnviromentDao(),
+        dispatchRulesDao: daoFactory.getDispatchRulesDao(),
+        sequencesDao: daoFactory.getSequenceDao(),
+        tasksDao: daoFactory.getTaskDao(),
+        taskDependencyDao: daoFactory.getTaskDependencyDao());
+
     //services
     final machinesService = MachinesService(machineRepo);
     final ordersService = OrdersService(ordersRepo, machineRepo);
     final seqService = SequencesService(sequencesRepo);
-    
 
     //Bloc
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
-    depIn.registerFactory<MachineBloc>(
-      ()=> MachineBloc(machinesService)
-    );
+    depIn.registerFactory<MachineBloc>(() => MachineBloc(machinesService));
     depIn.registerFactory<MachineTypesBloc>(
-      ()=> MachineTypesBloc(machinesService)
+        () => MachineTypesBloc(machinesService));
+    depIn.registerFactory<MachineInactivitiesCubit>(
+      () => MachineInactivitiesCubit(machinesService),
     );
     depIn.registerFactory<SequencesBloc>(
-      ()=> SequencesBloc(seqService, machinesService)
-    );
-    depIn.registerFactory<SeeProcessBloc>(
-      ()=> SeeProcessBloc(seqService)
-    );
+        () => SequencesBloc(seqService, machinesService));
+    depIn.registerFactory<SeeProcessBloc>(() => SeeProcessBloc(seqService));
 
     //Bloc orders
-    depIn.registerFactory<OrderBloc>(
-      ()=> OrderBloc(ordersService)
-    );
+    depIn.registerFactory<OrderBloc>(() => OrderBloc(ordersService));
     depIn.registerFactory<NewOrderBloc>(
-      ()=> NewOrderBloc(ordersService, seqService)
-    );
-    depIn.registerFactory<GanttBloc>(
-      ()=> GanttBloc(ordersService)
-    );
+        () => NewOrderBloc(ordersService, seqService, machinesService));
+    depIn.registerFactory<GanttBloc>(() => GanttBloc(ordersService));
 
-    depIn.registerFactory<TaskBloc>(
-      ()=> TaskBloc(ordersRepo)
-    );
+    depIn.registerFactory<TaskBloc>(() => TaskBloc(ordersRepo));
 
-    depIn.registerFactory<MetricsBloc>(
-      ()=> MetricsBloc(ordersService)
-    );
-    
-  }
-  catch(e){
+    depIn.registerFactory<MetricsBloc>(() => MetricsBloc(ordersService));
+  } catch (e) {
     //to implement file logging later if needed
   }
 }

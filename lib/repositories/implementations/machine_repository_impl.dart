@@ -7,6 +7,7 @@ import 'package:production_planning/daos/interfaces/status_dao.dart';
 import 'package:production_planning/repositories/models/machine_type_model.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 
@@ -121,16 +122,70 @@ class MachineRepositoryImpl implements MachineRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, bool>> updateMachineTimesByType(
+    int machineTypeId,
+    MachineStandardTimes times,
+  ) async {
+    try {
+      final machines = await machineDao.getMachinesByType(machineTypeId);
+      bool updated = false;
+
+      final processing = _durationToSqlTime(times.processing);
+      final preparation = _durationToSqlTime(times.preparation);
+      final rest = _durationToSqlTime(times.rest);
+
+      final values = <String, dynamic>{
+        'processing_time': processing,
+        'preparation_time': preparation,
+        'rest_time': rest,
+      }..removeWhere((key, value) => value == null);
+
+      for (final machine in machines) {
+        final id = machine['machine_id'];
+        if (id == null) continue;
+        final result = await machineDao.updateMachine(id as int, values);
+        updated = updated || result;
+      }
+
+      return Right(updated);
+    } on Failure catch (failure) {
+      return Left(failure);
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> updateMachineTimes(
+    int machineId,
+    MachineStandardTimes times,
+  ) async {
+    try {
+      final processing = _durationToSqlTime(times.processing);
+      final preparation = _durationToSqlTime(times.preparation);
+      final rest = _durationToSqlTime(times.rest);
+
+      final updated = await machineDao.updateMachine(machineId, {
+        'processing_time': processing,
+        if (preparation != null) 'preparation_time': preparation,
+        if (rest != null) 'rest_time': rest,
+      });
+
+      return Right(updated);
+    } on Failure catch (failure) {
+      return Left(failure);
+    }
+  }
+
    Future<Map<String, dynamic>> machineEntityToJson(MachineEntity entity)async {
-    final proccesing = '${entity.processingTime.inHours.toString().padLeft(2, '0')}:${(entity.processingTime.inMinutes - (entity.processingTime.inHours*60)).toString().padLeft(2, '0')}:00';
-    final preparation = entity.preparationTime != null ? '${entity.preparationTime!.inHours.toString().padLeft(2, '0')}:${(entity.preparationTime!.inMinutes- (entity.preparationTime!.inHours*60)).toString().padLeft(2, '0')}:00': null;
+    final processing = _durationToSqlTime(entity.processingTime)!;
+    final preparation = _durationToSqlTime(entity.preparationTime);
     final rest = _durationToSqlTime(entity.restTime);
     return {
       "machine_type_id"   : entity.machineTypeId,
       "machine_name" : entity.name,
       "status_id"         : entity.status != null ? await statusDao.getIdByName(entity.status) : await statusDao.getDefaultStatusId(),
-      "processing_time"   : '1970-01-01 $proccesing',
-      "preparation_time"  : preparation != null ? '1970-01-01 $preparation' : null,
+      "processing_time"   : processing,
+      "preparation_time"  : preparation,
       "rest_time"         : rest,
       "continue_capacity" : entity.continueCapacity,
       "availability_time" : entity.availabilityDateTime.toString()
@@ -141,7 +196,8 @@ class MachineRepositoryImpl implements MachineRepository {
     final rest = map["rest_time"] != null
         ? Duration(
             hours: int.parse(map["rest_time"].toString().substring(11, 13)),
-            minutes: int.parse(map["rest_time"].toString().substring(14, 16)))
+            minutes: int.parse(map["rest_time"].toString().substring(14, 16)),
+            seconds: int.parse(map["rest_time"].toString().substring(17, 19)))
         : null;
     final scheduled = await _getMachineInactivities(map["machine_id"]);
     return MachineEntity(
@@ -150,11 +206,13 @@ class MachineRepositoryImpl implements MachineRepository {
       status: await statusDao.getNameById(map["status_id"]),
       processingTime: Duration(
         hours: int.parse(map["processing_time"].toString().substring(11, 13)),
-        minutes: int.parse(map["processing_time"].toString().substring(14, 16))
+        minutes: int.parse(map["processing_time"].toString().substring(14, 16)),
+        seconds: int.parse(map["processing_time"].toString().substring(17, 19)),
       ),
       preparationTime: map["preparation_time"] != null ? Duration(
         hours: int.parse(map["preparation_time"].toString().substring(11, 13)),
-        minutes: int.parse(map["preparation_time"].toString().substring(14, 16))
+        minutes: int.parse(map["preparation_time"].toString().substring(14, 16)),
+        seconds: int.parse(map["preparation_time"].toString().substring(17, 19)),
       ) : null,
       restTime: rest,
       continueCapacity: map["continue_capacity"],
@@ -172,8 +230,13 @@ class MachineRepositoryImpl implements MachineRepository {
   String? _durationToSqlTime(Duration? duration) {
     if (duration == null) return null;
     final hours = duration.inHours.toString().padLeft(2, '0');
-    final minutes = (duration.inMinutes - (duration.inHours * 60)).toString().padLeft(2, '0');
-    return '1970-01-01 $hours:$minutes:00';
+    final minutes = (duration.inMinutes - (duration.inHours * 60))
+        .toString()
+        .padLeft(2, '0');
+    final seconds = (duration.inSeconds - (duration.inMinutes * 60))
+        .toString()
+        .padLeft(2, '0');
+    return '1970-01-01 $hours:$minutes:$seconds';
   }
 
   @override

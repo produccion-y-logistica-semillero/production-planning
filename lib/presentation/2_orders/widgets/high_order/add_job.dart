@@ -47,8 +47,8 @@ class AddJobState extends State<AddJobWidget> {
   SequenceEntity? _sequenceDetails;
   bool _loadingStations = false;
   final Map<int, List<MachineEntity>> _machinesByType = {};
-  final Map<int, MachineEntity?> _selectedMachines = {};
-  final Map<int, MachineStandardTimes> _stationTimes = {};
+  final Map<String, MachineEntity?> _selectedMachines = {};
+  final Map<String, MachineStandardTimes> _stationTimes = {};
 
   @override
   void initState() {
@@ -113,8 +113,10 @@ class AddJobState extends State<AddJobWidget> {
     if (sequence != null) {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
-      final Map<int, MachineStandardTimes> initialTimes = {};
-      for (final task in tasks) {
+      final Map<String, MachineStandardTimes> initialTimes = {};
+      for (final entry in tasks.asMap().entries) {
+        final task = entry.value;
+        final stationKey = _stationKey(task, entry.key);
         final current = bloc.getStandardTimesForType(task.machineTypeId);
         // Si ya hay tiempos estándar ajustados para el tipo de máquina,
         // úsalo como base; de lo contrario, conserva el tiempo de la tarea
@@ -125,11 +127,8 @@ class AddJobState extends State<AddJobWidget> {
                 : task.processingUnits;
 
         final updated = current.copyWith(processing: processingTime);
-        initialTimes[task.machineTypeId] = updated;
+        initialTimes[stationKey] = updated;
       }
-      initialTimes.forEach((key, value) {
-        bloc.updateStandardTimesForType(key, value);
-      });
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
@@ -140,14 +139,7 @@ class AddJobState extends State<AddJobWidget> {
         if (!mounted) return;
         final Map<int, List<MachineEntity>> machinesMap = {};
         for (final entry in results) {
-          final times = initialTimes[entry.value1];
-          if (times != null) {
-            machinesMap[entry.value1] = entry.value2
-                .map((machine) => _applyStandardTimes(machine, times))
-                .toList();
-          } else {
-            machinesMap[entry.value1] = entry.value2;
-          }
+          machinesMap[entry.value1] = entry.value2;
         }
         setState(() {
           _sequenceDetails = sequence;
@@ -297,11 +289,44 @@ class AddJobState extends State<AddJobWidget> {
               ),
             if (!_loadingStations &&
                 (_sequenceDetails?.tasks?.isNotEmpty ?? false))
-              ..._sequenceDetails!.tasks!.map(_buildStationRow),
+              ..._sequenceDetails!.tasks!
+                  .asMap()
+                  .entries
+                  .map((entry) => _buildStationRow(entry.key, entry.value)),
           ],
         ),
       ),
     );
+  }
+
+  MachineEntity _machineWithTimes(
+    MachineEntity machine,
+    MachineStandardTimes times,
+  ) {
+    return MachineEntity(
+      id: machine.id,
+      machineTypeId: machine.machineTypeId,
+      status: machine.status,
+      processingTime: times.processing,
+      preparationTime: times.preparation ?? machine.preparationTime,
+      restTime: times.rest ?? machine.restTime,
+      name: machine.name,
+      continueCapacity: machine.continueCapacity,
+      availabilityDateTime: machine.availabilityDateTime,
+      scheduledInactivities: machine.scheduledInactivities,
+    );
+  }
+
+  void _updateSelectedMachineTimes(
+    String stationKey,
+    MachineStandardTimes times,
+  ) {
+    final selected = _selectedMachines[stationKey];
+    if (selected == null) return;
+
+    setState(() {
+      _selectedMachines[stationKey] = _machineWithTimes(selected, times);
+    });
   }
 
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
@@ -371,11 +396,12 @@ class AddJobState extends State<AddJobWidget> {
     );
   }
 
-  Widget _buildStationRow(TaskEntity task) {
+  Widget _buildStationRow(int taskIndex, TaskEntity task) {
     final machineTypeId = task.machineTypeId;
+    final stationKey = _stationKey(task, taskIndex);
     final machineOptions =
         _machinesByType[machineTypeId] ?? const <MachineEntity>[];
-    final selectedMachine = _selectedMachines[machineTypeId];
+    final selectedMachine = _selectedMachines[stationKey];
     final defaultLabel = _stationLabel(task);
 
     return Padding(
@@ -386,7 +412,8 @@ class AddJobState extends State<AddJobWidget> {
             child: OutlinedButton(
               onPressed: machineOptions.isEmpty
                   ? null
-                  : () => _showMachineSelectionDialog(task, machineOptions),
+                  : () =>
+                      _showMachineSelectionDialog(task, machineOptions, taskIndex: taskIndex),
               style: OutlinedButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -394,7 +421,9 @@ class AddJobState extends State<AddJobWidget> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  selectedMachine?.name ?? defaultLabel,
+                  selectedMachine != null
+                      ? '${task.description} · ${selectedMachine.name}'
+                      : defaultLabel,
                   style: TextStyle(
                     color: machineOptions.isEmpty
                         ? Theme.of(context).colorScheme.onSurfaceVariant
@@ -406,8 +435,8 @@ class AddJobState extends State<AddJobWidget> {
           ),
           const SizedBox(width: 12),
           IconButton(
-            onPressed: _stationTimes.containsKey(machineTypeId)
-                ? () => _showStationTimeDialog(task, machineTypeId)
+            onPressed: _stationTimes.containsKey(stationKey)
+                ? () => _showStationTimeDialog(task, stationKey)
                 : null,
             icon: const Icon(Icons.schedule_outlined),
             color: Theme.of(context).colorScheme.primary,
@@ -418,34 +447,43 @@ class AddJobState extends State<AddJobWidget> {
   }
 
   String _stationLabel(TaskEntity task) {
+    final process = task.description.trim();
     final name = task.machineName?.trim();
     if (name == null || name.isEmpty) {
-      return 'Estación de trabajo';
+      return process;
     }
-    final normalized = name.toLowerCase();
-    if (normalized.startsWith('estación')) {
-      return name;
-    }
-    return 'Estación de ${normalized}';
+
+    return '$process · $name';
   }
 
   Future<void> _showMachineSelectionDialog(
-      TaskEntity task, List<MachineEntity> options) async {
+      TaskEntity task, List<MachineEntity> options,
+      {required int taskIndex}) async {
+    final stationKey = _stationKey(task, taskIndex);
     final selected = await showDialog<MachineEntity>(
       context: context,
       builder: (dialogContext) {
+        final stationTimes = _stationTimes[stationKey];
+        final optionsWithTimes = stationTimes == null
+            ? options
+            : options
+                .map((machine) => _machineWithTimes(machine, stationTimes))
+                .toList();
         return AlertDialog(
           title: Text(
-              'Selecciona máquina para ${task.machineName ?? 'la estación'}'),
+            'Selecciona máquina para ${task.description}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: double.maxFinite,
             child: options.isEmpty
                 ? const Text('No hay máquinas registradas para esta estación.')
                 : ListView.builder(
                     shrinkWrap: true,
-                    itemCount: options.length,
+                    itemCount: optionsWithTimes.length,
                     itemBuilder: (context, index) {
-                      final machine = options[index];
+                      final machine = optionsWithTimes[index];
                       return ListTile(
                         title: Text(machine.name),
                         subtitle: Text(
@@ -467,25 +505,26 @@ class AddJobState extends State<AddJobWidget> {
 
     if (!mounted || selected == null) return;
 
-    final bloc = context.read<NewOrderBloc>();
     setState(() {
-      _selectedMachines[task.machineTypeId] = selected;
-      final fallback = _stationTimes[task.machineTypeId];
+      final fallback = _stationTimes[stationKey];
       final updated = MachineStandardTimes.fromMachine(
         selected,
         fallback: fallback,
       );
-      _stationTimes[task.machineTypeId] = updated;
-      bloc.updateStandardTimesForType(task.machineTypeId, updated);
-      _syncStandardTimesToMachines(task.machineTypeId, updated);
+      final merged = fallback == null
+          ? updated
+          : updated.copyWith(processing: fallback.processing);
+      _stationTimes[stationKey] = merged;
+      _selectedMachines[stationKey] = _machineWithTimes(selected, merged);
     });
   }
 
-  Future<void> _showStationTimeDialog(
-      TaskEntity task, int machineTypeId) async {
+  Future<void> _showStationTimeDialog(TaskEntity task, String stationKey) async {
     final bloc = context.read<NewOrderBloc>();
-    MachineStandardTimes localTimes = _stationTimes[machineTypeId] ??
-        bloc.getStandardTimesForType(machineTypeId);
+    MachineStandardTimes localTimes = _stationTimes[stationKey] ??
+        bloc.getStandardTimesForType(task.machineTypeId);
+    final selectedMachine = _selectedMachines[stationKey];
+    final machineLabel = (selectedMachine?.name ?? task.machineName ?? '').trim();
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -503,22 +542,41 @@ class AddJobState extends State<AddJobWidget> {
                 setDialogState(() {});
                 if (mounted) {
                   setState(() {
-                    _stationTimes[machineTypeId] = localTimes;
+                    _stationTimes[stationKey] = localTimes;
                   });
-                  bloc.updateStandardTimesForType(machineTypeId, localTimes);
-                  _syncStandardTimesToMachines(machineTypeId, localTimes);
                 }
+                _updateSelectedMachineTimes(stationKey, localTimes);
               }
             }
 
             return AlertDialog(
-              title: Text(task.machineName ?? 'Estación'),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    task.description,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (machineLabel.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        machineLabel,
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelLarge
+                            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildTimeOption(
                     title:
-                        'El tiempo de procesamiento estándar de esta máquina para este trabajo es de:',
+                        'Tiempo estándar de procesamiento para este proceso y estación:',
                     duration: localTimes.processing,
                     onPressed: () => updateTime(
                       (times) => times.processing,
@@ -527,7 +585,7 @@ class AddJobState extends State<AddJobWidget> {
                   ),
                   _buildTimeOption(
                     title:
-                        'El tiempo estándar de preparación de esta máquina para este trabajo es de:',
+                        'Tiempo estándar de preparación para este proceso y estación:',
                     duration: localTimes.preparation,
                     onPressed: () => updateTime(
                       (times) => times.preparation,
@@ -536,7 +594,7 @@ class AddJobState extends State<AddJobWidget> {
                   ),
                   _buildTimeOption(
                     title:
-                        'El tiempo estándar de descanso de esta máquina para este trabajo es de:',
+                        'Tiempo estándar de descanso para este proceso y estación:',
                     duration: localTimes.rest,
                     onPressed: () => updateTime(
                       (times) => times.rest,
@@ -551,14 +609,28 @@ class AddJobState extends State<AddJobWidget> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (mounted) {
                       setState(() {
-                        _stationTimes[machineTypeId] = localTimes;
+                        _stationTimes[stationKey] = localTimes;
                       });
                     }
-                    bloc.updateStandardTimesForType(machineTypeId, localTimes);
-                    _syncStandardTimesToMachines(machineTypeId, localTimes);
+
+                    final machineId = selectedMachine?.id;
+                    if (machineId != null) {
+                      await bloc.updateMachineTimes(
+                        machineId: machineId,
+                        machineTypeId: task.machineTypeId,
+                        times: localTimes,
+                      );
+                    } else {
+                      await bloc.updateStandardTimesForType(
+                        task.machineTypeId,
+                        localTimes,
+                      );
+                    }
+
+                    _updateSelectedMachineTimes(stationKey, localTimes);
                     Navigator.of(dialogContext).pop();
                   },
                   child: const Text('Aceptar'),
@@ -569,36 +641,6 @@ class AddJobState extends State<AddJobWidget> {
         );
       },
     );
-  }
-
-  MachineEntity _applyStandardTimes(
-    MachineEntity machine,
-    MachineStandardTimes times,
-  ) {
-    machine.processingTime = times.processing;
-    machine.preparationTime = times.preparation ?? machine.preparationTime;
-    machine.restTime = times.rest ?? machine.restTime;
-    return machine;
-  }
-
-  void _syncStandardTimesToMachines(
-    int machineTypeId,
-    MachineStandardTimes times,
-  ) {
-    final machines = _machinesByType[machineTypeId];
-    if (machines == null) return;
-
-    setState(() {
-      final updatedMachines = machines
-          .map((machine) => _applyStandardTimes(machine, times))
-          .toList();
-      _machinesByType[machineTypeId] = updatedMachines;
-
-      final selected = _selectedMachines[machineTypeId];
-      if (selected != null) {
-        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
-      }
-    });
   }
 
   Widget _buildTimeOption(
@@ -689,6 +731,11 @@ class AddJobState extends State<AddJobWidget> {
     final minutes = duration.inMinutes % 60;
     final seconds = duration.inSeconds % 60;
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _stationKey(TaskEntity task, int index) {
+    final process = task.description.replaceAll(' ', '_');
+    return '${task.id ?? index}-${task.machineTypeId}-$process';
   }
 }
 

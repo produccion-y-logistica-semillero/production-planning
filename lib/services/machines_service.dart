@@ -9,6 +9,7 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 class MachinesService {
   final MachineRepository repository;
   final Map<int, MachineStandardTimes> _standardTimesCache = {};
+  final Map<int, MachineStandardTimes> _machineOverrides = {};
 
   MachinesService(this.repository);
 
@@ -77,7 +78,7 @@ class MachinesService {
                 rest: fallback.rest ?? candidate.rest,
               );
       }
-      return machines;
+      return machines.map(_applyOverrides).toList();
     });
   }
 
@@ -85,8 +86,50 @@ class MachinesService {
     return _standardTimesCache[machineTypeId] ?? MachineStandardTimes.defaults();
   }
 
-  void updateStandardTimesForType(int machineTypeId, MachineStandardTimes times) {
+  Future<void> updateStandardTimesForType(
+    int machineTypeId,
+    MachineStandardTimes times,
+  ) async {
     _standardTimesCache[machineTypeId] = times;
+    await repository.updateMachineTimesByType(machineTypeId, times);
+  }
+
+  Future<Either<Failure, bool>> updateMachineTimes({
+    required int machineId,
+    required MachineStandardTimes times,
+    int? machineTypeId,
+  }) async {
+    _machineOverrides[machineId] = times;
+
+    if (machineTypeId != null && _standardTimesCache.containsKey(machineTypeId)) {
+      final cached = _standardTimesCache[machineTypeId]!;
+      _standardTimesCache[machineTypeId] = cached.copyWith(
+        processing: times.processing,
+        preparation: times.preparation ?? cached.preparation,
+        rest: times.rest ?? cached.rest,
+      );
+    }
+
+    return repository.updateMachineTimes(machineId, times);
+  }
+
+  MachineEntity _applyOverrides(MachineEntity machine) {
+    final override =
+        machine.id != null ? _machineOverrides[machine.id!] : null;
+    if (override == null) return machine;
+
+    return MachineEntity(
+      id: machine.id,
+      machineTypeId: machine.machineTypeId,
+      status: machine.status,
+      name: machine.name,
+      processingTime: override.processing,
+      preparationTime: override.preparation ?? machine.preparationTime,
+      restTime: override.rest ?? machine.restTime,
+      continueCapacity: machine.continueCapacity,
+      availabilityDateTime: machine.availabilityDateTime,
+      scheduledInactivities: machine.scheduledInactivities,
+    );
   }
 
   Future<Either<Failure, bool>> updateAutomaticInactivity({

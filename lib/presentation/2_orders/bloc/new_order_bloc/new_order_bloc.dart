@@ -106,8 +106,23 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     return machinesService.getStandardTimesForType(machineTypeId);
   }
 
-  void updateStandardTimesForType(int machineTypeId, MachineStandardTimes times) {
-    machinesService.updateStandardTimesForType(machineTypeId, times);
+  Future<void> updateStandardTimesForType(
+    int machineTypeId,
+    MachineStandardTimes times,
+  ) async {
+    await machinesService.updateStandardTimesForType(machineTypeId, times);
+  }
+
+  Future<void> updateMachineTimes({
+    required int machineId,
+    required MachineStandardTimes times,
+    int? machineTypeId,
+  }) async {
+    await machinesService.updateMachineTimes(
+      machineId: machineId,
+      times: times,
+      machineTypeId: machineTypeId,
+    );
   }
 
   Future<void> saveOrder() async {

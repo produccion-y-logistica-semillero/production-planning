@@ -12,7 +12,6 @@ import 'package:production_planning/shared/functions/functions.dart';
 import '../../entities/machine_entity.dart';
 
 class ParallelMachineAdapter {
-
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
 
@@ -21,35 +20,37 @@ class ParallelMachineAdapter {
     required this.machineRepository,
   });
 
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(int orderId, String rule) async {
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
+      int orderId, String rule) async {
     //getting full order
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) =>null, (or) => or);
+    OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
     if (order == null) return null;
 
     //we get all machines from this machine type
     int machineTypeid = order.orderJobs![0].sequence!.tasks![0].machineTypeId;
-    final responseMachines = await machineRepository.getAllMachinesFromType(machineTypeid);
-    List<MachineEntity>? machineEntities = responseMachines.fold((f)=>null, (machines) => machines);
-    if (machineEntities == null) return null;
+    final responseMachines =
+        await machineRepository.getAllMachinesFromType(machineTypeid);
+    List<MachineEntity>? machineEntities =
+        responseMachines.fold((f) => null, (machines) => machines);
 
-    //we create the input 
+    //we create the input
     final List<ParallelInput> inputJobs = [];
-    for(final job in order.orderJobs!){
-      Map<int, Duration> durationsInMachines= {};
+    for (final job in order.orderJobs!) {
+      Map<int, Duration> durationsInMachines = {};
       //we get the duration it would take on each machine and add it to the map
-      for(final machine in machineEntities){
+      for (final machine in machineEntities!) {
         final task = job.sequence!.tasks![0];
-        durationsInMachines[machine.id!] = ruleOf3(machine.processingTime, task.processingUnits);
+        durationsInMachines[machine.id!] =
+            ruleOf3(machine.processingTime, task.processingUnits);
       }
-      inputJobs.add(ParallelInput(
-        job.jobId!, job.dueDate, job.priority, job.availableDate, durationsInMachines)
-      );
-    } 
+      inputJobs.add(ParallelInput(job.jobId!, job.dueDate, job.priority,
+          job.availableDate, durationsInMachines));
+    }
 
     //we create an the empy input struct for machines
     final Map<int, List<Tuple2<DateTime, DateTime>>> machines = {};
-    for(final machine in machineEntities){
+    for (final machine in machineEntities!) {
       machines[machine.id!] = [];
     }
 
@@ -66,7 +67,7 @@ class ParallelMachineAdapter {
     final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
     for (var out in output) {
       final job = order.orderJobs!.firstWhere((job) => job.jobId == out.jobId);
-      final jobSequence =job.sequence!;
+      final jobSequence = job.sequence!;
       final task = PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
@@ -87,15 +88,17 @@ class ParallelMachineAdapter {
 
     final List<PlanningMachineEntity> machinesResult = machineTasksMap.entries
         .map((entry) => PlanningMachineEntity(
-            entry.key,
-            machineEntities.where((m)=>m.id == entry.key).first.name,
-            entry.value,
-          ))
+              entry.key,
+              machineEntities.where((m) => m.id == entry.key).first.name,
+              entry.value,
+            ))
         .toList();
 
     final metrics = getMetricts(
       machinesResult,
-      output.map((out) => Tuple3(out.startDate, out.endDate, out.dueDate)).toList(),
+      output
+          .map((out) => Tuple3(out.startDate, out.endDate, out.dueDate))
+          .toList(),
     );
 
     return Tuple2(machinesResult, metrics);

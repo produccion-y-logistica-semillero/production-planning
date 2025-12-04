@@ -1,4 +1,5 @@
 
+
 import 'package:production_planning/entities/job_entity.dart';
 
 class JobModel {
@@ -8,9 +9,10 @@ class JobModel {
   final DateTime dueDate;
   final DateTime availableDate;
   final int priority;
+  final Map<int, int>? preemptionMatrix;
 
   JobModel(
-      this.jobId, this.sequenceId, this.amount, this.dueDate, this.priority, this.availableDate);
+      this.jobId, this.sequenceId, this.amount, this.dueDate, this.priority, this.availableDate, {this.preemptionMatrix});
 
 
   factory JobModel.fromJson(Map<String, dynamic> json) {
@@ -32,7 +34,9 @@ class JobModel {
       amount,
       dueDate,
       priority,
-      availableDate
+      availableDate,
+      preemptionMatrix: preemptionMatrix
     );
   }
 }
+

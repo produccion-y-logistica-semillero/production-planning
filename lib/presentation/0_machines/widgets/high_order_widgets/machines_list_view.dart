@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 
 // Changed to StatefulWidget to manage list expanded state 
 class MachinesListView extends StatefulWidget {
@@ -223,6 +225,14 @@ class _MachinesListViewState extends State<MachinesListView> {
     final TextEditingController availabilityDateTimeController = TextEditingController();
     final TextEditingController quantityController = TextEditingController(text: "1"); // default 1
 
+    double? parsePercentage(String text) {
+      final normalized = text.replaceAll(',', '.').trim();
+      if (normalized.isEmpty) {
+        return null;
+      }
+      return double.tryParse(normalized);
+    }
+
     await showDialog(
       context: context,
       builder: (dialogContext) {
@@ -237,17 +247,25 @@ class _MachinesListViewState extends State<MachinesListView> {
           quantityController: quantityController,
           addMachineHandle: () async {
           final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
+          final processingPercent = parsePercentage(controllerCapacity.text);
+          final preparationPercent = parsePercentage(controllerPreparation.text);
+          final restPercent = parsePercentage(controllerRestTime.text);
+          final continueCapacity = int.tryParse(controllerContinue.text.trim());
 
-          if (
-            controllerCapacity.text.length != 5 ||
-            controllerPreparation.text.length != 5 ||
-            controllerRestTime.text.length != 5 ||
-            // Used .trim() to ensure inputs with only spaces are treated as empty
-            nameController.text.trim().isEmpty ||
-            controllerContinue.text.trim().isEmpty ||
-            availabilityDateTimeController.text.trim().isEmpty ||
-            quantity <= 0
-          ) {
+          final hasInvalidFields =
+              processingPercent == null ||
+              processingPercent <= 0 ||
+              preparationPercent == null ||
+              preparationPercent < 0 ||
+              restPercent == null ||
+              restPercent < 0 ||
+              nameController.text.trim().isEmpty ||
+              continueCapacity == null ||
+              continueCapacity <= 0 ||
+              availabilityDateTimeController.text.trim().isEmpty ||
+              quantity <= 0;
+
+          if (hasInvalidFields) {
             // If they are not complete, display a warning dialog box
             await showDialog(
               context: dialogContext,
@@ -260,6 +278,22 @@ class _MachinesListViewState extends State<MachinesListView> {
             );
             return;
           }
+
+          final machinesService = context.read<MachineBloc>().service;
+          final baseTimes = machinesService.getStandardTimesForType(machineId);
+
+          final processingDuration = percentageOfBaseDuration(
+            processingPercent,
+            base: baseTimes.processing,
+          );
+          final preparationDuration = percentageOfBaseDuration(
+            preparationPercent,
+            base: baseTimes.preparationOrDefault,
+          );
+          final restDuration = percentageOfBaseDuration(
+            restPercent,
+            base: baseTimes.restOrDefault,
+          );
 
           //Get existing machines from the current state
           final state = context.read<MachineBloc>().state;
@@ -287,10 +321,10 @@ class _MachinesListViewState extends State<MachinesListView> {
             final newName = '$baseName$suffix';
 
             BlocProvider.of<MachineBloc>(context).addNewMachine(
-              controllerCapacity.text,
-              controllerPreparation.text,
-              controllerContinue.text,
-              controllerRestTime.text,
+              processingDuration,
+              preparationDuration,
+              continueCapacity,
+              restDuration,
               newName,
               machineId,
               availabilityDateTimeController.text,

@@ -16,6 +16,17 @@ Duration ruleOf3(Duration machineCapacity, Duration taskDuration){
   return Duration(seconds: scaledD2InSeconds);
 }
 
+Duration percentageOfBaseDuration(
+  double percentage, {
+  Duration base = const Duration(hours: 1),
+}) {
+  final clampedPercentage = percentage < 0 ? 0 : percentage;
+  final baseInSeconds = base.inSeconds;
+  final factor = 1 + (clampedPercentage / 100);
+  final totalSeconds = (baseInSeconds * factor).round();
+  return Duration(seconds: totalSeconds);
+}
+
 
 String getDateFormat(DateTime date) {
   return DateFormat("dd/MM/yyyy HH:mm").format(date);

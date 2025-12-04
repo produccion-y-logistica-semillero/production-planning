@@ -1,5 +1,6 @@
 
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 
 class MachineModel {
   int? id;
@@ -38,12 +39,13 @@ class MachineModel {
   MachineEntity toEntity(){
     return MachineEntity(
       machineTypeId: machineTypeId,
-      status: status, 
+      status: status,
       name: name,
-      processingTime: processingTime, 
-      preparationTime: preparationTime, 
-      restTime: restTime, 
-      continueCapacity: continueCapacity
+      processingTime: processingTime,
+      preparationTime: preparationTime,
+      restTime: restTime,
+      continueCapacity: continueCapacity,
+      scheduledInactivities: const <MachineInactivityEntity>[],
     );
   }
   

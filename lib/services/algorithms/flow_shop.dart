@@ -5,6 +5,7 @@ import 'dart:math';
 
 class FlowShopInput {
   final int jobId;
+  final int sequenceId;
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
@@ -14,6 +15,7 @@ class FlowShopInput {
   final Map<int, Duration> taskTimesInMachines;
   FlowShopInput(
     this.jobId,
+    this.sequenceId,
     this.dueDate,
     this.priority,
     this.availableDate,
@@ -66,13 +68,18 @@ class FlowShop {
   // job 1   |   <10:00, 12:00>    |   <14:00, 17:00>   |    <18:00, 20:30>   ....|
   // job 2   |   <12:00, 13:45>    |   <17:00, 18:00>   |    <20:30, 21:30>   ....|
 
+  final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<int, int?> _machineLastSequence = {};
+
   FlowShop(
     this.startDate,
     this.workingSchedule,
     this.inputJobs,
     this.machinesAvailability,
-    String rule,
-  ) {
+    String rule, {
+    Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
+  }) : changeoverMatrix = changeoverMatrix ?? {} {
+    _initializeMachineLastSequence();
     switch (rule) {
       case "EDD":
         eddRule();
@@ -122,34 +129,48 @@ class FlowShop {
     }
   }
 
+  void _initializeMachineLastSequence() {
+    for (final job in inputJobs) {
+      for (final task in job.taskSequence) {
+        _machineLastSequence.putIfAbsent(task.value2, () => null);
+      }
+    }
+    for (final machineId in machinesAvailability.keys) {
+      _machineLastSequence.putIfAbsent(machineId, () => null);
+    }
+    for (final machineId in changeoverMatrix.keys) {
+      _machineLastSequence.putIfAbsent(machineId, () => null);
+    }
+  }
+
   void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptRule() => _schedule(
-    (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
-  );
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+      );
   void lptRule() => _schedule(
-    (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
-  );
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+      );
   void fifoRule() =>
       _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
   void wsptRule() => _schedule((a, b) {
-    double wsptA = a.priority / _totalProcessingTime(a);
-    double wsptB = b.priority / _totalProcessingTime(b);
-    return wsptB.compareTo(wsptA);
-  });
+        double wsptA = a.priority / _totalProcessingTime(a);
+        double wsptB = b.priority / _totalProcessingTime(b);
+        return wsptB.compareTo(wsptA);
+      });
   void eddaRule() => dynamicRule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptaRule() => dynamicRule(
-    (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
-  );
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+      );
   void lptaRule() => dynamicRule(
-    (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
-  );
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+      );
   void fifoaRule() =>
       dynamicRule((a, b) => a.availableDate.compareTo(b.availableDate));
   void wsptaRule() => dynamicRule((a, b) {
-    double wsptA = a.priority / _totalProcessingTime(a);
-    double wsptB = b.priority / _totalProcessingTime(b);
-    return wsptB.compareTo(wsptA);
-  });
+        double wsptA = a.priority / _totalProcessingTime(a);
+        double wsptB = b.priority / _totalProcessingTime(b);
+        return wsptB.compareTo(wsptA);
+      });
 
   void msRule() {
     int totalProcessingTimeAccumulated = 0;
@@ -246,15 +267,20 @@ class FlowShop {
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
       DateTime startTime =
-          jobStartTime.isAfter(machineAvailable)
-              ? jobStartTime
-              : machineAvailable;
+          jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
       startTime = _adjustForWorkingSchedule(startTime);
-      DateTime endTime = startTime.add(duration);
-      endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
+
+      final int? previousSequence =
+          _machineLastSequence.putIfAbsent(machineId, () => null);
+      final Duration setupDuration =
+          _getSetupDuration(machineId, job.sequenceId, previousSequence);
+      final Duration totalDuration = duration + setupDuration;
+
+      DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
 
       scheduling[machineId] = Tuple2(taskId, Range(startTime, endTime));
       machinesAvailability[machineId] = endTime;
+      _machineLastSequence[machineId] = job.sequenceId;
       jobStartTime = endTime;
     }
 
@@ -267,6 +293,29 @@ class FlowShop {
         scheduling,
       ),
     );
+  }
+
+  Duration _getSetupDuration(
+    int machineId,
+    int currentSequenceId,
+    int? previousSequenceId,
+  ) {
+    final machineMatrix = changeoverMatrix[machineId];
+    if (machineMatrix == null) return Duration.zero;
+
+    final previousDurations = machineMatrix[previousSequenceId];
+    if (previousDurations != null &&
+        previousDurations.containsKey(currentSequenceId)) {
+      return previousDurations[currentSequenceId]!;
+    }
+
+    final defaultDurations = machineMatrix[null];
+    if (defaultDurations != null &&
+        defaultDurations.containsKey(currentSequenceId)) {
+      return defaultDurations[currentSequenceId]!;
+    }
+
+    return Duration.zero;
   }
 
   int _totalProcessingTime(FlowShopInput job) {
@@ -303,27 +352,69 @@ class FlowShop {
     return start;
   }
 
-  DateTime _adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
-    TimeOfDay workingEnd = workingSchedule.value2;
-    DateTime endOfDay = DateTime(
-      start.year,
-      start.month,
-      start.day,
-      workingEnd.hour,
-      workingEnd.minute,
-    );
-
-    if (end.isAfter(endOfDay)) {
-      Duration remainingTime = end.difference(endOfDay);
-      return DateTime(
-        start.year,
-        start.month,
-        start.day + 1,
-        workingSchedule.value1.hour,
-        workingSchedule.value1.minute,
-      ).add(remainingTime);
+  DateTime _calculateEndWithSchedule(DateTime start, Duration duration) {
+    if (duration <= Duration.zero) {
+      return start;
     }
-    return end;
+
+    final TimeOfDay workingStart = workingSchedule.value1;
+    final TimeOfDay workingEnd = workingSchedule.value2;
+
+    DateTime current = start;
+    Duration remaining = duration;
+
+    while (remaining > Duration.zero) {
+      final DateTime dayStart = DateTime(
+        current.year,
+        current.month,
+        current.day,
+        workingStart.hour,
+        workingStart.minute,
+      );
+      final DateTime dayEnd = DateTime(
+        current.year,
+        current.month,
+        current.day,
+        workingEnd.hour,
+        workingEnd.minute,
+      );
+
+      if (current.isBefore(dayStart)) {
+        current = dayStart;
+        continue;
+      }
+
+      if (!current.isBefore(dayEnd)) {
+        current = DateTime(
+          current.year,
+          current.month,
+          current.day + 1,
+          workingStart.hour,
+          workingStart.minute,
+        );
+        continue;
+      }
+
+      final Duration availableToday = dayEnd.difference(current);
+      if (remaining <= availableToday) {
+        return current.add(remaining);
+      } else {
+        remaining -= availableToday;
+        current = DateTime(
+          current.year,
+          current.month,
+          current.day + 1,
+          workingStart.hour,
+          workingStart.minute,
+        );
+      }
+    }
+
+    return current;
+  }
+
+  DateTime _adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
+    return _calculateEndWithSchedule(start, end.difference(start));
   }
 
   void dynamicRule(int Function(FlowShopInput, FlowShopInput) comparator) {
@@ -395,6 +486,7 @@ class FlowShop {
 
             return FlowShopInput(
               job.jobId,
+              job.sequenceId,
               job.dueDate,
               job.priority,
               job.availableDate,
@@ -485,10 +577,12 @@ class FlowShop {
 
   int _calculateMakespan(List<FlowShopInput> jobSequence) {
     Map<int, DateTime> currentMachineAvailability = {};
+    Map<int, int?> currentMachineSequence = {};
     jobSequence.forEach((job) {
       for (var task in job.taskSequence) {
         int machineId = task.value2;
         currentMachineAvailability[machineId] = startDate;
+        currentMachineSequence[machineId] = null;
       }
     });
 
@@ -509,10 +603,17 @@ class FlowShop {
                 ? jobStartTime
                 : machineAvailable;
         startTime = _adjustForWorkingSchedule(startTime);
-        DateTime endTime = startTime.add(duration);
-        endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
+
+        final int? previousSequence =
+            currentMachineSequence.putIfAbsent(machineId, () => null);
+        final Duration setupDuration =
+            _getSetupDuration(machineId, job.sequenceId, previousSequence);
+        final Duration totalDuration = duration + setupDuration;
+
+        DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
 
         currentMachineAvailability[machineId] = endTime;
+        currentMachineSequence[machineId] = job.sequenceId;
         jobStartTime = endTime;
       }
 

@@ -10,6 +10,8 @@ class JobEntity {
   final DateTime availableDate;
   final DateTime dueDate;
   final int priority;
+  final Map<int, int>? preemptionMatrix; // Map<machineId, canPreempt (0 o 1)>
 
-  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority, this.availableDate);
+  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority, this.availableDate, {this.preemptionMatrix});
 }
+

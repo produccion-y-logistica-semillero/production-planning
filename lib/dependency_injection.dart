@@ -6,6 +6,7 @@ import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metr
 import 'package:production_planning/repositories/implementations/machine_repository_impl.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
+import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_cubit.dart';
 import 'package:production_planning/repositories/implementations/sequences_repository_impl.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
@@ -42,7 +43,8 @@ Future<void> initDependencies(String workspace) async {
     final machineRepo   = MachineRepositoryImpl(
       machineTypeDao: daoFactory.getMachineTypeDao(),
       machineDao:  daoFactory.getMachineDao(),
-      statusDao: daoFactory.getStatusDao()
+      statusDao: daoFactory.getStatusDao(),
+      machineInactivityDao: daoFactory.getMachineInactivityDao(),
     );
     final sequencesRepo =  SequencesRepositoryImpl(
       sequencesDao: daoFactory.getSequenceDao(), 
@@ -74,6 +76,9 @@ Future<void> initDependencies(String workspace) async {
     depIn.registerFactory<MachineTypesBloc>(
       ()=> MachineTypesBloc(machinesService)
     );
+    depIn.registerFactory<MachineInactivitiesCubit>(
+      () => MachineInactivitiesCubit(machinesService),
+    );
     depIn.registerFactory<SequencesBloc>(
       ()=> SequencesBloc(seqService, machinesService)
     );
@@ -86,7 +91,7 @@ Future<void> initDependencies(String workspace) async {
       ()=> OrderBloc(ordersService)
     );
     depIn.registerFactory<NewOrderBloc>(
-      ()=> NewOrderBloc(ordersService, seqService)
+      ()=> NewOrderBloc(ordersService, seqService, machinesService)
     );
     depIn.registerFactory<GanttBloc>(
       ()=> GanttBloc(ordersService)

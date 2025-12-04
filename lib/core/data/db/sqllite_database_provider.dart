@@ -6,6 +6,26 @@ import 'package:sqflite/sqflite.dart';
 class SQLLiteDatabaseProvider{
   static Database? _database;
 
+  static Future<void> _createMachineInactivitiesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS MACHINE_INACTIVITIES (
+          inactivity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          machine_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          start_time TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL,
+          monday INTEGER NOT NULL DEFAULT 0,
+          tuesday INTEGER NOT NULL DEFAULT 0,
+          wednesday INTEGER NOT NULL DEFAULT 0,
+          thursday INTEGER NOT NULL DEFAULT 0,
+          friday INTEGER NOT NULL DEFAULT 0,
+          saturday INTEGER NOT NULL DEFAULT 0,
+          sunday INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id)
+      );
+    ''');
+  }
+
   static Future<Database> open(String workspace) async{
     final databasePath = await getDatabasesPath();
     final path = join(databasePath, '${workspace.replaceAll(' ', '')}.db');
@@ -25,7 +45,7 @@ class SQLLiteDatabaseProvider{
 
     _database = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (Database db, int version) async {
         await db.execute('''
           CREATE TABLE STATUS (
@@ -55,6 +75,7 @@ class SQLLiteDatabaseProvider{
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
         ''');
+        await _createMachineInactivitiesTable(db);
         await db.execute('''
           CREATE TABLE sequences (
               sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,6 +375,11 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
           VALUES (5, 4, 7, '2024-10-21', 1, '2024-10-10 22:30');
 
         ''');
+      },
+      onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        if (oldVersion < 2) {
+          await _createMachineInactivitiesTable(db);
+        }
       }
     );
     return _database!;

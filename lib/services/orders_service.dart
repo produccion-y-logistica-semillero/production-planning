@@ -130,25 +130,34 @@ class OrdersService {
     }
   }
 
-  bool hasPrecedence = false;
+  bool hasExplicitPrecedence = false;
   for (var job in order.orderJobs!) {
     final dependencies = job.sequence?.dependencies ?? [];
     final taskIds = job.sequence?.tasks?.map((t) => t.id).toSet() ?? {};
 
     for (final dep in dependencies) {
-      
       if (dep.predecessor_id != null &&
           dep.successor_id != null &&
           dep.predecessor_id != dep.successor_id &&
           taskIds.contains(dep.predecessor_id) &&
           taskIds.contains(dep.successor_id)) {
-        hasPrecedence = true;
+        hasExplicitPrecedence = true;
         print("Precedencia detectada: ${dep.predecessor_id} -> ${dep.successor_id}");
         break;
       }
     }
 
-    if (hasPrecedence) break;
+    if (hasExplicitPrecedence) break;
+  }
+
+  final bool hasImplicitPrecedence = order.orderJobs!
+      .any((job) => (job.sequence?.tasks?.length ?? 0) > 1);
+
+  final bool hasPrecedence = hasExplicitPrecedence || hasImplicitPrecedence;
+
+  if (!hasExplicitPrecedence && hasImplicitPrecedence) {
+    print(
+        "Precedencia implícita detectada: al menos un trabajo posee múltiples tareas en su secuencia");
   }
 
 

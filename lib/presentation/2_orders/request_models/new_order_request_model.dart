@@ -4,6 +4,7 @@ class NewOrderRequestModel{
   final DateTime availableDate;
   final int priority;
   final int amount;
+  final Map<int, int>? preemptionMatrix;
 
-  NewOrderRequestModel(this.sequenceId, this.dueDate, this.availableDate, this.priority, this.amount);
+  NewOrderRequestModel(this.sequenceId, this.dueDate, this.availableDate, this.priority, this.amount, {this.preemptionMatrix});
 }

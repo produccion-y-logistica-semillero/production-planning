@@ -1,14 +1,11 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
-import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/entities/environment_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/job_entity.dart';
 import 'package:production_planning/entities/order_entity.dart';
-import 'package:production_planning/entities/task_dependency_entity.dart';
-import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
@@ -17,6 +14,7 @@ import 'package:production_planning/services/adapters/flexible_job_shop_adapter.
 import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
+import 'package:production_planning/services/adapters/open_shop_adapter.dart';
 
 
 class OrdersService {
@@ -34,14 +32,12 @@ class OrdersService {
             jobModel.amount,
             jobModel.dueDate,
             jobModel.priority,
-            jobModel.availableDate)
+            jobModel.availableDate,
+            preemptionMatrix: jobModel.preemptionMatrix)
           )
         .toList();
 
-    print("Creando orden con los siguientes jobs:");
-    for (final job in jobs) {
-      print("Job: ${job.jobId}, SequenceId: ${job.sequence?.id}");
-    }
+
 
     // order entity.
     final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs);
@@ -68,26 +64,12 @@ class OrdersService {
   );
   if (fail != null) return Left(fail!);
 
-  print("Analizando orden ${order.orderId}");
-  for (final job in order.orderJobs ?? []) {
-    print("Job ${job.jobId} - Secuencia ${job.sequence?.id}:");
-    final deps = job.sequence?.dependencies;
-    if (deps == null || deps.isEmpty) {
-      print("  Sin dependencias");
-    } else {
-      for (final dep in deps) {
-        print("  Dependencia: ${dep.predecessor_id} -> ${dep.successor_id}");
-      }
-    }
-  }
-
   // Validación básica
   if (order.orderJobs == null || order.orderJobs!.isEmpty) {
-    print("La orden no tiene trabajos asociados");
+    return Left(LocalStorageFailure());
   }
   if (order.orderJobs!.any((job) => job.sequence == null || job.sequence!.tasks == null || job.sequence!.tasks!.isEmpty)) {
-    print("Al menos un trabajo no tiene tareas asociadas");
-
+    return Left(LocalStorageFailure());
   }
 
   // Matriz de tipos de máquina por job
@@ -136,13 +118,10 @@ class OrdersService {
     final taskIds = job.sequence?.tasks?.map((t) => t.id).toSet() ?? {};
 
     for (final dep in dependencies) {
-      if (dep.predecessor_id != null &&
-          dep.successor_id != null &&
-          dep.predecessor_id != dep.successor_id &&
+      if (dep.predecessor_id != dep.successor_id &&
           taskIds.contains(dep.predecessor_id) &&
           taskIds.contains(dep.successor_id)) {
         hasExplicitPrecedence = true;
-        print("Precedencia detectada: ${dep.predecessor_id} -> ${dep.successor_id}");
         break;
       }
     }
@@ -150,20 +129,12 @@ class OrdersService {
     if (hasExplicitPrecedence) break;
   }
 
-  final bool hasImplicitPrecedence = order.orderJobs!
-      .any((job) => (job.sequence?.tasks?.length ?? 0) > 1);
+  // Eliminada la lógica de precedencia implícita para permitir Open Shop
+  // Solo se consideran precedencias EXPLÍCITAS (dependencies en la BD)
+  final bool hasPrecedence = hasExplicitPrecedence;
 
-  final bool hasPrecedence = hasExplicitPrecedence || hasImplicitPrecedence;
-
-  if (!hasExplicitPrecedence && hasImplicitPrecedence) {
-    print(
-        "Precedencia implícita detectada: al menos un trabajo posee múltiples tareas en su secuencia");
-  }
-
-
-
-  //Detectar Open Shop: más de un job, cada job con más de una tarea, y SIN precedencia
-  bool isOpenShop = !hasPrecedence &&
+  //Detectar Open Shop: más de un job, cada job con más de una tarea, y SIN precedencia explícita
+  bool isOpenShop = !hasExplicitPrecedence &&
       order.orderJobs!.length > 1 &&
       
       order.orderJobs!.every((job) => job.sequence != null && job.sequence!.tasks != null && job.sequence!.tasks!.length > 1);
@@ -199,7 +170,6 @@ class OrdersService {
     enviroment = 'OPEN SHOP'; // fallback
   }
 
-  print('Ambiente detectado: $enviroment');
   return orderRepo.getEnvironmentByName(enviroment);
 }
 
@@ -211,6 +181,7 @@ class OrdersService {
       'FLOW SHOP' => Right(await FlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => Right(await FlexibleJobShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).flexibleJobShopAdapter(sch.value1, sch.value2)),
+      'OPEN SHOP' => Right(await OpenShopAdapter(machineRepository: machineRepo, orderRepository: orderRepo).openShopAdapter(sch.value1, sch.value2)),
       String() => Left(EnviromentNotCorrectFailure()),
 
 

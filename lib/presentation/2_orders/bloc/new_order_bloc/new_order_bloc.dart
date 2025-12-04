@@ -135,6 +135,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
           wid.availableDate!,
           int.parse(wid.priorityController!.text),
           int.parse(wid.quantityController!.text),
+          preemptionMatrix: wid.stateKey.currentState?.getPreemptionMatrix(),
         );
       }).toList();
 

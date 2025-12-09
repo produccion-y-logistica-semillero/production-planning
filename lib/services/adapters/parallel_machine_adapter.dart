@@ -27,7 +27,6 @@ class ParallelMachineAdapter {
     //getting full order
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
-¿
     if (order == null) return null;
 
     //we get all machines from this machine type

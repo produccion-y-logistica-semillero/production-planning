@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-
 class SQLLiteDatabaseProvider {
   static Database? _database;
 
@@ -43,7 +42,6 @@ class SQLLiteDatabaseProvider {
     //the best way, but anyways, it works for me at the moment, can comment the line while we don't need it
     print(path);
 
-
     _database = await openDatabase(path, version: 8,
         onCreate: (Database db, int version) async {
       await db.execute('''
@@ -52,7 +50,6 @@ class SQLLiteDatabaseProvider {
               status VARCHAR(100) NOT NULL
           );
         ''');
-
       await db.execute('''
           CREATE TABLE MACHINE_TYPES(
             machine_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +57,6 @@ class SQLLiteDatabaseProvider {
             description TEXT
           );
         ''');
-
       await db.execute('''
           CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +72,6 @@ class SQLLiteDatabaseProvider {
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
         ''');
-
       await _createMachineInactivitiesTable(db);
 
       await db.execute('''
@@ -99,7 +94,6 @@ class SQLLiteDatabaseProvider {
               name VARCHAR(100) NOT NULL
           );
         ''');
-
       await db.execute('''
           CREATE TABLE tasks (
               task_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +107,6 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
-
       await db.execute('''
           CREATE TABLE TaskDependency (
             id SERIAL PRIMARY KEY,
@@ -126,9 +119,7 @@ class SQLLiteDatabaseProvider {
             CONSTRAINT unique_dependency UNIQUE (predecessor_id, successor_id),
             CONSTRAINT no_self_dependency CHECK (predecessor_id <> successor_id)
           );
-
         ''');
-
 
       await db.execute('''
           CREATE TABLE environments (
@@ -136,7 +127,6 @@ class SQLLiteDatabaseProvider {
               name VARCHAR(100) NOT NULL
           );
         ''');
-
 
       await db.execute('''
           CREATE TABLE dispatch_rules (
@@ -155,14 +145,12 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
-
       await db.execute('''
           CREATE TABLE orders (
               order_id INTEGER PRIMARY KEY AUTOINCREMENT,
               reg_date DATE NOT NULL
           );
         ''');
-
       await db.execute('''
           CREATE TABLE jobs (
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,7 +164,6 @@ class SQLLiteDatabaseProvider {
               FOREIGN KEY (order_id) REFERENCES orders(order_id)
           );
         ''');
-
 
       await db.execute('''
           CREATE TABLE job_preemption (
@@ -213,21 +200,20 @@ class SQLLiteDatabaseProvider {
           INSERT INTO status (status) VALUES ('Inactive');
           INSERT INTO status (status) VALUES ('Maintenance');
 
-
           -- Insert default machine types
           INSERT INTO machine_types (name, description) VALUES ('Type A', 'Basic machine type A');
           INSERT INTO machine_types (name, description) VALUES ('Type B', 'Advanced machine type B');
           INSERT INTO machine_types (name, description) VALUES ('Type C', 'High capacity machine type C');
 
           -- Insert default machines
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
-          VALUES (1,'type A 1', 1, '2024-09-08 10:00:00', '2024-09-08 09:30:00', '2024-09-08 12:00:00', 5, '2024-09-08 10:00:00');
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
+          VALUES (1,'type A 1', 1, 100.0, 100.0, 100.0, 5, '2024-09-08 10:00:00');
 
-          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
-          VALUES (2, 'type B 1', 1, '2024-09-08 11:00:00', '2024-09-08 10:00:00', '2024-09-08 13:00:00', 3, '2024-09-08 11:00:00');
+          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
+          VALUES (2, 'type B 1', 1, 100.0, 100.0, 100.0, 3, '2024-09-08 11:00:00');
 
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
-          VALUES (3,'type C 1', 2, '2024-09-08 12:00:00', '2024-09-08 11:30:00', NULL, 7, '2024-09-08 12:00:00');
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
+          VALUES (3,'type C 1', 2, 100.0, 100.0, 100.0, 7, '2024-09-08 12:00:00');
 
           -- Insert default sequences
           INSERT INTO sequences (name) VALUES ('Sequence Alpha');
@@ -235,14 +221,14 @@ class SQLLiteDatabaseProvider {
           INSERT INTO sequences (name) VALUES ('Sequence Gamma');
 
           -- Insert default tasks
-          INSERT INTO tasks ( n_proc_units, description, sequence_id, machine_type_id)
-          VALUES ('2024-09-08 09:00:00', 'Task 1 description', 1, 1);
+          INSERT INTO tasks ( n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
+          VALUES ('2024-09-08 09:00:00', 'Task 1 description', 1, 1, 0);
 
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
-          VALUES ('2024-09-08 10:00:00', 'Task 2 description', 2, 2);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
+          VALUES ('2024-09-08 10:00:00', 'Task 2 description', 2, 2, 0);
 
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
-          VALUES ('2024-09-08 11:00:00', 'Task 3 description', 3, 3);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
+          VALUES ('2024-09-08 11:00:00', 'Task 3 description', 3, 3, 0);
 
           ---------------------------------------------------------------------------------------------------------------------------
           --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
@@ -288,7 +274,7 @@ class SQLLiteDatabaseProvider {
           ------ FLEXIBLE FLOW SHOP RULES
           --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES'); --ID 24
           --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');       --ID 25 
-
+          
           --GENETICS ALGORITHM
           INSERT INTO dispatch_rules (name) VALUES('GENETICS');  --ID 24 (los anteriores están comentados)
 
@@ -308,7 +294,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 24);
-
 
 ------- PARALLEL MACHINE RULES
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
@@ -330,7 +315,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 20);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 21);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 22);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 24);
-
 
 ------- FLOW SHOP MACHINE RULES (SPT,EDD,LPT,FIFO,WSPT,SPTA,EDDA,LPTA,FIFOA,WSPTA,CR, MS,ATCS,JOHNSON,JOHNSON3,CDS)
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
@@ -380,17 +364,30 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 5);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 13);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 24);
 
-          ---------------------------------------------------------------------------------------------------------------------------
-          ---------------------------------------------------------------------------------------------------------------------------
+-------- OPEN SHOP MACHINE RULES
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
+INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
 
-          -- Insert default orders
+        ''');
+        
+        // Insert default orders
+        await db.execute('''
           INSERT INTO orders (reg_date) VALUES ('2024-09-08');
           INSERT INTO orders (reg_date) VALUES ('2024-09-07');
           INSERT INTO orders (reg_date) VALUES ('2024-09-06');
-
-          -- Insert default jobs (associating sequences with orders)
+        ''');
+        
+        // Insert default jobs (associating sequences with orders)
+        await db.execute('''
           INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
           VALUES (1, 1, 100, '2024-09-10', 1, '2024-09-10');
 
@@ -399,8 +396,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
 
           INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
           VALUES (3, 3, 150, '2024-09-12', 3, '2024-09-10');
+        ''');
 
-
+        // CUSTOM ORDERS TO CHECK
+        await db.execute('''
           ---------------------------------------------------------------------------------------------------------------------------
           -------------------------------------------------CUSTOM ORDERS TO CHECK----------------------------------------------------
           ---------------------------------------------------------------------------------------------------------------------------
@@ -411,18 +410,18 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
           INSERT INTO machine_types (name, description) VALUES ('Maquina coser', 'Maquina para coser prendas de vestir');
 
           --machine ID = 4
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_time, preparation_time, rest_time, continue_capacity, availability_time)
-          VALUES (4,'Maquina de coser pro', 1, '2024-09-08 01:00:00', '2024-09-08 00:00:00', '2024-09-08 00:00:00', 1, '2024-09-08 01:00:00');
+          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
+          VALUES (4,'Maquina de coser pro', 1, 100.0, 100.0, 100.0, 1, '2024-09-08 01:00:00');
 
 
           INSERT INTO sequences (name) VALUES ('Coser pantalon'); --sequence ID = 4
           INSERT INTO sequences (name) VALUES ('Coser camiseta'); --sequence ID = 5
 
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
-          VALUES ('2024-09-08 04:30:00', 'Coser pantalon', 4, 4);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
+          VALUES ('2024-09-08 04:30:00', 'Coser pantalon', 4, 4, 0);
 
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id)
-          VALUES ('2024-09-08 06:30:00', 'Coser camiseta', 5, 4);
+          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
+          VALUES ('2024-09-08 06:30:00', 'Coser camiseta', 5, 4, 0);
 
           INSERT INTO orders (reg_date) VALUES ('2024-10-08');  --order ID = 4
 
@@ -434,19 +433,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
           VALUES (4, 4, 5, '2024-10-17', 1, '2024-10-10 14:30');
           INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
           VALUES (5, 4, 7, '2024-10-21', 1, '2024-10-10 22:30');
-
-          -------- OPEN SHOP MACHINE RULES
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
-          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
-
         ''');
     }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
       if (oldVersion < 2) {
@@ -467,8 +453,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
             INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
           ''');
       }
-
-      
       if (oldVersion < 5) {
         // Crear tabla job_preemption
         await db.execute('''
@@ -560,17 +544,16 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
         await db.execute(
             'ALTER TABLE job_task_machine_times_new RENAME TO job_task_machine_times;');
       }
-
-    );
+      // Versión 4: Base de datos limpia, sin datos de ejemplo
+      // No se requiere migración de datos
+    });
     return _database!;
   }
 
-
-  static Future<void> closeDatabaseConnection() async{
-    if(_database != null){
+  static Future<void> closeDatabaseConnection() async {
+    if (_database != null) {
       await _database!.close();
       _database = null;
     }
   }
 }
-

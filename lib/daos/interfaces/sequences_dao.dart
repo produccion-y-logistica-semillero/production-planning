@@ -4,5 +4,6 @@ abstract class SequencesDao{
   Future<int> createSequence(SequenceModel sequence);
   Future<List<SequenceModel>> getSequences();
   Future<SequenceModel?> getSequenceById(int id);
-  Future<bool> deleteSequence(int id);
+  Future<boo
 }
+

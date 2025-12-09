@@ -39,6 +39,7 @@ class OrderProcess extends StatelessWidget {
             child: GestureDetector(
               onHorizontalDragUpdate: (details) {
                 _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+
               },
               child: ListView.builder(
                 controller: _scrollController,
@@ -98,6 +99,7 @@ class OrderProcess extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 16,
                               color: colorScheme.onPrimaryContainer.withOpacity(0.8),
+
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -131,12 +133,15 @@ class OrderProcess extends StatelessWidget {
                         content: Row(
                           children: [
                             TextButton(
+
                               onPressed: () => Navigator.of(dialogContext).pop(),
+
                               child: const Text("Cancelar"),
                             ),
                             TextButton(
                               onPressed: () {
                                 BlocProvider.of<SeeProcessBloc>(context).deleteSequence(process.id!);
+
                                 Navigator.of(dialogContext).pop();
                               },
                               child: const Text("Eliminar"),
@@ -159,6 +164,7 @@ class OrderProcess extends StatelessWidget {
                   backgroundColor: colorScheme.errorContainer,
                   minimumSize: const Size(140, 50),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

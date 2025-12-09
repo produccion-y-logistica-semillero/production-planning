@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_cubit.dart';
+import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_inactivities_dialog.dart';
+
 
 class MachineDisplayTile extends StatelessWidget {
   final MachineEntity machine;
@@ -54,12 +60,22 @@ class MachineDisplayTile extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              'Tiempo de procesamiento ${machine.processingTime.toString().substring(0, 8)}',
+
+              'Porcentaje de procesamiento: ${machine.processingPercentage.toStringAsFixed(0)}%',
               style: TextStyle(
                 color: colorScheme.onSurfaceVariant,
               ),
               overflow: TextOverflow.ellipsis,
             ),
+          ),
+          IconButton(
+
+            onPressed: () => _openInactivitiesDialog(context),
+            icon: Icon(
+              Icons.pause_circle_outline,
+              color: colorScheme.primary,
+            ),
+            tooltip: 'Configurar inactividades',
           ),
           IconButton(
             onPressed: deleteHandler,
@@ -71,6 +87,20 @@ class MachineDisplayTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+
+  void _openInactivitiesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return BlocProvider(
+          create: (_) => GetIt.instance.get<MachineInactivitiesCubit>()
+            ..initialize(machine),
+          child: MachineInactivitiesDialog(machine: machine),
+        );
+      },
     );
   }
 }

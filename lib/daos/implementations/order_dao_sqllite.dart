@@ -11,6 +11,7 @@ class OrderDaoSqlLite implements OrderDao {
 
   @override
   Future<List<OrderModel>> getAllOrders() async {
+
     try{
       final List<Map<String, dynamic>> maps = await db.query('orders');
       return maps.map((map) => OrderModel.fromJson(map)).toList();
@@ -24,6 +25,7 @@ class OrderDaoSqlLite implements OrderDao {
     try{
       return (await db.query('orders', where: 'order_id = ?', whereArgs: [id])).map((json)=>OrderModel.fromJson(json)).first;
     }catch(error){
+
       throw LocalStorageFailure();
     }
   }
@@ -49,6 +51,7 @@ class OrderDaoSqlLite implements OrderDao {
   Future<void> deleteOrder(int orderId) async{
     try {
       int n = await db.delete(
+
         'ORDERS',
         where: 'order_id = ?',
         whereArgs: [orderId],

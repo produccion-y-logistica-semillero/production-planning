@@ -3,6 +3,7 @@ import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/presentation/1_sequences/request_models/new_task_model.dart';
 
 abstract class SequencesState{
+
   bool isNewOrder;
   List<MachineTypeEntity>? machines;
   List<TaskDependencyEntity>? dependencies;

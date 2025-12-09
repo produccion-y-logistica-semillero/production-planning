@@ -69,6 +69,7 @@ class GanttDataTablePage extends StatelessWidget {
 
               return matchingRule.value2?.toString() ??
                   'Algoritmo ${matchingRule.value1}';
+
             }();
 
             final taskRows = _buildTaskRows(state.planningMachines);
@@ -266,6 +267,7 @@ class _TaskTable extends StatelessWidget {
                   DataCell(Text(row.machineName)),
                   DataCell(Text('Job ${task.jobId}')),
                   DataCell(Text('${task.sequenceName} #${task.numberProcess}')),
+                  DataCell(Text('${task.displayName}')),
                   DataCell(Text(dateFormatter.format(task.startDate))),
                   DataCell(Text(dateFormatter.format(task.endDate))),
                   DataCell(Text('$durationMinutes')),

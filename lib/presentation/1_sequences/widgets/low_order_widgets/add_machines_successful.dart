@@ -15,6 +15,7 @@ class SuccessModal extends StatelessWidget {
           onTap: onClose, // Close the modal when tapping outside
           child: Container(
             color: Colors.black.withOpacity(0.3), // Dimming background for focus
+
             width: double.infinity,
             height: double.infinity,
           ),
@@ -62,6 +63,7 @@ class SuccessModal extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

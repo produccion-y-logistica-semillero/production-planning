@@ -138,7 +138,6 @@ class ParallelMachine {
           _atcPriority(b, startDate).compareTo(_atcPriority(a, startDate)),
     );
   }
-  
   void wsptRule(){
     _schedule((a, b) => calculateWSPT(b).compareTo(calculateWSPT(a)));
   }
@@ -163,11 +162,11 @@ class ParallelMachine {
 
       if (aAvailable && !bAvailable) return -1;
       if (!aAvailable && bAvailable) return 1; 
+
       if (!aAvailable && !bAvailable) return 0;
       return a.dueDate.compareTo(b.dueDate);
     });
   }
-  
   void lptaRule(){
     DateTime now = DateTime.now();
     
@@ -263,7 +262,6 @@ class ParallelMachine {
 
     return (1 / processingTime) * exp(-tardinessFactor);
   }
-  
   
   double calculateWSPT(ParallelInput job) {
   int w = job.priority; // Peso
@@ -396,7 +394,6 @@ class ParallelMachine {
       );
     }
   }
-
 
   //ALGORITMO DE GENÉTICA Y SUS FUNCIONAS AUXILIARES -> Varias máquinas al mismo tiempo
 
@@ -542,5 +539,4 @@ class ParallelMachine {
     individual[j] = temp;
     return individual;
   }
-
 }

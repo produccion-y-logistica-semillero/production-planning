@@ -5,6 +5,9 @@ import 'dart:math';
 
 class FlowShopInput {
   final int jobId;
+
+  final int sequenceId;
+
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
@@ -13,13 +16,16 @@ class FlowShopInput {
   //in this map we have the durations, the id is the task id, and the duration is how long it takes (since we know there's only one machine, and we already have that time)
   final Map<int, Duration> taskTimesInMachines;
   FlowShopInput(
-      this.jobId,
-      this.dueDate,
-      this.priority,
-      this.availableDate,
-      this.taskSequence,
-      this.taskTimesInMachines,
-      );
+
+    this.jobId,
+    this.sequenceId,
+    this.dueDate,
+    this.priority,
+    this.availableDate,
+    this.taskSequence,
+    this.taskTimesInMachines,
+  );
+
 }
 
 class FlowShopOutput {
@@ -30,12 +36,14 @@ class FlowShopOutput {
   //the output, the map has the key the machine id, the value is a tuple of <task id, range start to end time>
   final Map<int, Tuple2<int, Range>> machinesScheduling;
   FlowShopOutput(
-      this.jobId,
-      this.startDate,
-      this.dueDate,
-      this.endTime,
-      this.machinesScheduling,
-      );
+
+    this.jobId,
+    this.startDate,
+    this.dueDate,
+    this.endTime,
+    this.machinesScheduling,
+  );
+
 }
 
 class FlowShop {
@@ -66,13 +74,20 @@ class FlowShop {
   // job 1   |   <10:00, 12:00>    |   <14:00, 17:00>   |    <18:00, 20:30>   ....|
   // job 2   |   <12:00, 13:45>    |   <17:00, 18:00>   |    <20:30, 21:30>   ....|
 
+
+  final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<int, int?> _machineLastSequence = {};
+
   FlowShop(
-      this.startDate,
-      this.workingSchedule,
-      this.inputJobs,
-      this.machinesAvailability,
-      String rule,
-      ) {
+    this.startDate,
+    this.workingSchedule,
+    this.inputJobs,
+    this.machinesAvailability,
+    String rule, {
+    Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
+  }) : changeoverMatrix = changeoverMatrix ?? {} {
+    _initializeMachineLastSequence();
+
     switch (rule) {
       case "EDD":
         eddRule();
@@ -122,12 +137,14 @@ class FlowShop {
       case "GENETICS":
         scheduleGeneticAlgorithm();
         break;
+
     }
   }
 
   void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptRule() => _schedule(
         (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+
   );
   void lptRule() => _schedule(
         (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
@@ -153,6 +170,7 @@ class FlowShop {
     double wsptB = b.priority / _totalProcessingTime(b);
     return wsptB.compareTo(wsptA);
   });
+
 
   void msRule() {
     int totalProcessingTimeAccumulated = 0;
@@ -201,6 +219,7 @@ class FlowShop {
     while (remainingJobs.isNotEmpty) {
       remainingJobs.sort(
             (a, b) => _calculateATCPriority(
+
           b,
           currentTime,
           elapsedTime,
@@ -215,11 +234,13 @@ class FlowShop {
   }
 
   double _calculateATCPriority(
+HEAD<<<<<<< 
       FlowShopInput job,
       DateTime currentTime,
       int elapsedTime,
       double k,
       ) {
+
     int processingTime = _totalProcessingTime(job);
     double avgProcessingTime = processingTime / job.taskSequence.length;
     double timeDiff = job.dueDate.difference(currentTime).inMinutes.toDouble();
@@ -248,6 +269,7 @@ class FlowShop {
       Duration duration = job.taskTimesInMachines[taskId]!;
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
+
       DateTime startTime =
       jobStartTime.isAfter(machineAvailable)
           ? jobStartTime
@@ -258,6 +280,7 @@ class FlowShop {
 
       scheduling[machineId] = Tuple2(taskId, Range(startTime, endTime));
       machinesAvailability[machineId] = endTime;
+
       jobStartTime = endTime;
     }
 
@@ -272,10 +295,12 @@ class FlowShop {
     );
   }
 
+
   int _totalProcessingTime(FlowShopInput job) {
     return job.taskTimesInMachines.values.fold(
       0,
           (sum, duration) => sum + duration.inMinutes,
+
     );
   }
 
@@ -305,7 +330,6 @@ class FlowShop {
     }
     return start;
   }
-
   DateTime _adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
     TimeOfDay workingEnd = workingSchedule.value2;
     DateTime endOfDay = DateTime(
@@ -327,6 +351,7 @@ class FlowShop {
       ).add(remainingTime);
     }
     return end;
+
   }
 
   void dynamicRule(int Function(FlowShopInput, FlowShopInput) comparator) {
@@ -379,8 +404,10 @@ class FlowShop {
     int bestMakespan = double.maxFinite.toInt();
 
     for (int k = 1; k < numMachines; k++) {
+
       List<FlowShopInput> tempJobs =
       inputJobs.map((job) {
+
         Duration sumA = Duration.zero;
         Duration sumB = Duration.zero;
 
@@ -402,6 +429,7 @@ class FlowShop {
           job.priority,
           job.availableDate,
           [Tuple2(0, 0), Tuple2(1, 1)],
+
           reducedTimes,
         );
       }).toList();
@@ -411,8 +439,10 @@ class FlowShop {
       List<int> orderedIds = ordered.map((e) => e.jobId).toList();
 
       // Convertimos a la secuencia original
+
       List<FlowShopInput> orderedOriginal =
       orderedIds
+
           .map((id) => inputJobs.firstWhere((job) => job.jobId == id))
           .toList();
 
@@ -448,11 +478,13 @@ class FlowShop {
 
     conjuntoI.sort(
           (a, b) => a.taskTimesInMachines[a.taskSequence[0].value1]!.compareTo(
+
         b.taskTimesInMachines[b.taskSequence[0].value1]!,
       ),
     );
     conjuntoII.sort(
           (a, b) => b.taskTimesInMachines[b.taskSequence[1].value1]!.compareTo(
+
         a.taskTimesInMachines[a.taskSequence[1].value1]!,
       ),
     );
@@ -481,6 +513,7 @@ class FlowShop {
     );
     conjuntoII.sort(
           (a, b) => b.taskTimesInMachines[1]!.compareTo(a.taskTimesInMachines[1]!),
+
     );
 
     return [...conjuntoI, ...conjuntoII];
@@ -488,12 +521,15 @@ class FlowShop {
 
   int _calculateMakespan(List<FlowShopInput> jobSequence) {
     Map<int, DateTime> currentMachineAvailability = {};
-    jobSequence.forEach((job) {
+
+    Map<int, int?> currentMachineSequence = {};
+    for (var job in jobSequence) {
       for (var task in job.taskSequence) {
         int machineId = task.value2;
         currentMachineAvailability[machineId] = startDate;
+        currentMachineSequence[machineId] = null;
       }
-    });
+    }
 
     DateTime makespanEndTime = startDate;
 
@@ -507,20 +543,26 @@ class FlowShop {
 
         DateTime machineAvailable =
             currentMachineAvailability[machineId] ?? startDate;
-        DateTime startTime =
-        jobStartTime.isAfter(machineAvailable)
+
+        DateTime startTime = jobStartTime.isAfter(machineAvailable)
             ? jobStartTime
             : machineAvailable;
         startTime = _adjustForWorkingSchedule(startTime);
-        DateTime endTime = startTime.add(duration);
-        endTime = _adjustEndTimeForWorkingSchedule(startTime, endTime);
+
+        final int? previousSequence =
+            currentMachineSequence.putIfAbsent(machineId, () => null);
+        final Duration setupDuration =
+            _getSetupDuration(machineId, job.sequenceId, previousSequence);
+        final Duration totalDuration = duration + setupDuration;
+
+        DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
 
         currentMachineAvailability[machineId] = endTime;
+        currentMachineSequence[machineId] = job.sequenceId;
         jobStartTime = endTime;
       }
 
-      makespanEndTime =
-      jobStartTime.isAfter(makespanEndTime)
+      makespanEndTime = jobStartTime.isAfter(makespanEndTime)
           ? jobStartTime
           : makespanEndTime;
     }
@@ -727,3 +769,4 @@ class FlowShop {
     return individual;
   }
 }
+  

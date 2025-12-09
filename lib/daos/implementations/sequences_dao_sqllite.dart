@@ -3,6 +3,7 @@ import 'package:production_planning/daos/interfaces/sequences_dao.dart';
 import 'package:production_planning/repositories/models/sequence_model.dart';
 import 'package:sqflite/sqflite.dart';
 
+
 class SequencesDaoSqllite implements SequencesDao{
 
   final Database db;

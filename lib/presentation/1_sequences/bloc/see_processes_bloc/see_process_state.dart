@@ -1,6 +1,7 @@
 import 'package:production_planning/entities/sequence_entity.dart';
 
-abstract class SeeProcessState{
+
+abstract class SeeProcessState {
   final List<SequenceEntity>? sequences;
   final int? selectedProcess;
   final SequenceEntity? process;

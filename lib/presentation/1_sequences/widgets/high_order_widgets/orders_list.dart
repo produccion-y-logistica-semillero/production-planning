@@ -7,6 +7,7 @@ import 'package:production_planning/presentation/1_sequences/widgets/high_order_
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/sequence_selector_modal.dart';
 
+
 class OrderList extends StatelessWidget {
   final TextEditingController nameController;
   final GlobalKey<NodeEditorState> nodeEditorKey;
@@ -35,6 +36,7 @@ class OrderList extends StatelessWidget {
                         id: t.machineTypeId,
                         name: t.machineName ?? '',
                         description: t.description ?? '',
+
                       ))
                   .toList() ??
               [];
@@ -190,6 +192,7 @@ class OrderList extends StatelessWidget {
                   ),
                 ),
 
+
                 if (state.selectedProcess != null)
                   Expanded(
                     child: SequenceEditorPanel(
@@ -200,17 +203,20 @@ class OrderList extends StatelessWidget {
                                     id: t.machineTypeId,
                                     name: t.machineName ?? '',
                                     description: t.description ?? '',
+
                                   ))
                               .toList() ??
                           [],
                       nodeEditorKey: nodeEditorKey,
                       onlyGraph: true,
+
                     ),
                   ),
                 if (state.selectedProcess == null)
                   Expanded(
                     child: Container(
                       constraints: const BoxConstraints(maxHeight: 400),
+
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Center(
@@ -233,3 +239,4 @@ class OrderList extends StatelessWidget {
     );
   }
 }
+

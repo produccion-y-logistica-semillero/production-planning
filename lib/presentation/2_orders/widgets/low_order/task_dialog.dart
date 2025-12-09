@@ -57,6 +57,7 @@ class TaskDialog extends StatelessWidget {
 
   Widget _buildOrderInfo(OrderEntity order) {
     final job = order.orderJobs!.firstWhere((j) => j.jobId! == task.jobId);
+
     final taskInfo = job.sequence!.tasks!.firstWhere((t) => t.id == task.taskId);
 
     return SingleChildScrollView(
@@ -66,6 +67,7 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Order ID", order.orderId.toString()),
           _buildInfoRow(
             "La orden está compuesta por",
+
             order.orderJobs!
                 .map((j) => j.sequence!.name)
                 .join(", "),

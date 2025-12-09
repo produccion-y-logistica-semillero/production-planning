@@ -26,6 +26,7 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
           Row(
             children: [
               Expanded(
+
                 flex:1,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
@@ -34,32 +35,37 @@ class _GanttPageContainerState extends State<GanttPageContainer> {
                       title: 'Programar orden', 
                       content: 'Aca se muestra el ambiente de manofactura en el que cae la orden seleccionada, con este ambiente puedes seleccionar cualqueira de las reglas mostradas en la lista, cada regla usa algoritmos distintos para realizar la planificacion, puedes agregar mas pantallas para visualizar varios algoritmos al tiempo.'), 
                     icon: const Icon(Icons.info))
+
                   ],
                 ),
               ),
               Expanded(
-                flex:15,
-                child: Row( 
+
+                flex: 15,
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ElevatedButton(
-                    onPressed: () => {
-                          setState(() {
-                            number++;
-                          })
-                        },
-                    style: const ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.green)),
-                    child: const Icon(Icons.add),
+                      onPressed: () => {
+                        setState(() {
+                          number++;
+                        })
+                      },
+                      style: const ButtonStyle(
+                          backgroundColor:
+                              WidgetStatePropertyAll(Colors.green)),
+                      child: const Icon(Icons.add),
                     ),
                     ElevatedButton(
-                        onPressed: () => {
-                              if (number > 1)
-                                setState(() {
-                                  number--;
-                                })
-                            },
-                        style: const ButtonStyle(backgroundColor: WidgetStatePropertyAll(Colors.red)),
-                        child: const Icon(Icons.remove),
+                      onPressed: () => {
+                        if (number > 1)
+                          setState(() {
+                            number--;
+                          })
+                      },
+                      style: const ButtonStyle(
+                          backgroundColor: WidgetStatePropertyAll(Colors.red)),
+                      child: const Icon(Icons.remove),
                     ),
                   ],
                 ),

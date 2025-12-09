@@ -7,8 +7,8 @@ import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_
 
 class AlgorithmPickerPage extends StatefulWidget {
   final int orderId;
-
   const AlgorithmPickerPage({Key? key, required this.orderId}) : super(key: key);
+
 
   @override
   State<AlgorithmPickerPage> createState() => _AlgorithmPickerPageState();
@@ -81,6 +81,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
           backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
         ),
       );
       return;
@@ -132,6 +133,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                 backgroundColor: colorScheme.error,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
               ),
             );
           }
@@ -188,8 +190,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                 ),
               );
             }
-
             final List<dynamic> rules = (env.rules ?? []) as List<dynamic>;
+
             if (rules.isEmpty) {
               return Center(
                 child: Column(
@@ -337,6 +339,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                           ),
                           value: isSelected,
                           onChanged: (v) => _toggleSingle(index, v, rules.length),
+
                           activeColor: colorScheme.primary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -407,6 +410,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                       const SizedBox(width: 12),
                       FilledButton.icon(
                         onPressed: _selectedIndexes.isEmpty ? null : _onCalculate,
+
                         icon: const Icon(Icons.calculate),
                         label: const Text('Calcular'),
                         style: FilledButton.styleFrom(
@@ -416,6 +420,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                           ),
                           backgroundColor: _selectedIndexes.isEmpty
                               ? colorScheme.surfaceVariant
+
                               : colorScheme.primary,
                           foregroundColor: _selectedIndexes.isEmpty
                               ? colorScheme.onSurfaceVariant
@@ -436,3 +441,4 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     );
   }
 }
+

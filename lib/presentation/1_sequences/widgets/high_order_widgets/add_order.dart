@@ -40,7 +40,8 @@ class AddOrderForm extends StatelessWidget {
 
               Container(
                 height: 60,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
                 margin: const EdgeInsets.symmetric(vertical: 5),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
@@ -61,7 +62,8 @@ class AddOrderForm extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),              
+
+              const SizedBox(height: 20),
               Container(
                 constraints: const BoxConstraints(maxHeight: 500),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -82,19 +84,24 @@ class AddOrderForm extends StatelessWidget {
                 ),
                 child: GestureDetector(
                   onHorizontalDragUpdate: (details) {
-                    _scrollController.jumpTo(_scrollController.offset - details.delta.dx);
+
+                    _scrollController
+                        .jumpTo(_scrollController.offset - details.delta.dx);
+
                   },
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     controller: _scrollController,
                     child: Row(
-                      children: _buildMachineList(state.selectedMachines, context),
+
+                      children:
+                          _buildMachineList(state.selectedMachines, context),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-              
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -104,7 +111,9 @@ class AddOrderForm extends StatelessWidget {
                     },
                     label: Text(
                       "Guardar",
+
                       style: TextStyle(color: colorScheme.onPrimaryContainer, fontSize: 16),
+
                     ),
                     icon: Icon(
                       Icons.save,
@@ -112,7 +121,10 @@ class AddOrderForm extends StatelessWidget {
                     ),
                     style: TextButton.styleFrom(
                       backgroundColor: colorScheme.primaryContainer,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+
                       minimumSize: const Size(140, 50),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -127,14 +139,19 @@ class AddOrderForm extends StatelessWidget {
         if (state.isNoMachinesModalVisible)
           _buildOverlay(
             NoMachinesSelectedModal(
-              onClose: () => BlocProvider.of<SequencesBloc>(context).modelChanged(false),
+
+              onClose: () =>
+                  BlocProvider.of<SequencesBloc>(context).modelChanged(false),
+
             ),
             context,
           ),
         if (state.isSuccessModalVisible)
           _buildOverlay(
             SuccessModal(
+
               onClose: () => BlocProvider.of<SequencesBloc>(context).machinesSuccessModalChanged(false),
+
             ),
             context,
           ),
@@ -142,8 +159,10 @@ class AddOrderForm extends StatelessWidget {
     );
   }
 
- 
-  List<Widget> _buildMachineList(List<NewTaskModel>? machines, BuildContext context) {
+
+  List<Widget> _buildMachineList(
+      List<NewTaskModel>? machines, BuildContext context) {
+
     List<Widget> machineWidgets = [];
 
     if (machines == null) {
@@ -156,7 +175,9 @@ class AddOrderForm extends StatelessWidget {
           TaskContainer(
             task: machines[i],
             number: i + 1,
-            onDeleteCallback: () => BlocProvider.of<SequencesBloc>(context).taskRemoved(i),
+
+            onDeleteCallback: () =>
+                BlocProvider.of<SequencesBloc>(context).taskRemoved(i),
             callback: () {
               showDialog(
                 context: context,
@@ -190,12 +211,18 @@ class AddOrderForm extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               TextButton(
-                                onPressed: () => Navigator.of(dialogContext).pop(),
+
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+
                                 child: const Text("Cancelar"),
                               ),
                               TextButton(
                                 onPressed: () {
-                                  BlocProvider.of<SequencesBloc>(context).tsaskUpdated(i, descController.text, hourController.text);
+
+                                  BlocProvider.of<SequencesBloc>(context)
+                                      .tsaskUpdated(i, descController.text,
+                                          hourController.text);
                                   hourController.clear();
                                   descController.clear();
                                   Navigator.of(dialogContext).pop();
@@ -229,8 +256,9 @@ class AddOrderForm extends StatelessWidget {
     return machineWidgets;
   }
 
- 
-  void _saveOrder(String name, List<MachineTypeEntity> selectedMachines, BuildContext context) {
+
+  void _saveOrder(String name, List<MachineTypeEntity> selectedMachines,
+      BuildContext context) {
     if (name.isNotEmpty) {
       onSave(name);
     } else {
@@ -238,7 +266,6 @@ class AddOrderForm extends StatelessWidget {
     }
   }
 
- 
   Widget _buildOverlay(Widget modal, BuildContext context) {
     return Positioned.fill(
       child: Stack(
@@ -247,6 +274,7 @@ class AddOrderForm extends StatelessWidget {
             onTap: () {
               BlocProvider.of<SequencesBloc>(context).modelChanged(false);
               BlocProvider.of<SequencesBloc>(context).machinesSuccessModalChanged(false);
+
             },
             child: const SizedBox(
               width: double.infinity,

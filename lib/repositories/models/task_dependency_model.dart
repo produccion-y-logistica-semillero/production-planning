@@ -3,6 +3,7 @@ import 'package:production_planning/entities/task_dependency_entity.dart';
 class TaskDependencyModel {
   int? id;
   final int successor_id ;           
+
   final int predecessor_id;
   final int sequenceId;
 
@@ -13,7 +14,9 @@ class TaskDependencyModel {
     required this.sequenceId,
   });
 
-  factory TaskDependencyModel.fromEntity(TaskDependencyEntity entity, int sequenceId) {
+
+  factory TaskDependencyModel.fromEntity(
+      TaskDependencyEntity entity, int sequenceId) {
     return TaskDependencyModel(
       id: entity.id,
       successor_id: entity.successor_id,

@@ -7,3 +7,4 @@ class OrderEntity{
 
   OrderEntity(this.orderId, this.regDate, this.orderJobs);
 }
+

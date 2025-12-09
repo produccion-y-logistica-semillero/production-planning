@@ -1,27 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/shared/widgets/input_field_custom.dart';
 
-class AddMachineTypeDialog extends StatelessWidget{
 
+class AddMachineTypeDialog extends StatelessWidget {
   final TextEditingController _nameController;
   final TextEditingController _descController;
   final void Function() addMachine;
 
-  const AddMachineTypeDialog({required TextEditingController nameController, required TextEditingController descController, required this.addMachine, super.key}): 
-    _nameController = nameController,
-    _descController = descController;
+
+  const AddMachineTypeDialog(
+      {required TextEditingController nameController,
+      required TextEditingController descController,
+      required this.addMachine,
+      super.key})
+      : _nameController = nameController,
+        _descController = descController;
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       child: SizedBox(
-        height: 350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
-        width:  MediaQuery.of(context).size.width - 900,  //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
+
+        height:
+            350, // MediaQuery.of(context).size.height - 200, //media query so that the size is proportional to the screen size
+        width: MediaQuery.of(context).size.width -
+            900, //wORK TO MAKE IT MORE RELATIVE TO THE SIZE, NOT COMPLETELY LINEAL, BUT CHECK SIZES
         child: Column(
           children: [
-            const SizedBox(height: 15,),
+            const SizedBox(
+              height: 15,
+            ),
             const Text("Agregar tipo de maquina"),
-            const SizedBox(height: 30,),
+            const SizedBox(
+              height: 30,
+            ),
+
             InputFieldCustom(
               sizedBoxWidth: 30,
               title: "Nombre : ",
@@ -29,7 +42,9 @@ class AddMachineTypeDialog extends StatelessWidget{
               maxLines: 1,
               controller: _nameController,
             ),
-            const SizedBox(height: 30,),
+            const SizedBox(
+              height: 30,
+            ),
             InputFieldCustom(
               sizedBoxWidth: 10,
               title: "Descripcion : ",
@@ -37,7 +52,9 @@ class AddMachineTypeDialog extends StatelessWidget{
               maxLines: 5,
               controller: _descController,
             ),
-            const SizedBox(height: 40,),
+            const SizedBox(
+              height: 40,
+            ),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 40),
               child: Row(
@@ -54,6 +71,7 @@ class AddMachineTypeDialog extends StatelessWidget{
                     onPressed: addMachine, 
                     child: const Text("Agregar")
                   ),
+
                 ],
               ),
             )
@@ -63,3 +81,4 @@ class AddMachineTypeDialog extends StatelessWidget{
     );
   }
 }
+

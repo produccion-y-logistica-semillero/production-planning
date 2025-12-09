@@ -3,11 +3,12 @@
 
 import 'package:flutter/material.dart';
 
-class SideMenuProvider extends ChangeNotifier{
+
+class SideMenuProvider extends ChangeNotifier {
   int selectedOption = 0;
   bool expanded = true;
 
-  void changeOption(int index){
+  void changeOption(int index) {
     selectedOption = index;
     notifyListeners();
   }
@@ -17,3 +18,4 @@ class SideMenuProvider extends ChangeNotifier{
     notifyListeners();
   }
 }
+

@@ -7,3 +7,4 @@ abstract class TasksDao{
   Future<bool> deleteTasks(int id);
 
 }
+

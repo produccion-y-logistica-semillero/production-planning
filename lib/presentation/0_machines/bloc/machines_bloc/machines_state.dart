@@ -1,6 +1,7 @@
 import 'package:production_planning/entities/machine_entity.dart';
 
 sealed class MachinesState{
+
   final List<MachineEntity>? machines;
   final int? typeId;
   MachinesState(this.machines, this.typeId);
@@ -33,3 +34,4 @@ class MachineDeletionSuccess extends MachinesState{
 class MachineTypeIdSet extends MachinesState{
   MachineTypeIdSet(super.machines,  super.typeId);
 }
+

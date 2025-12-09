@@ -10,7 +10,6 @@ class GanttPage extends StatelessWidget {
   final int orderId;
   final int number;
 
-
   const GanttPage({
     super.key,
     required this.orderId,
@@ -44,7 +43,6 @@ class GanttPage extends StatelessWidget {
                 BlocProvider.of<GanttBloc>(context).assignOrderId(orderId);
                 return const Center(child: CircularProgressIndicator());
               }
-
 
               final List<Widget> content = [];
               if (state.enviroment != null && state is! GanttPlanningSuccess) {
@@ -99,4 +97,6 @@ class GanttPage extends StatelessWidget {
       ),
     );
   }
+
 }
+

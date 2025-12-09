@@ -1,8 +1,10 @@
 import 'package:production_planning/entities/sequence_entity.dart';
+
 import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/repositories/models/task_dependency_model.dart';
 
 class SequenceModel{
+
   int? sequenceId;
   final String name;
   final List<TaskDependencyModel>? dependencies;
@@ -39,3 +41,4 @@ class SequenceModel{
     };
   }
 }
+

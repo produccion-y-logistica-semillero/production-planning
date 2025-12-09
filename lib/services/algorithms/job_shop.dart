@@ -27,8 +27,9 @@ class JobShop {
   ) {
     // Inicializar la disponibilidad de las máquinas
     int totalMachines = _getTotalMachines();
-    machineAvailability =
-        List.generate(totalMachines, (_) => startDate);
+
+    machineAvailability = List.generate(totalMachines, (_) => startDate);
+
 
     // Elegir el algoritmo según la regla proporcionada
     switch (rule) {
@@ -116,8 +117,6 @@ class JobShop {
       }
     }
   }
-
-
 void assignJobsMVR() {
   // Inicializa las cargas de las máquinas en 0
   Map<int, Duration> machineLoads = {
@@ -140,13 +139,17 @@ void assignJobsMVR() {
 }
 
 
+
   // Ajusta el inicio del trabajo para respetar las horas laborales
   DateTime adjustForWorkingSchedule(DateTime start) {
     TimeOfDay workingStart = workingSchedule.value1;
     TimeOfDay workingEnd = workingSchedule.value2;
 
     if (start.hour < workingStart.hour ||
-        (start.hour == workingStart.hour && start.minute < workingStart.minute)) {
+
+        (start.hour == workingStart.hour &&
+            start.minute < workingStart.minute)) {
+
       return DateTime(start.year, start.month, start.day, workingStart.hour,
           workingStart.minute);
     } else if (start.hour > workingEnd.hour ||

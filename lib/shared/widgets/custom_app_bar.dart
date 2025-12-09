@@ -10,3 +10,4 @@ PreferredSizeWidget getAppBar(){
     backgroundColor: const Color.fromARGB(0, 255, 255, 255),
   );
 }
+

@@ -11,6 +11,7 @@ class MainPage extends StatelessWidget {
   bool _isNavigating = false;
   int selected = 0;
 
+
   MainPage({super.key});
 
   @override
@@ -21,6 +22,7 @@ class MainPage extends StatelessWidget {
     Color onTertiaryContainer = Theme.of(context).colorScheme.onTertiaryContainer;
     Color primaryFixed = Theme.of(context).colorScheme.primaryFixed;
 
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: tertiaryContainer,
@@ -30,12 +32,14 @@ class MainPage extends StatelessWidget {
           child: Text(
             "Planeacion de Producción",
             style: TextStyle(fontSize: 16, color: onTertiaryContainer, fontWeight: FontWeight.w600),
+
           ),
         ),
         leading: IconButton(
           icon: Icon(Icons.menu, color: onTertiaryContainer),
           onPressed: () {
             Provider.of<SideMenuProvider>(context, listen: false).changeExpansion();
+
           },
         ),
       ),
@@ -46,6 +50,7 @@ class MainPage extends StatelessWidget {
               return SideMenu(
                 hasResizerToggle: false,
                 mode: provider.expanded ? SideMenuMode.auto : SideMenuMode.compact,
+
                 minWidth: 70,
                 maxWidth: 250,
                 backgroundColor: primaryContainer,
@@ -58,8 +63,10 @@ class MainPage extends StatelessWidget {
                     SideMenuItemDataTile(
                       title: 'Workspace',
                       onTap: () => _showWorkspaceDialog(context),
+
                       titleStyle: TextStyle(color: onPrimaryContainer, fontSize: 18),
                       icon: Icon(Icons.workspaces_outline, color: onPrimaryContainer),
+
                       isSelected: false,
                     ),
                     SideMenuItemDataTile(
@@ -73,12 +80,14 @@ class MainPage extends StatelessWidget {
                     createItem(provider, context, '/machines', 'Estaciones de Trabajo', 1, Icons.settings),
                     createItem(provider, context, '/sequences', 'Rutas de Proceso', 2, Icons.work),
                     createItem(provider, context, '/orders', 'Programas de produccion', 3, Icons.schedule_send_sharp),
+
                   ],
                   footer: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Text(
                       'Pontificia Universidad Javeriana',
                       style: TextStyle(color: onPrimaryContainer.withOpacity(0.6), fontSize: 12),
+
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -102,6 +111,7 @@ class MainPage extends StatelessWidget {
       }
       _navigatorKey.currentState!.pushNamed(routeName);
       _isNavigating = false;
+
     }
   }
 
@@ -185,6 +195,7 @@ class MainPage extends StatelessWidget {
 
                 if (selectedWorkspace != null) {
                   await file.writeAsString('$selectedWorkspace\n${options.join('\n')}');
+
                   Navigator.of(context).pop();
                   _showRestartMessage(context);
                 }
@@ -220,6 +231,7 @@ class MainPage extends StatelessWidget {
                 trailing: Text(startTime.format(context)),
                 onTap: () async {
                   final pickedTime = await showTimePicker(context: context, initialTime: startTime);
+
                   if (pickedTime != null) {
                     startTime = pickedTime;
                   }
@@ -272,6 +284,7 @@ class MainPage extends StatelessWidget {
         return AlertDialog(
           title: const Text('Se requiere reinicio'),
           content: const Text('La aplicacion requiere reiniciar para aplicar los cambios'),
+
           actions: [
             TextButton(
               onPressed: () {

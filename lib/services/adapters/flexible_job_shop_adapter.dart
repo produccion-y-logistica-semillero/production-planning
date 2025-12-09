@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -10,6 +11,8 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
+import '../../shared/utils/task_time_utils.dart';
+
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
@@ -27,7 +30,9 @@ class FlexibleJobShopAdapter {
     return 0;
   }
 
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleJobShopAdapter(int orderId, String rule) async {
+
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleJobShopAdapter(
+      int orderId, String rule) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
@@ -40,7 +45,10 @@ class FlexibleJobShopAdapter {
         .toList();
     final List<MachineEntity> machines = [];
     for (final typeId in machineTypeIds) {
-      final responseMachines = await machineRepository.getAllMachinesFromType(typeId);
+
+      final responseMachines =
+          await machineRepository.getAllMachinesFromType(typeId);
+
       final machineList = responseMachines.fold((_) => null, (m) => m);
       if (machineList == null || machineList.isEmpty) return null;
       machines.addAll(machineList); // Agregar todas las máquinas del tipo
@@ -52,16 +60,18 @@ class FlexibleJobShopAdapter {
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
       for (final task in job.sequence!.tasks!) {
         final Map<int, Duration> machineDurations = {};
-        for (final machine in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
-          Duration processingTime = machine.processingTime;
 
-          print("processing time: $processingTime, processing units: ${task.processingUnits}");
-          final duration = ruleOf3(processingTime, task.processingUnits);
+        for (final machine
+            in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
+          final explicit =
+              getExplicitProcessingDuration(job, task.id!, machine);
+          // Calculate duration from machine percentage (100% = 1 hour base)
+          final baseDuration = Duration(
+              minutes: (60 * machine.processingPercentage / 100).round());
+          final Duration duration =
+              explicit ?? ruleOf3(baseDuration, task.processingUnits);
 
-          if (duration == Duration.zero) {
-            print('Error: Duración calculada es cero para la máquina ${machine.id}');
-            continue;
-          }
+          if (duration == Duration.zero) continue;
           machineDurations[machine.id!] = duration;
         }
 
@@ -70,6 +80,8 @@ class FlexibleJobShopAdapter {
 
       inputJobs.add(FlexibleJobInput(
         job.jobId!,
+
+        job.sequence!.id!,
         job.dueDate,
         job.priority,
         job.availableDate,
@@ -83,6 +95,20 @@ class FlexibleJobShopAdapter {
       machinesAvailability[machine.id!] = order.regDate;
     }
 
+
+    // Crear mapa de inactividades por máquina
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      // Calculate rest duration from percentage (100% = 1 hour base)
+      machineRestTimeMap[machine.id!] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
+
     // Ejecutar el algoritmo Flexible Job Shop
     final output = FlexibleJobShop(
       order.regDate,
@@ -90,29 +116,48 @@ class FlexibleJobShopAdapter {
       inputJobs,
       machinesAvailability,
       rule,
+
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
+
     ).output;
 
     // Transformar la salida en PlanningMachineEntity
     final List<PlanningMachineEntity> planningMachines = [];
     for (final machine in machines) {
-      planningMachines.add(PlanningMachineEntity(machine.id!, machine.name, []));
+
+      planningMachines.add(PlanningMachineEntity(
+        machine.id!,
+        machine.name,
+        [],
+        scheduledInactivities: machine.scheduledInactivities,
+      ));
     }
 
+    final Map<int, int> jobCounter = {};
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final sequence = job.sequence!;
+      final current = (jobCounter[out.jobId] ?? 0) + 1;
+      jobCounter[out.jobId] = current;
+
       for (final taskEntry in out.scheduling.entries) {
         final taskId = taskEntry.key;
         final machineId = taskEntry.value.value1;
         final timeRange = taskEntry.value.value2;
 
-        print('Task Range - Start: ${timeRange.start}, End: ${timeRange.end}');
 
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
+
+        final displayName = current == 1
+            ? (job.sequence?.name ?? sequence.name)
+            : '${job.sequence?.name ?? sequence.name}.${current - 1}';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
           sequenceName: sequence.name,
+          displayName: displayName,
           taskId: task.id!,
           numberProcess: taskId,
           startDate: timeRange.start,
@@ -122,16 +167,20 @@ class FlexibleJobShopAdapter {
           orderId: orderId,
         );
 
-        final planningMachine = planningMachines.firstWhere((m) => m.machineId == machineId);
+        final planningMachine =
+            planningMachines.firstWhere((m) => m.machineId == machineId);
         planningMachine.tasks.add(planningTask);
       }
     }
 
 
     // Calcular métricas
-    final List<Tuple3<DateTime, DateTime, DateTime>> jobsDates = [];
+    final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
-      jobsDates.add(Tuple3(out.startDate, out.endTime, out.dueDate));
+      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
+      jobsDates
+          .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
+
     }
 
     final metrics = getMetricts(
@@ -141,4 +190,6 @@ class FlexibleJobShopAdapter {
 
     return Tuple2(planningMachines, metrics);
   }
+
 }
+

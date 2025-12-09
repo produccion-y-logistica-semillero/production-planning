@@ -1,4 +1,5 @@
-class Range{
+
+class Range {
   final DateTime startDate;
   final DateTime endDate;
   Range(this.startDate, this.endDate);
@@ -6,4 +7,6 @@ class Range{
   get start => startDate;
 
   get end => endDate;
+
 }
+

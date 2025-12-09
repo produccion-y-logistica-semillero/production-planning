@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
+
 import 'package:production_planning/presentation/2_orders/widgets/high_order/metrics_page.dart';
+
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_dialog.dart';
 
@@ -84,7 +86,9 @@ class _GanttChartState extends State<GanttChart> {
 
     for (final machine in widget.machines) {
       for (final task in machine.tasks) {
+
         if(earliest == null){
+
           earliest = task.startDate;
           latest = earliest.add(const Duration(days: 1));
         }
@@ -98,6 +102,7 @@ class _GanttChartState extends State<GanttChart> {
       }
     }
     if(earliest == null){
+
       earliest = DateTime.now();
       latest = earliest.add(const Duration(days: 1));
     }
@@ -150,18 +155,15 @@ class _GanttChartState extends State<GanttChart> {
         const SizedBox(height: 8),
         _buildHorizontalZoomSlider(),
         const SizedBox(height: 8),
-
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildVerticalZoomSlider(chartContainerHeight.toDouble()),
-
             SizedBox(
               width: machineListWidth,
               height: chartContainerHeight.toDouble(),
               child: _buildMachineListArea(chartTotalHeight),
             ),
-
             Expanded(
               child: _buildChartArea(
                 chartContainerWidth: chartContainerWidth.toDouble(),
@@ -452,6 +454,7 @@ class _GanttChartState extends State<GanttChart> {
                   //Agregar id del job y el id de la secuencia
                   child: Text(
                     '${task.sequenceName} (Job: ${task.jobId})',
+                    '${task.displayName}',
                     style: const TextStyle(color: Colors.white),
                   ),
                 ),
@@ -464,12 +467,98 @@ class _GanttChartState extends State<GanttChart> {
     return bars;
   }
 
+  List<Widget> _buildInactivityBlocks(double chartWidth) {
+    final blocks = <Widget>[];
+
+    for (int i = 0; i < widget.machines.length; i++) {
+      final machine = widget.machines[i];
+
+      // Iterar sobre cada día del rango
+      for (int dayOffset = 0; dayOffset < _totalDays; dayOffset++) {
+        final currentDay = _startDate.add(Duration(days: dayOffset));
+        final weekday = currentDay.weekday; // 1=Lunes, 7=Domingo
+
+        // Verificar inactividades programadas para este día
+        for (final inactivity in machine.scheduledInactivities) {
+          // Verificar si este día está en la lista de weekdays (convertir de Weekday enum a int)
+          final weekdayInts = inactivity.weekdays.map((wd) {
+            // Weekday.monday = 0, pero DateTime.weekday usa 1=Monday
+            return wd.index + 1;
+          }).toSet();
+
+          if (weekdayInts.contains(weekday)) {
+            // Convertir Duration startTime a horas y minutos
+            final startHour = inactivity.startTime.inHours;
+            final startMinute = inactivity.startTime.inMinutes % 60;
+
+            // Calcular fecha y hora de inicio de la inactividad
+            final inactivityStart = DateTime(
+              currentDay.year,
+              currentDay.month,
+              currentDay.day,
+              startHour,
+              startMinute,
+            );
+
+            final inactivityEnd = inactivityStart.add(inactivity.duration);
+
+            // Verificar si la inactividad está dentro del rango de horas visibles
+            if (inactivityEnd.hour < initialHour ||
+                inactivityStart.hour >= endingHour) {
+              continue;
+            }
+
+            final top = (i * (40.0 * _verticalZoom)) + (5 * i);
+            final left = _calculateTaskLeft(inactivityStart, chartWidth);
+            final right = _calculateTaskLeft(inactivityEnd, chartWidth);
+            final width = (right - left).clamp(1, chartWidth);
+
+            blocks.add(
+              Positioned(
+                top: top,
+                left: left,
+                child: Tooltip(
+                  message:
+                      '${inactivity.name}\n${inactivity.formattedStartTime()} (${inactivity.duration.inMinutes} min)',
+                  child: Container(
+                    width: width.toDouble(),
+                    height: 40.0 * _verticalZoom,
+                    decoration: BoxDecoration(
+                      color: Colors.yellow,
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
+                    alignment: Alignment.center,
+                    child: FittedBox(
+                      child: Text(
+                        '⚠️ ${inactivity.name} ⚠️',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return blocks;
+  }
+
   double _calculateTaskLeft(DateTime date, double chartWidth) {
     final hoursPerDay = endingHour - initialHour;
     final totalDisplayedMinutes = _totalDays * hoursPerDay * 60;
 
     final dayIndex = date.difference(_startDate).inDays;
-    final clampedDayIndex = dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
+
+    final clampedDayIndex =
+        dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
+
 
     final hour = date.hour;
     final clampedHour = (hour < initialHour)
@@ -486,6 +575,7 @@ class _GanttChartState extends State<GanttChart> {
     final fraction = (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
     return (fraction * chartWidth) + (_hourWidth/2);
   }
+
 
 
 
@@ -522,6 +612,7 @@ class _GanttChartState extends State<GanttChart> {
       builder: (_) => MetricsPage(metrics: metrics),
     );
   }
+
 
   void _openTaskDialog(task) {
     showDialog(

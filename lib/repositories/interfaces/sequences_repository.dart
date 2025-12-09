@@ -4,7 +4,9 @@ import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 
+
 abstract class SequencesRepository{
+
   Future<Either<Failure, bool>> createSequence(SequenceEntity sequence);
   Future<Either<Failure, List<SequenceEntity>>> getBasicSequences();
   Future<Either<Failure, SequenceEntity?>> getFullSequence(int id);
@@ -17,3 +19,4 @@ abstract class SequencesRepository{
 
   //Future<int> createTaskForSequenceAndReturnId(TaskEntity taskEntity, int sequenceId);
 }
+

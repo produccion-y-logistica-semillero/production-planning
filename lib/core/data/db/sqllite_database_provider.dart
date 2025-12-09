@@ -3,15 +3,35 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-class SQLLiteDatabaseProvider{
+
+class SQLLiteDatabaseProvider {
   static Database? _database;
 
-  static Future<Database> open(String workspace) async{
+  static Future<void> _createMachineInactivitiesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS MACHINE_INACTIVITIES (
+          inactivity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          machine_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          start_time TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL,
+          monday INTEGER NOT NULL DEFAULT 0,
+          tuesday INTEGER NOT NULL DEFAULT 0,
+          wednesday INTEGER NOT NULL DEFAULT 0,
+          thursday INTEGER NOT NULL DEFAULT 0,
+          friday INTEGER NOT NULL DEFAULT 0,
+          saturday INTEGER NOT NULL DEFAULT 0,
+          sunday INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id)
+      );
+    ''');
+  }
+
+  static Future<Database> open(String workspace) async {
     final databasePath = await getDatabasesPath();
     final path = join(databasePath, '${workspace.replaceAll(' ', '')}.db');
 
-
-     // Get the directory of the current executable (.exe)
+    // Get the directory of the current executable (.exe)
     final exeDir = File(Platform.resolvedExecutable).parent.path;
 
     // Create a text file in the same directory as the .exe
@@ -23,57 +43,78 @@ class SQLLiteDatabaseProvider{
     //the best way, but anyways, it works for me at the moment, can comment the line while we don't need it
     print(path);
 
-    _database = await openDatabase(
-      path,
-      version: 1,
-      onCreate: (Database db, int version) async {
-        await db.execute('''
+
+    _database = await openDatabase(path, version: 8,
+        onCreate: (Database db, int version) async {
+      await db.execute('''
           CREATE TABLE STATUS (
               status_id INTEGER PRIMARY KEY AUTOINCREMENT,
               status VARCHAR(100) NOT NULL
           );
         ''');
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE MACHINE_TYPES(
             machine_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT
           );
         ''');
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
               machine_name VARCHAR(100) NOT NULL,
               machine_type_id INTEGER NOT NULL,
               status_id INTEGER NOT NULL,
-              processing_time DATETIME NOT NULL,
-              preparation_time DATETIME NOT NULL,
+              processing_percentage REAL NOT NULL DEFAULT 100.0,
+              preparation_percentage REAL NOT NULL DEFAULT 100.0,
+              rest_percentage REAL NOT NULL DEFAULT 100.0,
               availability_time DATETIME NOT NULL,
-              rest_time DATETIME,
               continue_capacity INTEGER,
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
         ''');
-        await db.execute('''
+
+      await _createMachineInactivitiesTable(db);
+
+      await db.execute('''
+          CREATE TABLE IF NOT EXISTS setup_times (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              machine_id INTEGER NOT NULL,
+              from_sequence_id INTEGER,
+              to_sequence_id INTEGER NOT NULL,
+              setup_duration_minutes INTEGER NOT NULL,
+              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+              FOREIGN KEY (from_sequence_id) REFERENCES sequences(sequence_id),
+              FOREIGN KEY (to_sequence_id) REFERENCES sequences(sequence_id),
+              UNIQUE(machine_id, from_sequence_id, to_sequence_id)
+          );
+        ''');
+
+      await db.execute('''
           CREATE TABLE sequences (
               sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE tasks (
               task_id INTEGER PRIMARY KEY AUTOINCREMENT,
               n_proc_units TIMESTAMP NOT NULL,
               description VARCHAR(100),
               sequence_id INTEGER NOT NULL,
               machine_type_id INTEGER NOT NULL,
+              allow_preemption INTEGER NOT NULL DEFAULT 0,
               FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id)
           );
         ''');
 
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE TaskDependency (
             id SERIAL PRIMARY KEY,
             predecessor_id INT NOT NULL,
@@ -88,21 +129,23 @@ class SQLLiteDatabaseProvider{
 
         ''');
 
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE environments (
               environment_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
 
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE dispatch_rules (
               dispatch_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
               name VARCHAR(100) NOT NULL
           );
         ''');
 
-        await db.execute('''
+      await db.execute('''
           CREATE TABLE types_x_rules (
               type_rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
               environment_id INTEGER NOT NULL,
@@ -112,13 +155,15 @@ class SQLLiteDatabaseProvider{
           );
         ''');
 
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE orders (
               order_id INTEGER PRIMARY KEY AUTOINCREMENT,
               reg_date DATE NOT NULL
           );
         ''');
-        await db.execute('''
+
+      await db.execute('''
           CREATE TABLE jobs (
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
               sequence_id INTEGER NOT NULL,
@@ -132,12 +177,42 @@ class SQLLiteDatabaseProvider{
           );
         ''');
 
-        //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
-        await db.execute('''
+
+      await db.execute('''
+          CREATE TABLE job_preemption (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id INTEGER NOT NULL,
+              machine_id INTEGER NOT NULL,
+              can_preempt INTEGER NOT NULL CHECK (can_preempt IN (0, 1)),
+              FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+              UNIQUE(job_id, machine_id)
+          );
+        ''');
+
+      await db.execute('''
+          CREATE TABLE IF NOT EXISTS job_task_machine_times (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id INTEGER NOT NULL,
+              task_id INTEGER NOT NULL,
+              machine_id INTEGER NOT NULL,
+              processing_minutes INTEGER NOT NULL,
+              preparation_minutes INTEGER NOT NULL DEFAULT 0,
+              rest_minutes INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+              FOREIGN KEY (task_id) REFERENCES tasks(task_id),
+              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+              UNIQUE(job_id, task_id, machine_id)
+          );
+        ''');
+
+      //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
+      await db.execute('''
           -- Insert default statuses
           INSERT INTO status (status) VALUES ('Active');
           INSERT INTO status (status) VALUES ('Inactive');
           INSERT INTO status (status) VALUES ('Maintenance');
+
 
           -- Insert default machine types
           INSERT INTO machine_types (name, description) VALUES ('Type A', 'Basic machine type A');
@@ -234,6 +309,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 24);
 
+
 ------- PARALLEL MACHINE RULES
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
@@ -254,6 +330,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 20);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 21);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 22);
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 24);
+
 
 ------- FLOW SHOP MACHINE RULES (SPT,EDD,LPT,FIFO,WSPT,SPTA,EDDA,LPTA,FIFOA,WSPTA,CR, MS,ATCS,JOHNSON,JOHNSON3,CDS)
 INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
@@ -358,11 +435,136 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
           INSERT INTO jobs (sequence_id, order_id, amount, due_date, priority, available_date)
           VALUES (5, 4, 7, '2024-10-21', 1, '2024-10-10 22:30');
 
+          -------- OPEN SHOP MACHINE RULES
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
+          INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
+
         ''');
+    }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
+      if (oldVersion < 2) {
+        await _createMachineInactivitiesTable(db);
       }
+      if (oldVersion < 3) {
+        // Agregar environment y reglas de Open Shop
+        await db.execute('''
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
+            
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
+            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
+          ''');
+      }
+
+      
+      if (oldVersion < 5) {
+        // Crear tabla job_preemption
+        await db.execute('''
+            CREATE TABLE job_preemption (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                machine_id INTEGER NOT NULL,
+                can_preempt INTEGER NOT NULL CHECK (can_preempt IN (0, 1)),
+                FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+                FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+                UNIQUE(job_id, machine_id)
+            );
+          ''');
+      }
+      if (oldVersion < 6) {
+        // Crear tabla setup_times
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS setup_times (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id INTEGER NOT NULL,
+                from_sequence_id INTEGER,
+                to_sequence_id INTEGER NOT NULL,
+                setup_duration_minutes INTEGER NOT NULL,
+                FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+                FOREIGN KEY (from_sequence_id) REFERENCES sequences(sequence_id),
+                FOREIGN KEY (to_sequence_id) REFERENCES sequences(sequence_id),
+                UNIQUE(machine_id, from_sequence_id, to_sequence_id)
+            );
+          ''');
+      }
+      if (oldVersion < 7) {
+        // Asegurar que el environment OPEN SHOP existe
+        await db.execute('''
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
+          ''');
+      }
+      if (oldVersion < 8) {
+        // Migración a versión 8: convertir tiempos a porcentajes en MACHINES
+        // Crear nueva tabla con esquema actualizado
+        await db.execute('''
+          CREATE TABLE MACHINES_NEW (
+              machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              machine_name VARCHAR(100) NOT NULL,
+              machine_type_id INTEGER NOT NULL,
+              status_id INTEGER NOT NULL,
+              processing_percentage REAL NOT NULL DEFAULT 100.0,
+              preparation_percentage REAL NOT NULL DEFAULT 100.0,
+              rest_percentage REAL NOT NULL DEFAULT 100.0,
+              availability_time DATETIME NOT NULL,
+              continue_capacity INTEGER,
+              FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
+              FOREIGN KEY (status_id) REFERENCES status(status_id)
+          );
+        ''');
+        // Migrar datos existentes con porcentaje 100%
+        await db.execute('''
+          INSERT INTO MACHINES_NEW (machine_id, machine_name, machine_type_id, status_id, 
+              processing_percentage, preparation_percentage, rest_percentage, 
+              availability_time, continue_capacity)
+          SELECT machine_id, machine_name, machine_type_id, status_id, 
+              100.0, 100.0, 100.0, 
+              availability_time, continue_capacity
+          FROM MACHINES;
+        ''');
+        await db.execute('DROP TABLE MACHINES;');
+        await db.execute('ALTER TABLE MACHINES_NEW RENAME TO MACHINES;');
+
+        // Actualizar job_task_machine_times para tener 3 columnas de tiempo
+        await db.execute('''
+          CREATE TABLE job_task_machine_times_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id INTEGER NOT NULL,
+              task_id INTEGER NOT NULL,
+              machine_id INTEGER NOT NULL,
+              processing_minutes INTEGER NOT NULL,
+              preparation_minutes INTEGER NOT NULL DEFAULT 0,
+              rest_minutes INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+              FOREIGN KEY (task_id) REFERENCES tasks(task_id),
+              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+              UNIQUE(job_id, task_id, machine_id)
+          );
+        ''');
+        await db.execute('''
+          INSERT INTO job_task_machine_times_new (id, job_id, task_id, machine_id, processing_minutes, preparation_minutes, rest_minutes)
+          SELECT id, job_id, task_id, machine_id, duration_minutes, 0, 0 FROM job_task_machine_times;
+        ''');
+        await db.execute('DROP TABLE IF EXISTS job_task_machine_times;');
+        await db.execute(
+            'ALTER TABLE job_task_machine_times_new RENAME TO job_task_machine_times;');
+      }
+
     );
     return _database!;
   }
+
 
   static Future<void> closeDatabaseConnection() async{
     if(_database != null){
@@ -370,5 +572,5 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 25);
       _database = null;
     }
   }
-
 }
+

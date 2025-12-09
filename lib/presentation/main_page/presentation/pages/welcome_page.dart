@@ -11,4 +11,6 @@ class WelcomePage extends StatelessWidget{
       body: Center(child: Text("welcome")),
     );
   }
+
 }
+

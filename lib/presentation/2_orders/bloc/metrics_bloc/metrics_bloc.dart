@@ -30,6 +30,7 @@ class MetricsBloc extends Cubit<MetricsState> {
 
       final resp = await service.scheduleOrder(Tuple3(id, ruleValue, environment.name));
 
+
       if (resp.isRight()) {
         final result = resp.getOrElse(() => null);
         if (result != null) {

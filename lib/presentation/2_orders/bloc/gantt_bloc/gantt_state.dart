@@ -3,6 +3,7 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 
 abstract class GanttState{
+
   int? orderId;
   int? selectedRule;
   final EnvironmentEntity? enviroment;
@@ -35,3 +36,4 @@ class GanttPlanningSuccess extends GanttState{
   
   GanttPlanningSuccess(super.orderId, super.enviroment, this.planningMachines, this.metrics, super.selectedRule);
 }
+

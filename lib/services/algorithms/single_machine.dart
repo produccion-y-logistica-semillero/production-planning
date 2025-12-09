@@ -1,19 +1,21 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
-
 import 'dart:math';
 
 
 class SingleMachineInput{
+
   final int jobId;
   final Duration machineDuration;
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
-  SingleMachineInput(this.jobId, this.machineDuration, this.dueDate, this.priority, this.availableDate);
+  SingleMachineInput(this.jobId, this.machineDuration, this.dueDate,
+      this.priority, this.availableDate);
 }
 
-class SingleMachineOutput{
+class SingleMachineOutput {
+
   final int jobId;
   final Duration processingTime;
   final DateTime startDate;
@@ -32,6 +34,7 @@ class SingleMachine {
   //the input comes like a table of type
   //  job id   |     unique machine duration   |     due date        |       priority    |     Available date
   //  1         |         15:30                 |   2024/8/30/6:00    |         1         |     2024/8/28/6:00 
+
   //  2         |         20:41                 |   2024/8/30/6:00    |         3         |     2024/8/28/6:00
   //  3         |         01:25                 |   2024/8/30/6:00    |         2         |     2024/8/28/6:00
 
@@ -39,6 +42,7 @@ class SingleMachine {
   List<SingleMachineOutput> output = [];
   //the output goes like a table of type
   //  job id   |   processing time   |   start date    |     End date    |     due date        |     Delay (Retraso)    
+
   //  1         |       01:30         |  26/09/24/10:00 | 26/09/24/11:30  |   2024/8/30/6:00    |     00:00
   //  2         |       02:30         |  26/09/24/11:30 | 26/09/24/14:00  |   2024/8/30/6:00    |     00:00
 
@@ -72,6 +76,7 @@ class SingleMachine {
   DateTime _getStartTime(DateTime availableDate) {
     DateTime workStart = DateTime(startDate.year, startDate.month, startDate.day,
         workingSchedule.value1.hour, workingSchedule.value1.minute);
+
     return availableDate.isBefore(workStart) ? workStart : availableDate;
   }
 
@@ -81,6 +86,7 @@ class SingleMachine {
     if (currentMinutes > workEndMinutes) {
       DateTime nextDay = current.add(const Duration(days: 1));
       return DateTime(nextDay.year, nextDay.month, nextDay.day, workingSchedule.value1.hour, workingSchedule.value1.minute);
+
     }
     return current;
   }
@@ -108,6 +114,7 @@ class SingleMachine {
       int totalTime = (scheduleTime.hour * 60) + scheduleTime.minute + job.machineDuration.inMinutes;
       int endOfDay = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
 
+
       if (totalTime < endOfDay) {
         start = scheduleTime;
       } else {
@@ -121,7 +128,7 @@ class SingleMachine {
         );
         start = scheduleTime;
       }
-      
+
       scheduleTime = scheduleTime.add(job.machineDuration);
       end = scheduleTime;
 
@@ -132,6 +139,7 @@ class SingleMachine {
   }
 
  void sptRule() {
+
     input.sort((a, b) => a.machineDuration.compareTo(b.machineDuration));
     DateTime scheduleTime = _getStartTime(input[0].availableDate);
 
@@ -155,6 +163,7 @@ class SingleMachine {
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+
       scheduleTime = end;
     }
   }
@@ -167,6 +176,7 @@ class SingleMachine {
       DateTime end = start.add(job.machineDuration);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+
       scheduleTime = end;
     }
   }
@@ -179,6 +189,7 @@ class SingleMachine {
       DateTime end = start.add(job.machineDuration);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+
       scheduleTime = end;
     }
   }
@@ -193,6 +204,7 @@ class SingleMachine {
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+
       scheduleTime = end;
     }
   }
@@ -207,13 +219,18 @@ class SingleMachine {
     eddRuleAdapted();
   }
 
- void fifoRuleAdapted() {
+
+  void fifoRuleAdapted() {
+
     input.sort((a, b) => a.availableDate.compareTo(b.availableDate));
     eddRuleAdapted();
   }
 
   void wsptRuleAdapted() {
-    input.sort((a, b) => (b.priority / b.machineDuration.inMinutes).compareTo(a.priority / a.machineDuration.inMinutes));
+
+    input.sort((a, b) => (b.priority / b.machineDuration.inMinutes)
+        .compareTo(a.priority / a.machineDuration.inMinutes));
+
     eddRuleAdapted();
   }
 
@@ -221,7 +238,9 @@ class SingleMachine {
 ///////////////////Reglas DINÁMICAS////////////////////
   ///////////////////////////////////////////////////
   // Implementación de la regla de Minimum Slack
-   void scheduleMinimumSlack() {
+
+  void scheduleMinimumSlack() {
+
     input.sort((a, b) => _slack(a) < _slack(b) ? -1 : 1);
     eddRuleAdapted();
   }
@@ -383,8 +402,5 @@ class SingleMachine {
     individual[j] = temp;
     return individual;
   }
-
-
-
 
 }

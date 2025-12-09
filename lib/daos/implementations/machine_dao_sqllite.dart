@@ -24,49 +24,68 @@ class MachineDaoSqllite implements MachineDao{
   }
 
 
-  
   @override
-  Future<bool> deleteWhere(String field, int value) async{
-    try{
-      int n = await db.delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
-      return n == 1 ? true: false;
-    }
-    catch(error){
+  Future<bool> deleteWhere(String field, int value) async {
+    try {
+      int n = await db
+          .delete('MACHINES', where: '? = ?', whereArgs: [field, value]);
+      return n == 1 ? true : false;
+    } catch (error) {
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
       throw LocalStorageFailure();
     }
   }
-  
+
   @override
-  Future<List<Map<String, dynamic>>> getMachinesByType(int machineTypeId) async {
-    try{
-      List<Map<String, dynamic>> machines = await db.query('MACHINES', where: 'machine_type_id = ?', whereArgs: [machineTypeId]);
+  Future<List<Map<String, dynamic>>> getMachinesByType(
+      int machineTypeId) async {
+    try {
+      List<Map<String, dynamic>> machines = await db.query('MACHINES',
+          where: 'machine_type_id = ?', whereArgs: [machineTypeId]);
       return machines;
-    }
-    catch(error){
+    } catch (error) {
       print("ERORRRRRRRRRRRRRRRRRRRRRR ${error.toString()}");
       throw LocalStorageFailure();
     }
   }
-  
+
+
   @override
-  Future<int> insertMachine(Map<String, dynamic> machineJson) async{
-    try{
+  Future<int> insertMachine(Map<String, dynamic> machineJson) async {
+    try {
       int id = await db.insert('MACHINES', machineJson);
       return id;
-    }
-    catch(error){
+    } catch (error) {
       print("ERORR FROM INSERTING MACHINE DAO ${error.toString()}");
       throw LocalStorageFailure();
     }
   }
-  
+
+
   @override
-  Future<int> getMachinesCount(int machineTypeId) async{
-    try{
-      int amount = int.parse((await db.rawQuery('SELECT COUNT(*) as conteo FROM MACHINES WHERE machine_type_id = ?', [machineTypeId]))[0]['conteo'].toString());
+  Future<int> getMachinesCount(int machineTypeId) async {
+    try {
+      int amount = int.parse((await db.rawQuery(
+              'SELECT COUNT(*) as conteo FROM MACHINES WHERE machine_type_id = ?',
+              [machineTypeId]))[0]['conteo']
+          .toString());
       return amount;
-    }catch(error){
+    } catch (error) {
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
+  Future<bool> updateMachine(int machineId, Map<String, dynamic> values) async {
+    try {
+      final updated = await db.update(
+        'MACHINES',
+        values,
+        where: 'machine_id = ?',
+        whereArgs: [machineId],
+      );
+      return updated > 0;
+    } catch (_) {
       throw LocalStorageFailure();
     }
   }

@@ -7,14 +7,14 @@ class GanttBloc extends Cubit<GanttState> {
   final OrdersService service;
 
   GanttBloc(
+
       this.service,
       ) : super(GanttInitialState(null, null, null));
+
 
   /// Asigna un orderId y obtiene el environment
   void assignOrderId(int id) async {
     try {
-
-
       final response = await service.getOrderEnvironment(id);
       response.fold(
             (failure) {
@@ -23,11 +23,14 @@ class GanttBloc extends Cubit<GanttState> {
         },
             (env) {
           print("SUCCESS: Environment obtenido para orden $id: ${env.name}");
+
           emit(GanttOrderRetrieved(id, env, null));
         },
       );
     } catch (e) {
+
       print("EXCEPTION en assignOrderId: $e");
+
       emit(GanttOrderRetrieveError(id, null, null));
     }
   }
@@ -36,6 +39,7 @@ class GanttBloc extends Cubit<GanttState> {
   void selectRule(int ruleId) async {
     if (state.orderId == null || state.enviroment == null) {
       print("ERROR: No se puede seleccionar regla sin orderId o environment");
+
       return;
     }
 
@@ -49,6 +53,7 @@ class GanttBloc extends Cubit<GanttState> {
 
       if (selectedRule == null) {
         print("ERROR: No se encontró regla con ID $ruleId");
+
         emit(GanttPlanningError(state.orderId, state.enviroment, ruleId));
         return;
       }
@@ -66,6 +71,7 @@ class GanttBloc extends Cubit<GanttState> {
         },
             (result) {
           print("SUCCESS: Planificación exitosa para regla $ruleId");
+
           emit(GanttPlanningSuccess(
             state.orderId,
             state.enviroment,
@@ -76,7 +82,9 @@ class GanttBloc extends Cubit<GanttState> {
         },
       );
     } catch (e) {
+
       print("EXCEPTION en selectRule: $e");
+
       emit(GanttPlanningError(state.orderId, state.enviroment, ruleId));
     }
   }
@@ -85,17 +93,23 @@ class GanttBloc extends Cubit<GanttState> {
   void selectRuleByIndex(int index) {
     final env = state.enviroment;
     if (env == null) {
+
       print("ERROR: No hay environment disponible");
+
       return;
     }
 
     if (index < 0 || index >= env.rules.length) {
+
       print("ERROR: Índice $index fuera de rango (0-${env.rules.length - 1})");
+
       return;
     }
 
     final ruleId = env.rules[index].value1;
+
     print("INFO: Seleccionando regla en índice $index con ID $ruleId");
+
     selectRule(ruleId);
   }
 
@@ -112,6 +126,7 @@ class GanttBloc extends Cubit<GanttState> {
         },
             (env) {
           print("SUCCESS: Environment obtenido, seleccionando regla índice $index");
+
           emit(GanttOrderRetrieved(orderId, env, null));
 
           // Validar índice y seleccionar regla
@@ -121,11 +136,13 @@ class GanttBloc extends Cubit<GanttState> {
             selectRule(ruleId);
           } else {
             print("ERROR: Índice $index fuera de rango para ${env.rules.length} reglas");
+
           }
         },
       );
     } catch (e) {
       print("EXCEPTION en assignOrderAndSelectRuleByIndex: $e");
+
       emit(GanttOrderRetrieveError(orderId, null, null));
     }
   }
@@ -140,3 +157,4 @@ class GanttBloc extends Cubit<GanttState> {
     clearState();
   }
 }
+

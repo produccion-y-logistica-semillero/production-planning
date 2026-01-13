@@ -17,6 +17,7 @@ class SequencesBloc extends Cubit<SequencesState>{
     this.seqService, this.machinesService
 
   ): super(SequencesInitialState(false, null, false, false, null,/* */ null)) {
+
     //initial state
     retrieveSequencesMachine();
   }
@@ -119,3 +120,4 @@ void saveProcess(String processName, List<MachineTypeEntity> nodes, List<Connect
     emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines, state.dependencies));
   }
 }
+

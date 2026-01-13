@@ -4,7 +4,9 @@ import 'package:production_planning/entities/metrics.dart';
 class MetricsPage extends StatelessWidget {
   final Metrics metrics;
 
-  const MetricsPage({super.key, 
+
+  const MetricsPage({
+    super.key,
     required this.metrics,
   });
 
@@ -28,12 +30,20 @@ class MetricsPage extends StatelessWidget {
               const SizedBox(height: 20),
               _buildMetricRow('Tiempo muerto', _formatDuration(metrics.idle)),
               _buildMetricRow('Total trabajos', metrics.totalJobs.toString()),
-              _buildMetricRow('Tardanza maxima', _formatDuration(metrics.maxDelay)),
-              _buildMetricRow('Flujo promedio', _formatDuration(metrics.avarageProcessingTime)),
-              _buildMetricRow('Tardanza promedio', _formatDuration(metrics.avarageDelayTime)),
-              _buildMetricRow('Retardo promedio', _formatDuration(metrics.avarageLatenessTime)),
-              _buildMetricRow('Trabajos retrasados', metrics.delayedJobs.toString()),
-              _buildMetricRow('Porcentaje trabajos retrasados', '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
+
+              _buildMetricRow(
+                  'Tardanza maxima', _formatDuration(metrics.maxDelay)),
+              _buildMetricRow('Flujo promedio',
+                  _formatDuration(metrics.avarageProcessingTime)),
+              _buildMetricRow('Tardanza promedio',
+                  _formatDuration(metrics.avarageDelayTime)),
+              _buildMetricRow('Retardo promedio',
+                  _formatDuration(metrics.avarageLatenessTime)),
+              _buildMetricRow(
+                  'Trabajos retrasados', metrics.delayedJobs.toString()),
+              _buildMetricRow('Porcentaje trabajos retrasados',
+                  '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
+
               const SizedBox(height: 20),
               Align(
                 alignment: Alignment.centerRight,
@@ -67,4 +77,5 @@ class MetricsPage extends StatelessWidget {
   String _formatDuration(Duration duration) {
     return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m ${duration.inSeconds.remainder(60)}s';
   }
-}
+  }
+

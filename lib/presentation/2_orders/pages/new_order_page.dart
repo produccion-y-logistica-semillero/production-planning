@@ -32,6 +32,7 @@ class NewOrderPage extends StatelessWidget {
                       title: Text(
                         state.justSaved! ? "Guardado!!" : "Error",
                         style: TextStyle(color: state.justSaved! ? colorScheme.primary : colorScheme.error),
+
                       ),
                       content: Text(
                         state.justSaved!
@@ -79,6 +80,7 @@ class NewOrderPage extends StatelessWidget {
                         ),
                             icon: const Icon(Icons.info)
                         )
+
                       ],
                     ),
                     Expanded(
@@ -94,6 +96,7 @@ class NewOrderPage extends StatelessWidget {
                         backgroundColor: colorScheme.primary,
                         foregroundColor: colorScheme.onPrimary,
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -115,6 +118,7 @@ class NewOrderPage extends StatelessWidget {
                         backgroundColor: colorScheme.secondary,
                         foregroundColor: colorScheme.onSecondary,
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -155,6 +159,7 @@ class NewOrderPage extends StatelessWidget {
             style: TextStyle(color: colorScheme.error),
           ),
           content: const Text("Asegúrese de llenar todos los campos de todos los jobs antes de crear el programa de producción."),
+
           actions: [
             TextButton(
               onPressed: () => Navigator.of(subcontext).pop(),
@@ -166,3 +171,4 @@ class NewOrderPage extends StatelessWidget {
     );
   }
 }
+

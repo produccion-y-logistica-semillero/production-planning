@@ -15,6 +15,7 @@ class NoMachinesSelectedModal extends StatelessWidget {
           onTap: onClose, // Close the modal when tapping outside
           child: Container(
             color: Colors.black.withOpacity(0.3), // Slight dimming for background
+
             width: double.infinity,
             height: double.infinity,
           ),
@@ -63,6 +64,7 @@ class NoMachinesSelectedModal extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

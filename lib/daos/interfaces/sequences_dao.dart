@@ -6,3 +6,4 @@ abstract class SequencesDao{
   Future<SequenceModel?> getSequenceById(int id);
   Future<bool> deleteSequence(int id);
 }
+

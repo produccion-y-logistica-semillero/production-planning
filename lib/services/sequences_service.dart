@@ -8,6 +8,7 @@ import 'package:production_planning/repositories/interfaces/sequences_repository
 
 class SequencesService {
 
+
   final SequencesRepository repository;
   SequencesService(this.repository);
 
@@ -32,6 +33,7 @@ class SequencesService {
   }
 
   Future<Either<Failure, SequenceEntity?>> getFullSequence(int id){
+
     return repository.getFullSequence(id);
   }
 
@@ -45,11 +47,13 @@ class SequencesService {
     String processName,
   ) async {
     try {
+
       print("....................Add Sequence with Graph....................");
       // 1. Crea la secuencia y obtén el ID
       final SequenceEntity seq = SequenceEntity(null, [], processName, null);
       final int sequenceId = await repository.createSequenceAndReturnId(seq);
       print('Sequence created with ID: $sequenceId');
+
 
       // 2. Guarda las tareas con el sequenceId y mapea machineTypeId -> taskId
       final Map<int, int> machineTypeIdToTaskId = {};
@@ -70,6 +74,7 @@ class SequencesService {
         final predTaskId = machineTypeIdToTaskId[d['predecessor_id']];
         final succTaskId = machineTypeIdToTaskId[d['successor_id']];
         print('Mapping dependency: machineTypeId ${d['predecessor_id']} -> ${d['successor_id']} to taskId $predTaskId -> $succTaskId');
+
         if (predTaskId != null && succTaskId != null) {
           final depEntity = TaskDependencyEntity(
             predecessor_id: predTaskId,
@@ -81,6 +86,7 @@ class SequencesService {
         } else {
           print('ERROR: No se encontró el taskId para alguno de los nodos de la dependencia');
         }
+
       }
 
       return const Right(true);
@@ -90,3 +96,4 @@ class SequencesService {
     }
   }
 }
+

@@ -93,6 +93,10 @@ class ParallelMachine {
       case "MS":
         msRule();
         break;
+      case "GENETICS":
+        geneticsRule();
+        break;
+
 
     }
 
@@ -134,7 +138,6 @@ class ParallelMachine {
           _atcPriority(b, startDate).compareTo(_atcPriority(a, startDate)),
     );
   }
-  
   void wsptRule(){
     _schedule((a, b) => calculateWSPT(b).compareTo(calculateWSPT(a)));
   }
@@ -159,11 +162,11 @@ class ParallelMachine {
 
       if (aAvailable && !bAvailable) return -1;
       if (!aAvailable && bAvailable) return 1; 
+
       if (!aAvailable && !bAvailable) return 0;
       return a.dueDate.compareTo(b.dueDate);
     });
   }
-  
   void lptaRule(){
     DateTime now = DateTime.now();
     
@@ -259,7 +262,6 @@ class ParallelMachine {
 
     return (1 / processingTime) * exp(-tardinessFactor);
   }
-  
   
   double calculateWSPT(ParallelInput job) {
   int w = job.priority; // Peso
@@ -391,5 +393,150 @@ class ParallelMachine {
         "Trabajo ${out.jobId} -> Máquina ${out.machineId} | Inicio: ${out.startDate} | Fin: ${out.endDate} | Retraso: ${out.delay.inMinutes} min | Vencimiento: ${out.dueDate}",
       );
     }
+  }
+
+  //ALGORITMO DE GENÉTICA Y SUS FUNCIONAS AUXILIARES -> Varias máquinas al mismo tiempo
+
+  void geneticsRule() {
+    print("EJECUTANDO ALGORITMO GENÉTICO EN PARALLEL MACHINES");
+
+    const int populationSize = 50;
+    const int generations = 100;
+    const double mutationRate = 0.1;
+    
+    //crea la población inicial
+    List<List<ParallelInput>> population = _initializePopulation(populationSize);
+    List<ParallelInput> bestIndividual = [];
+    //valor grande para el comienzo
+    Duration bestFitness = Duration(days: 9999);
+
+    //se repite el proceso por el numero de generaciones asignado
+    for (int generation = 0; generation < generations; generation++) {
+      //se evalúa cada uno de los individuos
+      List<Tuple2<List<ParallelInput>, Duration>> evaluated = population.map((individual) {
+        return Tuple2(individual, _evaluateFitness(individual));
+      }).toList();
+
+      //se ordena de mejor a peor según el makespan
+      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
+
+      //se compara si el nuevo individuo es el mejor de las generaciones anteriores
+      if (evaluated.first.value2 < bestFitness) {
+        bestFitness = evaluated.first.value2;
+        bestIndividual = evaluated.first.value1;
+      }
+
+      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+    }
+
+    inputJobs = bestIndividual;
+    _assignJobsToMachines();
+  }
+  //población inicial
+  List<List<ParallelInput>> _initializePopulation(int size) {
+    List<List<ParallelInput>> population = [];
+
+    for (int i = 0; i < size; i++) {
+      List<ParallelInput> shuffled = List.from(inputJobs);
+      shuffled.shuffle();
+      population.add(shuffled);
+    }
+
+    return population;
+  }
+  //calcula makespan para un individuo en específico de jobs
+  Duration _evaluateFitness(List<ParallelInput> jobSequence) {
+    //mapa con la disponibilidad actual de cada máquina
+    Map<int, DateTime> machineAvailability = {
+      for (var id in machines.keys) id: startDate,
+    };
+
+    //se guarda tiempo
+    DateTime latestEnd = startDate;
+
+    //se prueba cada job en el orden del individuo
+    for (var job in jobSequence) {
+      DateTime bestEndTime = DateTime(9999);
+      //para cada job se prueban todas las máquinas y se escoge la que termina más rápido
+      for (var entry in job.durationsInMachines.entries) {
+        int machineId = entry.key;
+        Duration processing = entry.value;
+
+        //se ajusta a los horarios de cada máquina, sumando al makespam si no está disponible
+        DateTime available = machineAvailability[machineId]!;
+        DateTime start = job.availableDate.isAfter(available) ? job.availableDate : available;
+        start = _adjustForWorkingSchedule(start);
+        DateTime end = _adjustEndTimeForWorkingSchedule(start, processing);
+
+        //guarda mejor máquina para ese job
+        if (end.isBefore(bestEndTime)) {
+          bestEndTime = end;
+        }
+      }
+      //actualiza makespan total
+      if (bestEndTime.isAfter(latestEnd)) {
+        latestEnd = bestEndTime;
+      }
+    }
+    //devuelve el fitness de cada individuo, que es el makespan total
+    return latestEnd.difference(startDate);
+  }
+
+  //crea nuevas poblaciones a partir de dos padres aleatorios
+  List<List<ParallelInput>> _generateNewPopulation(
+    List<Tuple2<List<ParallelInput>, Duration>> evaluated,
+    int size,
+    double mutationRate,
+  ) {
+    List<List<ParallelInput>> newPop = [];
+
+    for (int i = 0; i < size; i++) {
+      final parent1 = _selectParent(evaluated);
+      final parent2 = _selectParent(evaluated);
+
+      List<ParallelInput> child = _crossover(parent1, parent2);
+
+      if (Random().nextDouble() < mutationRate) {
+        child = _mutate(child);
+      }
+
+      newPop.add(child);
+    }
+
+    return newPop;
+  }
+
+  //elige k individuos al azar, se queda con los que menor makespan tengan
+  List<ParallelInput> _selectParent(List<Tuple2<List<ParallelInput>, Duration>> evaluated) {
+    int k = 5;
+    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+    selected.sort((a, b) => a.value2.compareTo(b.value2));
+    return selected.first.value1;
+  }
+
+  //toma ciertos jobs del individuo p1 y otros del individuo p2
+    //básicamente cambia el orden de los jobs mezclando p1 y p2, sin repetir
+  List<ParallelInput> _crossover(List<ParallelInput> p1, List<ParallelInput> p2) {
+    final length = p1.length;
+    final int point = Random().nextInt(length);
+    final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
+
+    final List<ParallelInput> child = [
+      ...p1.sublist(0, point),
+      ...p2.where((j) => !jobIds.contains(j.jobId)),
+    ];
+
+    return child;
+  }
+
+  //intercambia el orden de dos jobs aleatoriamente
+  List<ParallelInput> _mutate(List<ParallelInput> individual) {
+    if (individual.length < 2) return individual;
+    int i = Random().nextInt(individual.length);
+    int j = Random().nextInt(individual.length);
+    final temp = individual[i];
+    individual[i] = individual[j];
+    individual[j] = temp;
+    return individual;
   }
 }

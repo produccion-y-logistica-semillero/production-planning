@@ -10,6 +10,7 @@ import 'package:production_planning/presentation/main_page/presentation/pages/we
 import 'package:production_planning/presentation/1_sequences/pages/sequences_page.dart';
 
 class MainNavigator extends StatelessWidget{
+
   final GlobalKey<NavigatorState> _navigatorKey;
 
   const MainNavigator(this._navigatorKey, {super.key});
@@ -54,3 +55,4 @@ class MainNavigator extends StatelessWidget{
             );
   }
 }
+

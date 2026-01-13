@@ -30,6 +30,7 @@ class OrdersScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
+
               ),
               shadowColor: colorScheme.shadow.withOpacity(0.1),
               elevation: 4,
@@ -63,6 +64,7 @@ class OrdersScreen extends StatelessWidget {
                         backgroundColor: colorScheme.primary,
                         foregroundColor: colorScheme.onPrimary,
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),

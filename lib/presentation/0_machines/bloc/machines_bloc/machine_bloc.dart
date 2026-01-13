@@ -4,72 +4,69 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/services/machines_service.dart';
 
 class MachineBloc extends Cubit<MachinesState> {
-
   final MachinesService service;
-  MachineBloc(this.service):super(MachinesStateInitial(null, null));
+  MachineBloc(this.service) : super(MachinesStateInitial(null, null));
 
-  void retrieveMachines(int typeId) async{
+  void retrieveMachines(int typeId) async {
     //emit so it shows loading
     emit(MachinesRetrieving(null, state.typeId));
     final response = await service.getMachines(typeId);
-    response.fold( 
-      (f)=> emit(MachinesRetrievingError(null, state.typeId)),
-      (machines)=> emit(MachinesRetrievingSuccess(machines, state.typeId))
-    );
+    response.fold((f) => emit(MachinesRetrievingError(null, state.typeId)),
+        (machines) => emit(MachinesRetrievingSuccess(machines, state.typeId)));
   }
 
-  void addNewMachine(String capacity, String preparation, String continueCapacity, String rest, String machineName, int typeId,  String availabilityDateTimeStr)async{
+  void addNewMachine(
+    double processingPercentage,
+    double preparationPercentage,
+    int continueCapacity,
+    double restPercentage,
+    String machineName,
+    int typeId,
+    String availabilityDateTimeStr,
+  ) async {
     List<MachineEntity> machines = [];
-    print("Adding new machine with typeId: $typeId");
-    if(state is MachinesRetrievingSuccess) machines = state.machines??[];
-    final proc = Duration(
-      hours: int.parse(capacity.substring(0,2)),
-      minutes: int.parse(capacity.substring(3,5)),
-    );
-    final prep = Duration(
-      hours: int.parse(preparation.substring(0,2)),
-      minutes: int.parse(preparation.substring(3,5)),
-    );
-    final rst = Duration(
-      hours: int.parse(rest.substring(0,2)),
-      minutes: int.parse(rest.substring(3,5)),
-    );
-    final continueCap = int.parse(continueCapacity);
+
+    if (state is MachinesRetrievingSuccess) machines = state.machines ?? [];
     final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
     //here we should call domain and get as response the machine entity to ad
-    print("------------------------------------------------");
-    print("Adding new machine with name: $machineName, typeId: $typeId, proc: $proc, prep: $prep, rst: $rst, continueCap: $continueCap, availabilityDateTime: $availabilityDateTime");
-    final response = await service.addMachine(typeId, machineName, null, proc, prep, rst, continueCap, availabilityDateTime);
-    print("Response from service: $response");
-    response.fold(
-      (f)=> MachinesRetrievingSuccess(machines, state.typeId), 
-      (mac){
-        //NEED TO CHECK BECAUSE WHEN ADDING THE NEW MACHINE IT SAYS ID IS NULL EVEN TOUGH IS NOT
-        emit(MachinesRetrievingSuccess(machines, state.typeId));
-      });
+
+    final response = await service.addMachine(
+        typeId,
+        machineName,
+        null,
+        processingPercentage,
+        preparationPercentage,
+        restPercentage,
+        continueCapacity,
+        availabilityDateTime);
+
+    response.fold((f) => MachinesRetrievingSuccess(machines, state.typeId),
+        (mac) {
+      //NEED TO CHECK BECAUSE WHEN ADDING THE NEW MACHINE IT SAYS ID IS NULL EVEN TOUGH IS NOT
+      emit(MachinesRetrievingSuccess(machines, state.typeId));
+    });
   }
 
-
-  void deleteMachine(int machineID) async{
-    List<MachineEntity> machines = state.machines??[];
+  void deleteMachine(int machineID) async {
+    List<MachineEntity> machines = state.machines ?? [];
 
     final response = await service.deleteMachine(machineID);
-    response.fold(
-      (failure) => emit(MachineDeletionError(machines, state.typeId)),
-      (boolean){
-        if(boolean){
-          machines.removeWhere((machine) => machine.id == machineID);
-          emit(MachineDeletionSuccess(machines, state.typeId));
-        }
+    response
+        .fold((failure) => emit(MachineDeletionError(machines, state.typeId)),
+            (boolean) {
+      if (boolean) {
+        machines.removeWhere((machine) => machine.id == machineID);
+        emit(MachineDeletionSuccess(machines, state.typeId));
       }
-    );
-  } 
+    });
+  }
 
-  void machinesExpansionCollapses() async{
+  void machinesExpansionCollapses() async {
     emit(MachinesStateInitial(null, state.typeId));
   }
 
-  void machineSetType(int typeId) async{
-     emit(MachineTypeIdSet(state.machines, typeId));
+  void machineSetType(int typeId) async {
+    emit(MachineTypeIdSet(state.machines, typeId));
+
   }
 }

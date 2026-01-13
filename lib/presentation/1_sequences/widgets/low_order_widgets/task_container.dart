@@ -84,6 +84,29 @@ class TaskContainer extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
+
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  task.allowPreemption ? Icons.pause_circle : Icons.block,
+                  size: 16,
+                  color: task.allowPreemption
+                      ? colorScheme.primary
+                      : colorScheme.onPrimaryContainer.withOpacity(0.5),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  task.allowPreemption ? 'Interrumpible' : 'No interrumpible',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onPrimaryContainer.withOpacity(0.7),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

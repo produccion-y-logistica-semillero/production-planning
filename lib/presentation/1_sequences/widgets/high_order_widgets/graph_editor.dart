@@ -52,12 +52,14 @@ class _Selection {
   const _Selection.none() : this._(_SelectionType.none);
   const _Selection.node(int id) : this._(_SelectionType.node, nodeId: id);
   const _Selection.edge(int index) : this._(_SelectionType.edge, edgeIndex: index);
+
 }
 
 /// ---------------------------------------------------------------------------
 /// Modos de arrastre temporal.
 /// ---------------------------------------------------------------------------
 enum _DragMode { none, draggingNode, draggingHandleSource, draggingHandleTarget }
+
 
 /// ---------------------------------------------------------------------------
 /// Widget principal del editor de grafo.
@@ -118,13 +120,6 @@ class NodeEditorState extends State<NodeEditor> {
   @override
   void initState() {
     super.initState();
-    // Si nos pasan máquinas por constructor y aún no hay estado cargado,
-    // dibujamos sin conexiones inicialmente.
-    if (widget.machines != null &&
-        widget.machines!.isNotEmpty &&
-        _machineById.isEmpty) {
-      loadNodesAndConnections(widget.machines!, const <Connection>[]);
-    }
   }
 
   @override
@@ -151,9 +146,11 @@ class NodeEditorState extends State<NodeEditor> {
   /// - [machines]: lista de entidades con al menos `id` (int) y opcionalmente `name` (String).
   /// - [connections]: lista de aristas dirigidas (source -> target).
   void loadNodesAndConnections(
+
       List<MachineTypeEntity> machines,
       List<Connection> connections,
       ) {
+
     setState(() {
       _nodePos.clear();
       _machineById.clear();
@@ -181,8 +178,28 @@ class NodeEditorState extends State<NodeEditor> {
   /// Retorna las entidades de máquina presentes (para persistencia).
   List<MachineTypeEntity> getNodes() => _machineById.values.toList();
 
-  /// Retorna las conexiones actuales.
-  List<Connection> getConnections() => List.unmodifiable(_connections);
+
+  /// Retorna las conexiones actuales (copia defensiva para evitar problemas al guardar).
+  List<Connection> getConnections() {
+    // Limpiar estados transitorios antes de retornar
+    _clearTransientBeforeSave();
+    return List.unmodifiable(_connections);
+  }
+
+  /// Limpia estados transitorios antes de guardar para evitar inconsistencias.
+  void _clearTransientBeforeSave() {
+    if (_dragMode != _DragMode.none ||
+        _connectingFrom != null ||
+        _cursor != null) {
+      setState(() {
+        _dragMode = _DragMode.none;
+        _connectingFrom = null;
+        _cursor = null;
+        _dragEdgeIndex = null;
+      });
+    }
+  }
+
 
   /// Compat: algunos flujos llaman a esto para agregar un nodo suelto.
   /// - Si `position` no se indica, se ubica en la siguiente celda de una grilla simple.
@@ -209,9 +226,11 @@ class NodeEditorState extends State<NodeEditor> {
   /// Tap en canvas vacío: cancela conexión en preparación o limpia selección.
   void _onTapCanvas() {
     setState(() {
+
       _cursor = null;                // <-- limpiar la guía
       if (_connectingFrom != null) {
         _connectingFrom = null;      // cancelar tap-to-connect
+
       } else {
         _sel = const _Selection.none();
       }
@@ -239,6 +258,7 @@ class NodeEditorState extends State<NodeEditor> {
         }
         _connectingFrom = null;
         _cursor = null;              // <-- importante: limpiar al salir del modo conectar
+
         _sel = _Selection.node(id);
       }
     });
@@ -249,6 +269,7 @@ class NodeEditorState extends State<NodeEditor> {
     setState(() {
       _sel = _Selection.edge(edgeIndex);
       _cursor = null;                // <-- no mostrar guía si solo está seleccionada
+
     });
   }
 
@@ -323,6 +344,7 @@ class NodeEditorState extends State<NodeEditor> {
       } else if (_hasEdge(newConn.source, newConn.target, ignoreIndex: idx)) {
         // Ya existe esa conexión exacta (ignorando la propia).
       } else if (_wouldCreateCycle(newConn.source, newConn.target, ignoreIndex: idx)) {
+
         _flashWarn(context, 'Esa reasignación crea un ciclo');
       } else {
         setState(() => _connections[idx] = newConn);
@@ -339,10 +361,12 @@ class NodeEditorState extends State<NodeEditor> {
   //   TECLADO: ESC PARA ELIMINAR
   // =======================================
 
-  /// Atajo: Supr -> borrar selección.
+  /// Atajo: Supr/Delete/Backspace -> borrar selección.
   Map<ShortcutActivator, Intent> get _shortcuts => {
     // Supr (Delete) borra nodo/arista seleccionada
     const SingleActivator(LogicalKeyboardKey.delete): const _DeleteIntent(),
+    // Backspace como alternativa (algunos teclados)
+    const SingleActivator(LogicalKeyboardKey.backspace): const _DeleteIntent(),
   };
   /// Acción asociada a Supr.
   Map<Type, Action<Intent>> get _actions => {
@@ -356,23 +380,37 @@ class NodeEditorState extends State<NodeEditor> {
   /// - Nodo: elimina el nodo y sus aristas incidentes.
   /// - Arista: elimina solo esa arista.
   void _deleteSelection() {
+    if (_sel.type == _SelectionType.none) return;
+
     setState(() {
       switch (_sel.type) {
         case _SelectionType.none:
           return;
         case _SelectionType.node:
-          final id = _sel.nodeId!;
+          final id = _sel.nodeId;
+          if (id == null) return;
+
+          // Verificar que el nodo existe antes de eliminarlo
+          if (!_nodePos.containsKey(id)) return;
+
+
           _nodePos.remove(id);
           _machineById.remove(id);
           _connections.removeWhere((e) => e.source == id || e.target == id);
           _sel = const _Selection.none();
           _connectingFrom = null;
+          _cursor = null;
+          break;
+
         case _SelectionType.edge:
-          final idx = _sel.edgeIndex!;
-          if (idx >= 0 && idx < _connections.length) {
-            _connections.removeAt(idx);
-          }
+          final idx = _sel.edgeIndex;
+          if (idx == null || idx < 0 || idx >= _connections.length) return;
+
+          _connections.removeAt(idx);
           _sel = const _Selection.none();
+          _cursor = null;
+          break;
+
       }
     });
   }
@@ -448,11 +486,20 @@ class NodeEditorState extends State<NodeEditor> {
         child: Focus(
           focusNode: _focusNode,
           autofocus: true, // para que Esc funcione sin clicks previos
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque, // IMPORTANTE: captura todos los eventos
+             onTap: () {
+            // Recuperar el foco al hacer clic en cualquier parte
+             if (!_focusNode.hasFocus) {
+            _focusNode.requestFocus();
+              }
+            },
           child: MouseRegion(
             onHover: (e) {
               final isConnecting = _connectingFrom != null;
               final isDraggingHandle = _dragMode == _DragMode.draggingHandleSource ||
                   _dragMode == _DragMode.draggingHandleTarget;
+
 
               if (isConnecting || isDraggingHandle) {
                 if (_cursor != e.localPosition) {
@@ -460,6 +507,7 @@ class NodeEditorState extends State<NodeEditor> {
                 }
               } else if (_cursor != null) {
                 setState(() => _cursor = null);  // <-- evita que quede una guía “fantasma”
+
               }
             },
             child: LayoutBuilder(
@@ -543,6 +591,7 @@ class NodeEditorState extends State<NodeEditor> {
                       connectingFrom: _connectingFrom,
                       cursor: _cursor,
                       machineById: _machineById,
+
                       isDraggingHandle: _dragMode == _DragMode.draggingHandleSource ||
                           _dragMode == _DragMode.draggingHandleTarget,
                       draggingEdgeIndex: _dragEdgeIndex,
@@ -551,10 +600,13 @@ class NodeEditorState extends State<NodeEditor> {
                     size: canvasSize,
                   ),
 
+
                 );
               },
             ),
           ),
+          ),
+
         ),
       ),
     );
@@ -589,6 +641,7 @@ class NodeEditorState extends State<NodeEditor> {
     if (dir.distance < 1e-6) return from;
     final candidates = <Offset>[];
     final lines = <(Offset, Offset)>[
+
       (Offset(rect.left, rect.top), Offset(rect.right, rect.top)),       // top
       (Offset(rect.left, rect.bottom), Offset(rect.right, rect.bottom)), // bottom
       (Offset(rect.left, rect.top), Offset(rect.left, rect.bottom)),     // left
@@ -600,6 +653,7 @@ class NodeEditorState extends State<NodeEditor> {
     }
     if (candidates.isEmpty) return from;
     candidates.sort((a, b) => (a - from).distance.compareTo((b - from).distance));
+
     return candidates.first;
   }
 
@@ -622,6 +676,7 @@ class NodeEditorState extends State<NodeEditor> {
     bool onSeg(Offset a, Offset b, Offset p) {
       final minX = math.min(a.dx, b.dx) - 1e-6, maxX = math.max(a.dx, b.dx) + 1e-6;
       final minY = math.min(a.dy, b.dy) - 1e-6, maxY = math.max(a.dy, b.dy) + 1e-6;
+
       return p.dx >= minX && p.dx <= maxX && p.dy >= minY && p.dy <= maxY;
     }
 
@@ -686,6 +741,7 @@ class NodeEditorState extends State<NodeEditor> {
     }
     return 'Nodo ${m.id}';
   }
+
 
   /// SnackBar corto de advertencia (e.g., intento de crear ciclo).
   void _flashWarn(BuildContext context, String msg) {
@@ -755,9 +811,9 @@ class _GraphPainter extends CustomPainter {
       // Anclar a los bordes del rectángulo (más prolijo que al centro)
       final p1 = _shrinkToRectEdge(a, b, fromRect);
       final p2 = _shrinkToRectEdge(b, a, toRect);
-
       final selected = selection.type == _SelectionType.edge && selection.edgeIndex == i;
       _drawArrow(canvas, p1, p2, selected: selected);
+
 
     }
 
@@ -769,6 +825,7 @@ class _GraphPainter extends CustomPainter {
           _center(_nodeRect(e.source)), _center(_nodeRect(e.target)), _nodeRect(e.source));
       final p2 = _shrinkToRectEdge(
           _center(_nodeRect(e.target)), _center(_nodeRect(e.source)), _nodeRect(e.target));
+
       final paint = Paint()..color = Colors.blue;
       canvas.drawCircle(p1, 6, paint);
       canvas.drawCircle(p2, 6, paint);
@@ -791,6 +848,7 @@ class _GraphPainter extends CustomPainter {
       final from = _shrinkToRectEdge(_center(fromRect), _center(toRect), fromRect);
       final to   = _shrinkToRectEdge(_center(toRect), _center(fromRect), toRect);
 
+
       if (draggingHandleIsSource) {
         // Mueves el ORIGEN: cursor -> to
         _drawArrow(canvas, cursor!, to, dashed: true);
@@ -800,13 +858,13 @@ class _GraphPainter extends CustomPainter {
       }
     }
 
-
     // (5) Nodos (rectángulos con etiqueta)
     for (final entry in nodePos.entries) {
       final id = entry.key;
       final pos = entry.value;
       final rect = Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
       final isSel = selection.type == _SelectionType.node && selection.nodeId == id;
+
 
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(10));
       final fill = Paint()..color = isSel ? Colors.blue.shade100 : Colors.white;
@@ -879,6 +937,7 @@ class _GraphPainter extends CustomPainter {
     }
     if (candidates.isEmpty) return from;
     candidates.sort((a, b) => (a - from).distance.compareTo((b - from).distance));
+
     return candidates.first;
   }
 
@@ -900,6 +959,7 @@ class _GraphPainter extends CustomPainter {
     bool onSeg(Offset a, Offset b, Offset p) {
       final minX = math.min(a.dx, b.dx) - 1e-6, maxX = math.max(a.dx, b.dx) + 1e-6;
       final minY = math.min(a.dy, b.dy) - 1e-6, maxY = math.max(a.dy, b.dy) + 1e-6;
+
       return p.dx >= minX && p.dx <= maxX && p.dy >= minY && p.dy <= maxY;
     }
 

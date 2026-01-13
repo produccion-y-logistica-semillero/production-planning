@@ -11,7 +11,10 @@ class FlexibleFlowInput {
   //tuple2 <task id, Map<machineId, Duration of task in machine>>
   final List<Tuple2<int, Map<int, Duration>>> taskSequence;
 
-  FlexibleFlowInput(this.jobId, this.dueDate, this.priority, this.availableDate, this.taskSequence);
+
+  FlexibleFlowInput(this.jobId, this.dueDate, this.priority, this.availableDate,
+      this.taskSequence);
+
 }
 
 class FlexibleFlowOutput {
@@ -22,7 +25,9 @@ class FlexibleFlowOutput {
   //map<task id, tuple2<machineId, range scheuled>>
   final Map<int, Tuple2<int, Range>> scheduling;
 
-  FlexibleFlowOutput(this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
+
+  FlexibleFlowOutput(
+      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
 }
 
 class FlexibleFlowShop {
@@ -81,22 +86,30 @@ class FlexibleFlowShop {
         break;
       case "JOHNSON":
         _applyJohnsonRuleFlexible(inputJobs);
-      case "CDS": 
+
+      case "CDS":
         cdsAlgorithm();
     }
   }
 
   void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptRule() => _schedule((a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),);
-  void lptRule() => _schedule((a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),);
-  void fifoRule() =>_schedule((a, b) => a.availableDate.compareTo(b.availableDate));
+  void sptRule() => _schedule(
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+      );
+  void lptRule() => _schedule(
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+      );
+  void fifoRule() =>
+      _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
   void wsptRule() => _schedule((a, b) {
-    double wsptA = a.priority / _totalProcessingTime(a);
-    double wsptB = b.priority / _totalProcessingTime(b);
-    return wsptB.compareTo(wsptA);
-  });
+        double wsptA = a.priority / _totalProcessingTime(a);
+        double wsptB = b.priority / _totalProcessingTime(b);
+        return wsptB.compareTo(wsptA);
+      });
 
-  void _schedule(int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
+  void _schedule(
+      int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
+
     inputJobs.sort(comparator);
     for (var job in inputJobs) {
       _assignJobToMachines(job);
@@ -114,15 +127,22 @@ class FlexibleFlowShop {
       int stationId = task.value1;
       Map<int, Duration> machinesInStation = task.value2;
 
-      Tuple2<int, int> selectedMachine = _selectBestMachine(stationId, machinesInStation);
+
+      Tuple2<int, int> selectedMachine =
+          _selectBestMachine(stationId, machinesInStation);
       int machineId = selectedMachine.value2;
       Duration processingTime = machinesInStation[machineId]!;
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
+
+      DateTime startTime = jobStartTime.isAfter(machineAvailable)
+          ? jobStartTime
+          : machineAvailable;
 
       startTime = _adjustForWorkingSchedule(startTime);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(startTime, startTime.add(processingTime));
+      DateTime endTime = _adjustEndTimeForWorkingSchedule(
+          startTime, startTime.add(processingTime));
+
 
       // Guarda el primer tiempo real de inicio
       actualStartTime ??= startTime;
@@ -143,9 +163,10 @@ class FlexibleFlowShop {
       scheduling,
     ));
   }
-   
 
-  Tuple2<int, int> _selectBestMachine(int stationId, Map<int, Duration> machinesInStation) {
+
+  Tuple2<int, int> _selectBestMachine(
+      int stationId, Map<int, Duration> machinesInStation) {
     final best = machinesInStation.entries.reduce((a, b) {
       final availableA = machinesAvailability[a.key] ?? startDate;
       final availableB = machinesAvailability[b.key] ?? startDate;
@@ -155,7 +176,9 @@ class FlexibleFlowShop {
       } else if (availableB.isBefore(availableA)) {
         return b;
       } else {
-      // Si ambos están disponibles al mismo tiempo, elige por menor duración
+
+        // Si ambos están disponibles al mismo tiempo, elige por menor duración
+
         return a.value.compareTo(b.value) <= 0 ? a : b;
       }
     });
@@ -179,7 +202,11 @@ class FlexibleFlowShop {
     TimeOfDay workingStart = workingSchedule.value1;
     TimeOfDay workingEnd = workingSchedule.value2;
 
-    if (start.hour < workingStart.hour ||(start.hour == workingStart.hour && start.minute < workingStart.minute)) {
+
+    if (start.hour < workingStart.hour ||
+        (start.hour == workingStart.hour &&
+            start.minute < workingStart.minute)) {
+
       return DateTime(
         start.year,
         start.month,
@@ -187,7 +214,10 @@ class FlexibleFlowShop {
         workingStart.hour,
         workingStart.minute,
       );
-    } else if (start.hour > workingEnd.hour ||(start.hour == workingEnd.hour && start.minute > workingEnd.minute)) {
+
+    } else if (start.hour > workingEnd.hour ||
+        (start.hour == workingEnd.hour && start.minute > workingEnd.minute)) {
+
       return DateTime(
         start.year,
         start.month,
@@ -224,14 +254,18 @@ class FlexibleFlowShop {
 
 
   void eddaRule() => _dynamicSchedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptaRule() => _dynamicSchedule((a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)));
-  void lptaRule() => _dynamicSchedule((a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)));
-  void fifoaRule() =>_dynamicSchedule((a, b) => a.availableDate.compareTo(b.availableDate));
+  void sptaRule() => _dynamicSchedule(
+      (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)));
+  void lptaRule() => _dynamicSchedule(
+      (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)));
+  void fifoaRule() =>
+      _dynamicSchedule((a, b) => a.availableDate.compareTo(b.availableDate));
   void wsptaRule() => _dynamicSchedule((a, b) {
-    double wsptA = a.priority / _totalProcessingTime(a);
-    double wsptB = b.priority / _totalProcessingTime(b);
-    return wsptB.compareTo(wsptA);
-  });
+        double wsptA = a.priority / _totalProcessingTime(a);
+        double wsptB = b.priority / _totalProcessingTime(b);
+        return wsptB.compareTo(wsptA);
+      });
+
 
   void msRule() {
     int accumulatedProcessingTime = 0;
@@ -252,7 +286,6 @@ class FlexibleFlowShop {
     }
   }
 
-
   void crRule() {
     int accumulatedProcessingTime = 0;
     DateTime currentTime = startDate;
@@ -272,22 +305,19 @@ class FlexibleFlowShop {
     }
   }
 
-
   void atcRule() {
     DateTime currentTime = startDate;
     List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
     output.clear();
     int elapsedTime = 0;
-    double K=3.0;
+
+    double K = 3.0;
 
     while (remainingJobs.isNotEmpty) {
       remainingJobs.sort(
-        (a, b) => _calculateATCPriority(
-          b,
-          currentTime,
-          elapsedTime,
-          K
-        ).compareTo(_calculateATCPriority(a, currentTime, elapsedTime,K)),
+        (a, b) => _calculateATCPriority(b, currentTime, elapsedTime, K)
+            .compareTo(_calculateATCPriority(a, currentTime, elapsedTime, K)),
+
       );
       FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
       _assignJobToMachines(selectedJob);
@@ -312,7 +342,10 @@ class FlexibleFlowShop {
         ));
   }
 
-  void _dynamicSchedule(int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
+
+  void _dynamicSchedule(
+      int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
+
     List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
     while (remainingJobs.isNotEmpty) {
       remainingJobs.sort(comparator);
@@ -321,17 +354,23 @@ class FlexibleFlowShop {
     }
   }
 
-  double _calculateCR(FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
-    int remainingTime = job.dueDate.difference(currentTime).inMinutes - accumulatedTime;
+  double _calculateCR(
+      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
+    int remainingTime =
+        job.dueDate.difference(currentTime).inMinutes - accumulatedTime;
     int processingTime = _totalProcessingTime(job);
     return processingTime > 0
-      ? (remainingTime > 0 ? remainingTime / processingTime : double.infinity)
-      : double.infinity;
+        ? (remainingTime > 0 ? remainingTime / processingTime : double.infinity)
+        : double.infinity;
   }
 
-  int _calculateSlack(FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
+  int _calculateSlack(
+      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
     int totalProcessingTime = _totalProcessingTime(job);
-    int slack = job.dueDate.difference(currentTime).inMinutes - totalProcessingTime - accumulatedTime;
+    int slack = job.dueDate.difference(currentTime).inMinutes -
+        totalProcessingTime -
+        accumulatedTime;
+
     return slack < 0 ? 0 : slack;
   }
 
@@ -375,7 +414,10 @@ class FlexibleFlowShop {
         );
       }).toList();
 
-      List<FlexibleFlowInput> ordered = _getJohnsonOrderedJobsFlexible(tempJobs);
+
+      List<FlexibleFlowInput> ordered =
+          _getJohnsonOrderedJobsFlexible(tempJobs);
+
       List<int> orderedIds = ordered.map((e) => e.jobId).toList();
 
       List<FlexibleFlowInput> orderedOriginal = orderedIds
@@ -411,10 +453,12 @@ class FlexibleFlowShop {
       }
     }
 
-    groupI.sort((a, b) =>
-        a.taskSequence[0].value2.values.first.compareTo(b.taskSequence[0].value2.values.first));
-    groupII.sort((a, b) =>
-        b.taskSequence[1].value2.values.first.compareTo(a.taskSequence[1].value2.values.first));
+
+    groupI.sort((a, b) => a.taskSequence[0].value2.values.first
+        .compareTo(b.taskSequence[0].value2.values.first));
+    groupII.sort((a, b) => b.taskSequence[1].value2.values.first
+        .compareTo(a.taskSequence[1].value2.values.first));
+
 
     inputJobs = [...groupI, ...groupII];
     _schedule((a, b) => 0);
@@ -426,7 +470,9 @@ class FlexibleFlowShop {
     return Duration(milliseconds: totalMs ~/ times.length);
   }
 
-  List<FlexibleFlowInput> _getJohnsonOrderedJobsFlexible(List<FlexibleFlowInput> jobs) {
+
+  List<FlexibleFlowInput> _getJohnsonOrderedJobsFlexible(
+      List<FlexibleFlowInput> jobs) {
     List<FlexibleFlowInput> groupI = [];
     List<FlexibleFlowInput> groupII = [];
 
@@ -441,10 +487,12 @@ class FlexibleFlowShop {
       }
     }
 
-    groupI.sort((a, b) => a.taskSequence[0].value2[0]!
-        .compareTo(b.taskSequence[0].value2[0]!));
-    groupII.sort((a, b) => b.taskSequence[1].value2[1]!
-        .compareTo(a.taskSequence[1].value2[1]!));
+
+    groupI.sort((a, b) =>
+        a.taskSequence[0].value2[0]!.compareTo(b.taskSequence[0].value2[0]!));
+    groupII.sort((a, b) =>
+        b.taskSequence[1].value2[1]!.compareTo(a.taskSequence[1].value2[1]!));
+
 
     return [...groupI, ...groupII];
   }
@@ -484,12 +532,16 @@ class FlexibleFlowShop {
 
           DateTime machineAvailable =
               stationMachineAvailability[stationId]?[machineId] ?? startDate;
-          DateTime tentativeStart =
-              jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
+
+          DateTime tentativeStart = jobStartTime.isAfter(machineAvailable)
+              ? jobStartTime
+              : machineAvailable;
 
           tentativeStart = _adjustForWorkingSchedule(tentativeStart);
           DateTime tentativeEnd = tentativeStart.add(duration);
-          tentativeEnd = _adjustEndTimeForWorkingSchedule(tentativeStart, tentativeEnd);
+          tentativeEnd =
+              _adjustEndTimeForWorkingSchedule(tentativeStart, tentativeEnd);
+
 
           if (tentativeEnd.isBefore(earliestStart)) {
             earliestStart = tentativeEnd;
@@ -521,5 +573,7 @@ class FlexibleFlowShop {
 
     return makespanEndTime.difference(startDate).inMinutes;
   }
+
 }   
+
 

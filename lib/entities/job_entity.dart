@@ -3,6 +3,9 @@
 
 import 'package:production_planning/entities/sequence_entity.dart';
 
+import 'package:production_planning/entities/machine_times.dart';
+
+
 class JobEntity {
   int? jobId;
   final SequenceEntity? sequence;
@@ -11,5 +14,11 @@ class JobEntity {
   final DateTime dueDate;
   final int priority;
 
-  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority, this.availableDate);
+  final Map<int, int>? preemptionMatrix; // Map<machineId, canPreempt (0 o 1)>
+  // Map<taskId, Map<machineId, MachineTimes>>: optional explicit processing/setup/rest times
+  final Map<int, Map<int, MachineTimes>>? taskMachineTimes;
+
+  JobEntity(this.jobId, this.sequence, this.amount, this.dueDate, this.priority,
+      this.availableDate,
+      {this.preemptionMatrix, this.taskMachineTimes});
 }

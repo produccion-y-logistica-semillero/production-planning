@@ -64,4 +64,6 @@ class TaskDependencyDaoSqllite implements TaskDependencyDao {
       throw LocalStorageFailure();
     }
   }
+
 }
+

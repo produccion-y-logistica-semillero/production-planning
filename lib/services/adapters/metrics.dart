@@ -3,7 +3,10 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 
-Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, DateTime, DateTime>> jobsDates) {
+
+Metrics getMetricts(List<PlanningMachineEntity> machines,
+    List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates) {
+
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
   }
@@ -37,6 +40,10 @@ Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, 
       avarageDelayTime: Duration.zero,
       avarageLatenessTime: Duration.zero,
       delayedJobs: 0,
+      makespan: Duration.zero,
+      totalFlow: Duration.zero,
+      totalWeightedDelay: Duration.zero,
+
     );
   }
 
@@ -49,16 +56,22 @@ Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, 
 
   // average delay
   final totalDelayTime = jobsDates
-      .map((dates) =>
-          dates.value2.isAfter(dates.value3) ? dates.value2.difference(dates.value3) : Duration.zero)
+
+      .map((dates) => dates.value2.isAfter(dates.value3)
+          ? dates.value2.difference(dates.value3)
+          : Duration.zero)
+
       .fold(Duration.zero, (a, b) => a + b);
   final averageDelay =
       Duration(minutes: totalDelayTime.inMinutes ~/ jobsDates.length);
 
   // max delay
   final maxDelay = jobsDates
-      .map((dates) =>
-          dates.value2.isAfter(dates.value3) ? dates.value2.difference(dates.value3) : Duration.zero)
+
+      .map((dates) => dates.value2.isAfter(dates.value3)
+          ? dates.value2.difference(dates.value3)
+          : Duration.zero)
+
       .fold(Duration.zero, (a, b) => a.inMinutes > b.inMinutes ? a : b);
 
   // average lateness (can be negative)
@@ -69,9 +82,28 @@ Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, 
       Duration(minutes: totalLatenessTime.inMinutes ~/ jobsDates.length);
 
   // late jobs
-  final delayedJobs = jobsDates
-      .where((dates) => dates.value2.isAfter(dates.value3))
-      .length;
+
+  final delayedJobs =
+      jobsDates.where((dates) => dates.value2.isAfter(dates.value3)).length;
+  // total weighted delay: sum of max(delay,0) * priority
+  int totalWeightedDelayMinutes = 0;
+  for (final dates in jobsDates) {
+    final delay = dates.value2.isAfter(dates.value3)
+        ? dates.value2.difference(dates.value3)
+        : Duration.zero;
+    final priority = dates.value4;
+    totalWeightedDelayMinutes += delay.inMinutes * priority;
+  }
+  final totalWeightedDelay = Duration(minutes: totalWeightedDelayMinutes);
+  // makespan: difference between earliest start and latest end
+  DateTime earliestStart =
+      jobsDates.map((t) => t.value1).reduce((a, b) => a.isBefore(b) ? a : b);
+  DateTime latestEnd =
+      jobsDates.map((t) => t.value2).reduce((a, b) => a.isAfter(b) ? a : b);
+  final makespan = latestEnd.difference(earliestStart);
+
+  // total flow: sum of (end - start) per job
+  final totalFlow = totalProcessingTime;
 
   return Metrics(
     idle: idle,
@@ -81,6 +113,9 @@ Metrics getMetricts(List<PlanningMachineEntity> machines, List<Tuple3<DateTime, 
     avarageDelayTime: averageDelay,
     avarageLatenessTime: averageLateness,
     delayedJobs: delayedJobs,
+    makespan: makespan,
+    totalFlow: totalFlow,
+    totalWeightedDelay: totalWeightedDelay,
   );
 }
 

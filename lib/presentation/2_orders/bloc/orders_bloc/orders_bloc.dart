@@ -15,6 +15,7 @@ class OrderBloc extends Cubit<OrdersState> {
     final Either<Failure, List<OrderEntity>> result = await service.getOrders();
 
     result.fold(
+
           (failure) {
         print("DEBUG: Error al cargar órdenes: ${failure.toString()}");
         emit(OrdersErrorState("Error al cargar órdenes"));
@@ -26,11 +27,13 @@ class OrderBloc extends Cubit<OrdersState> {
         }
         emit(OrdersLoadedState(orders));
         print("DEBUG: Estado cambiado a OrdersLoadedState");
+
       },
     );
   }
 
   Future<void> deleteOrderById(int orderId) async {
+
     print("DEBUG: deleteOrderById($orderId) iniciado");
     final response = await service.deleteOrder(orderId);
     response.fold(
@@ -40,14 +43,17 @@ class OrderBloc extends Cubit<OrdersState> {
       },
           (res) {
         print("DEBUG: Orden eliminada exitosamente");
+
         final List<OrderEntity> orders = switch (state) {
           OrdersLoadedState(:final orders) => orders,
           _ => [],
         };
         final updatedOrders = orders.where((o) => o.orderId != orderId).toList();
         print("DEBUG: Lista actualizada: ${updatedOrders.length} órdenes");
+
         emit(OrdersLoadedState(updatedOrders));
       },
     );
   }
 }
+

@@ -3,8 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/entities/process_entity.dart';
+
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
@@ -19,6 +21,7 @@ import 'package:production_planning/presentation/1_sequences/widgets/high_order_
 
 class SequencesPage extends StatefulWidget {
   SequencesPage({super.key});
+
 
   @override
   State<SequencesPage> createState() => _SequencesPageState();
@@ -38,20 +41,23 @@ class _SequencesPageState extends State<SequencesPage> {
           listeners: [
             // Refrescar la lista cuando pasas de "Nueva Ruta" a "Ver Secuencias"
             BlocListener<SequencesBloc, SequencesState>(
+
               listenWhen: (prev, curr) => prev.isNewOrder == true && curr.isNewOrder == false,
               listener: (context, state) {
                 // Forzar que la lista se recargue para que aparezca la recién creada
                 context.read<SeeProcessBloc>().retrieveSequences(); // si tienes force: true, úsalo aquí
+
               },
             ),
           ],
           child: BlocBuilder<SequencesBloc, SequencesState>(
             builder: (context, state) {
-              // ----- TODO LO QUE YA TENÍAS AQUÍ SE QUEDA IGUAL -----
+             
               Widget machinesContent = const Center(child: CircularProgressIndicator());
 
               if (state is SequencesInitialState) {
                 BlocProvider.of<SequencesBloc>(context).retrieveSequencesMachine();
+
               }
               if (state is SequencesMachineFailure) {
                 machinesContent = const Center(child: Text("Error fetching"));
@@ -60,7 +66,9 @@ class _SequencesPageState extends State<SequencesPage> {
                 machinesContent = MachinesList(
                   machineTypes: state.machines!,
                   onSelectMachine: (machine) {
+
                     BlocProvider.of<SequencesBloc>(context).selectMachine(machine);
+
                     nodeEditorKey.currentState?.addNodeForMachine(machine);
                   },
                 );
@@ -79,6 +87,7 @@ class _SequencesPageState extends State<SequencesPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Por favor ingresa un nombre para la secuencia'),
+
                         ),
                       );
                     }
@@ -123,12 +132,12 @@ class _SequencesPageState extends State<SequencesPage> {
                                 ButtonMode(
                                   callback: state.isNewOrder
                                       ? () {
-
                                     BlocProvider.of<SequencesBloc>(context).useMode(false);
 
                                     context.read<SeeProcessBloc>().retrieveSequences();
                                   }
                                       : () => BlocProvider.of<SequencesBloc>(context).useMode(true),
+
                                   labelText: state.isNewOrder
                                       ? "Ver Secuencias"
                                       : "Nueva Ruta de proceso",

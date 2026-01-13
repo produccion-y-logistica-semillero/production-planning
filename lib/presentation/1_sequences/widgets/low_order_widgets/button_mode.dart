@@ -35,7 +35,9 @@ class ButtonMode extends StatelessWidget {
       ),
       style: TextButton.styleFrom(
         backgroundColor: colorScheme.secondaryContainer,
+
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16),
+
         minimumSize: const Size(220, 50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

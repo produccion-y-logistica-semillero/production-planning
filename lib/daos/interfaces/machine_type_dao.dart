@@ -3,6 +3,7 @@ import 'package:production_planning/repositories/models/machine_type_model.dart'
 abstract class MachineTypeDao{
 
   //get methods for database schema info, we use these so that 
+
   //the repository can call them if it needs schema info, since repository should only coordinate
   //daos and only daos should now specific database schema implementation
   String getTableName();
@@ -16,3 +17,4 @@ abstract class MachineTypeDao{
 
   
 }
+

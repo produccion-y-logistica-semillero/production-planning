@@ -48,8 +48,17 @@ class _OrderMetricsState extends State<OrderMetrics> {
   /// Devuelve una cadena para el retardo promedio.
   /// Si la clase Metrics no tiene ese campo, retorna '-'.
   String _fmtAverageDelay(Metrics m) {
-    // Ajusta aquí si tu clase Metrics tiene otro nombre para ese valor.
-    return '-';
+
+    final d = m.avarageDelayTime;
+    return _durationToString(d);
+  }
+
+  String _durationToString(Duration d) {
+    if (d == Duration.zero) return '0:00:00';
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '${hours.toString()}:$minutes:$seconds';
   }
 
   @override
@@ -88,8 +97,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      state.message ??
-                          'Ocurrió un error al cargar las métricas',
+
+                      state.message,
+
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 16,
@@ -115,9 +125,8 @@ class _OrderMetricsState extends State<OrderMetrics> {
                   final env = ganttState.enviroment;
 
                   final allRuleNames = env != null
-                      ? env.rules
-                          .map((r) => r.value2?.toString() ?? 'Sin nombre')
-                          .toList()
+
+                      ? env.rules.map((r) => r.value2.toString()).toList()
                       : List.generate(
                           allMetrics.length,
                           (index) => 'Algoritmo ${index + 1}',
@@ -318,6 +327,47 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                     ),
                                   ),
                                   DataColumn(
+
+                                    numeric: true,
+                                    label: Text(
+                                      'Makespan',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: Text(
+                                      'Flujo Total',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: Text(
+                                      'Tiempo total\nretardo',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: Text(
+                                      'Retardo\nponderado',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
                                     label: Text(
                                       'Visualización',
                                       style: TextStyle(
@@ -416,6 +466,42 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                                 ),
                                               ),
                                             ],
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            '${m.makespan}',
+                                            style: TextStyle(
+                                              color: colorScheme.onSurface,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            '${m.totalFlow}',
+                                            style: TextStyle(
+                                              color: colorScheme.onSurface,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            '${Duration(minutes: m.avarageDelayTime.inMinutes * m.totalJobs)}',
+                                            style: TextStyle(
+                                              color: colorScheme.onSurface,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            '${m.totalWeightedDelay}',
+                                            style: TextStyle(
+                                              color: colorScheme.onSurface,
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
                                         ),
                                         DataCell(

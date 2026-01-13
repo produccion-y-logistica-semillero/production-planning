@@ -11,7 +11,6 @@ import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/presentation/2_orders/pages/algorithm_picker_page.dart';
 
-
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
 
@@ -53,6 +52,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     title: 'Ordenes',
                     content:
                     'Una orden es sobre lo que se realiza la planificación de producción... \n\nUna orden puede referirse a que se requiere producir 100 panes para dentro de 5 días...',
+
                   ),
                   icon: const Icon(Icons.info),
                 ),
@@ -64,6 +64,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       TextButton(
                         onPressed: () async {
                           print("DEBUG: Navegando a NewOrderPage");
+
                           final result = await Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => BlocProvider<NewOrderBloc>(
@@ -80,6 +81,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             _orderBloc.fetchOrders(); // <--- refrescar lista
                           } else {
                           }
+
                         },
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
@@ -105,6 +107,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     return const Center(child: CircularProgressIndicator());
                   } else if (state is OrdersLoadedState) {
                     print("DEBUG: Órdenes cargadas: ${state.orders.length}");
+
                     return ListView.builder(
                       itemCount: state.orders.length,
                       itemBuilder: (context, index) {
@@ -116,6 +119,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             borderRadius: BorderRadius.circular(12),
                             side: BorderSide(
                                 color: colorScheme.outlineVariant.withOpacity(0.5)),
+
                           ),
                           shadowColor: colorScheme.shadow.withOpacity(0.1),
                           elevation: 4,
@@ -147,13 +151,16 @@ class _OrdersPageState extends State<OrdersPage> {
                                     TextButton(
                                       onPressed: () =>
                                           getMetrics(context, state.orders[index].orderId!),
+
                                       style: TextButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 12, vertical: 8),
                                         backgroundColor: colorScheme.tertiary,
                                         foregroundColor: colorScheme.onTertiary,
                                         shape: RoundedRectangleBorder(
+
                                           borderRadius: BorderRadius.circular(8),
+
                                         ),
                                       ),
                                       child: const Text("programar"),
@@ -165,6 +172,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                       ),
                                       onPressed: () =>
                                           _orderBloc.deleteOrderById(state.orders[index].orderId!),
+
                                     ),
                                   ],
                                 ),
@@ -230,5 +238,4 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
   }
-
 }

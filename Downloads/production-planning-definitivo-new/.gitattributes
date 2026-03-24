@@ -1,0 +1,16 @@
+# Ensure all text files use LF (Unix-style) line endings
+* text=auto
+
+# Force LF line endings in specific types of files
+*.sh text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+
+# Force CRLF line endings in specific types of files (rarely needed)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files should not have line endings changed
+*.png binary
+*.jpg binary
+*.pdf binary

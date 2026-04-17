@@ -13,7 +13,6 @@ import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
-
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
@@ -30,7 +29,6 @@ class FlexibleJobShopAdapter {
     return 0;
   }
 
-
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleJobShopAdapter(
       int orderId, String rule) async {
     // Obtener la orden completa
@@ -45,7 +43,6 @@ class FlexibleJobShopAdapter {
         .toList();
     final List<MachineEntity> machines = [];
     for (final typeId in machineTypeIds) {
-
       final responseMachines =
           await machineRepository.getAllMachinesFromType(typeId);
 
@@ -80,7 +77,6 @@ class FlexibleJobShopAdapter {
 
       inputJobs.add(FlexibleJobInput(
         job.jobId!,
-
         job.sequence!.id!,
         job.dueDate,
         job.priority,
@@ -95,7 +91,6 @@ class FlexibleJobShopAdapter {
       machinesAvailability[machine.id!] = order.regDate;
     }
 
-
     // Crear mapa de inactividades por máquina
     final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
     final Map<int, int> machineContinueCapacityMap = {};
@@ -108,7 +103,6 @@ class FlexibleJobShopAdapter {
           Duration(minutes: (60 * machine.restPercentage / 100).round());
     }
 
-
     // Ejecutar el algoritmo Flexible Job Shop
     final output = FlexibleJobShop(
       order.regDate,
@@ -116,17 +110,14 @@ class FlexibleJobShopAdapter {
       inputJobs,
       machinesAvailability,
       rule,
-
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
-
     ).output;
 
     // Transformar la salida en PlanningMachineEntity
     final List<PlanningMachineEntity> planningMachines = [];
     for (final machine in machines) {
-
       planningMachines.add(PlanningMachineEntity(
         machine.id!,
         machine.name,
@@ -147,12 +138,12 @@ class FlexibleJobShopAdapter {
         final machineId = taskEntry.value.value1;
         final timeRange = taskEntry.value.value2;
 
-
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
+        final jobName = job.jobName ?? 'Job ${out.jobId}';
         final displayName = current == 1
-            ? (job.sequence?.name ?? sequence.name)
-            : '${job.sequence?.name ?? sequence.name}.${current - 1}';
+            ? jobName
+            : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
@@ -173,14 +164,12 @@ class FlexibleJobShopAdapter {
       }
     }
 
-
     // Calcular métricas
     final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       jobsDates
           .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
-
     }
 
     final metrics = getMetricts(
@@ -190,6 +179,4 @@ class FlexibleJobShopAdapter {
 
     return Tuple2(planningMachines, metrics);
   }
-
 }
-

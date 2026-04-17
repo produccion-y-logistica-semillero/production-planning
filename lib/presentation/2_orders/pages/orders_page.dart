@@ -129,7 +129,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Fecha: ${getDateFormat(order.regDate)}',
+                                  'Jobs: ${order.orderJobs?.map((job) => job.jobName ?? "Job ${job.jobId}").join(", ") ?? "No jobs"}',
                                   style: TextStyle(
                                     fontSize: 18.0,
                                     fontWeight: FontWeight.bold,
@@ -138,9 +138,9 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                                 const SizedBox(height: 8.0),
                                 Text(
-                                  'Jobs: ${order.orderJobs?.map((job) => job.sequence?.name ?? "No sequence").join(", ") ?? "No jobs"}',
+                                  'Fecha: ${getDateFormat(order.regDate)}',
                                   style: TextStyle(
-                                    fontSize: 16.0,
+                                    fontSize: 14.0,
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),

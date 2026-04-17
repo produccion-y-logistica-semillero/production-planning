@@ -93,6 +93,9 @@ class AddJobState extends State<AddJobWidget> {
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
   final Map<int, int> _preemptionMatrix =
       {}; // Map<machineId, canPreempt (0 o 1)>
+  
+  final Map<int, String> _machineFinalStates = {}; // Map<machineTypeId, letra>
+  final List<String> _letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
   Map<int, int> getPreemptionMatrix() {
     return _preemptionMatrix;
@@ -499,39 +502,66 @@ class AddJobState extends State<AddJobWidget> {
     final selectedMachine = _selectedMachines[machineTypeId];
     final defaultLabel = _stationLabel(task);
 
-    return Padding(
+        return Padding(
       padding: const EdgeInsets.only(top: 12.0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: machineOptions.isEmpty
-                  ? null
-                  : () => _showMachineSelectionDialog(task, machineOptions),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  selectedMachine?.name ?? defaultLabel,
-                  style: TextStyle(
-                    color: machineOptions.isEmpty
-                        ? Theme.of(context).colorScheme.onSurfaceVariant
-                        : Theme.of(context).colorScheme.onSurface,
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: machineOptions.isEmpty
+                      ? null
+                      : () => _showMachineSelectionDialog(task, machineOptions),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14, horizontal: 12),
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      selectedMachine?.name ?? defaultLabel,
+                      style: TextStyle(
+                        color: machineOptions.isEmpty
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: machineOptions.isNotEmpty
+                    ? () => _showStationTimeDialog(task, machineTypeId)
+                    : null,
+                icon: const Icon(Icons.schedule_outlined),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          IconButton(
-            onPressed: machineOptions.isNotEmpty
-                ? () => _showStationTimeDialog(task, machineTypeId)
-                : null,
-            icon: const Icon(Icons.schedule_outlined),
-            color: Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Estado dejado en la máquina: '),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _machineFinalStates[machineTypeId],
+                hint: const Text("Seleccionar (A-J)"),
+                items: _letters.map((String letter) {
+                  return DropdownMenuItem<String>(
+                    value: letter,
+                    child: Text(letter),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _machineFinalStates[machineTypeId] = newValue!;
+                  });
+                },
+              ),
+            ],
           ),
         ],
       ),

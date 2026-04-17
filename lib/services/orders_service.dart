@@ -51,6 +51,7 @@ class OrdersService {
         null,
         SequenceEntity(jobModel.sequenceId, null, "", null),
         jobModel.amount,
+        jobModel.jobName,
         jobModel.dueDate,
         jobModel.priority,
         jobModel.availableDate,

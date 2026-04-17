@@ -1,4 +1,3 @@
-
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -14,7 +13,6 @@ import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlowShopAdapter {
-
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
 
@@ -89,7 +87,6 @@ class FlowShopAdapter {
     //we create the sequence
     final Map<int, DateTime> machinesAvailability = {};
     for (final task in order.orderJobs!.first.sequence!.tasks!) {
-
       machinesAvailability[task.machineTypeId] = DateTime.now();
     }
 
@@ -99,7 +96,6 @@ class FlowShopAdapter {
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       machinesAvailability,
-
       rule,
       changeoverMatrix: mergedMatrix,
     ).output;
@@ -122,9 +118,10 @@ class FlowShopAdapter {
       final jobSequence = job.sequence!;
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
+      final jobName = job.jobName ?? 'Job ${out.jobId}';
       final displayName = current == 1
-          ? (job.sequence?.name ?? jobSequence.name)
-          : '${job.sequence?.name ?? jobSequence.name}.${current - 1}';
+          ? jobName
+          : '$jobName (${current - 1})';
       for (final machineScheduling in out.machinesScheduling.entries) {
         //we get the planning machine where this task belongs
         final planningMachineEntity = planningMachines
@@ -162,7 +159,6 @@ class FlowShopAdapter {
     );
     return Tuple2(planningMachines, metrics);
   }
-
 
   Map<int, Map<int?, Map<int, Duration>>> _buildDefaultChangeoverMatrix(
     List<MachineEntity> machines,
@@ -227,4 +223,3 @@ class FlowShopAdapter {
     return result;
   }
 }
-

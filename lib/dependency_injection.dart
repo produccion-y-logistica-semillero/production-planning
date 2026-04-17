@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:production_planning/core/factories/factory.dart';
 import 'package:production_planning/core/factories/sqllite_factory.dart';
 import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metrics_bloc.dart';
@@ -45,24 +47,29 @@ Future<void> initDependencies(String workspace) async {
       machineInactivityDao: daoFactory.getMachineInactivityDao(),
     );
     final sequencesRepo = SequencesRepositoryImpl(
-        sequencesDao: daoFactory.getSequenceDao(),
-        tasksDao: daoFactory.getTaskDao(),
-        machineTypeDao: daoFactory.getMachineTypeDao(),
-        taskDependencyDao: daoFactory.getTaskDependencyDao());
+      sequencesDao: daoFactory.getSequenceDao(),
+      tasksDao: daoFactory.getTaskDao(),
+      machineTypeDao: daoFactory.getMachineTypeDao(),
+      taskDependencyDao: daoFactory.getTaskDependencyDao(),
+    );
     final ordersRepo = OrderRepositoryImpl(
-        orderDao: daoFactory.getOrderDao(),
-        jobDao: daoFactory.getJobDao(),
-        enviromentDao: daoFactory.getEnviromentDao(),
-        dispatchRulesDao: daoFactory.getDispatchRulesDao(),
-        sequencesDao: daoFactory.getSequenceDao(),
-        tasksDao: daoFactory.getTaskDao(),
-        taskDependencyDao: daoFactory.getTaskDependencyDao());
+      orderDao: daoFactory.getOrderDao(),
+      jobDao: daoFactory.getJobDao(),
+      enviromentDao: daoFactory.getEnviromentDao(),
+      dispatchRulesDao: daoFactory.getDispatchRulesDao(),
+      sequencesDao: daoFactory.getSequenceDao(),
+      tasksDao: daoFactory.getTaskDao(),
+      taskDependencyDao: daoFactory.getTaskDependencyDao(),
+    );
 
     //services
     final machinesService = MachinesService(machineRepo);
     final setupTimeService = SetupTimeService(daoFactory.getSetupTimeDao());
-    final ordersService =
-        OrdersService(ordersRepo, machineRepo, setupTimeService);
+    final ordersService = OrdersService(
+      ordersRepo,
+      machineRepo,
+      setupTimeService,
+    );
     final seqService = SequencesService(sequencesRepo);
 
     // Register services as singletons
@@ -75,24 +82,37 @@ Future<void> initDependencies(String workspace) async {
     //its factory since we want to create a new one each time we get to the point it's provided, if we wanted to mantain the state no matter where we go, we could make it singleton
     depIn.registerFactory<MachineBloc>(() => MachineBloc(machinesService));
     depIn.registerFactory<MachineTypesBloc>(
-        () => MachineTypesBloc(machinesService));
+      () => MachineTypesBloc(machinesService),
+    );
     depIn.registerFactory<MachineInactivitiesCubit>(
       () => MachineInactivitiesCubit(machinesService),
     );
     depIn.registerFactory<SequencesBloc>(
-        () => SequencesBloc(seqService, machinesService));
+      () => SequencesBloc(seqService, machinesService),
+    );
     depIn.registerFactory<SeeProcessBloc>(() => SeeProcessBloc(seqService));
 
     //Bloc orders
     depIn.registerFactory<OrderBloc>(() => OrderBloc(ordersService));
     depIn.registerFactory<NewOrderBloc>(
-        () => NewOrderBloc(ordersService, seqService, machinesService));
+      () => NewOrderBloc(ordersService, seqService, machinesService),
+    );
     depIn.registerFactory<GanttBloc>(() => GanttBloc(ordersService));
 
     depIn.registerFactory<TaskBloc>(() => TaskBloc(ordersRepo));
 
     depIn.registerFactory<MetricsBloc>(() => MetricsBloc(ordersService));
-  } catch (e) {
-    //to implement file logging later if needed
+  } catch (e, stackTrace) {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/error_log.txt');
+      await file.writeAsString(
+        'Error initializing dependencies: $e\nStack trace: $stackTrace\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {
+      // Fallback if we can't write to file
+      print('Error initializing dependencies: $e');
+    }
   }
 }

@@ -15,7 +15,6 @@ import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class SingleMachineAdapter {
-
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
 
@@ -84,9 +83,10 @@ class SingleMachineAdapter {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
+      final jobName = job.jobName ?? 'Job ${out.jobId}';
       final displayName = current == 1
-          ? (job.sequence?.name ?? jobSequence.name)
-          : '${job.sequence?.name ?? jobSequence.name}.${current - 1}';
+          ? jobName
+          : '$jobName (${current - 1})';
       return PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
@@ -100,24 +100,19 @@ class SingleMachineAdapter {
         jobId: out.jobId,
         orderId: orderId,
       );
-
     }).toList();
-
 
     //since its single machine we know that there's only 1 planning machine
     final machinesResult = [
       PlanningMachineEntity(
         machineEntity.id!,
         machineTypeName,
-
         tasks,
         scheduledInactivities: machineEntity.scheduledInactivities,
-
       )
     ];
 
     final metrics = getMetricts(
-
       machinesResult,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);

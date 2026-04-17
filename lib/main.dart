@@ -6,15 +6,16 @@ import 'package:production_planning/presentation/main_page/presentation/provider
 import 'package:provider/provider.dart';
 import 'dart:io';
 
+// Comentario
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   String workspace = 'default';
   final workspaceFile = File('workspace.txt');
   if (await workspaceFile.exists()) {
-    workspace = await workspaceFile
-        .readAsLines()
-        .then((lines) => lines.isNotEmpty ? lines[0] : 'default');
+    workspace = await workspaceFile.readAsLines().then(
+      (lines) => lines.isNotEmpty ? lines[0] : 'default',
+    );
   } else {
     await workspaceFile.writeAsString('default');
   }
@@ -48,9 +49,7 @@ TimeOfDay? _parseTimeOfDay(String time) {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({
-    super.key,
-  });
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -59,9 +58,10 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blueGrey,
-            brightness: Brightness.light,
-            dynamicSchemeVariant: DynamicSchemeVariant.content),
+          seedColor: Colors.blueGrey,
+          brightness: Brightness.light,
+          dynamicSchemeVariant: DynamicSchemeVariant.content,
+        ),
         // textTheme: GoogleFonts.lexendDecaTextTheme()
       ),
       home: ChangeNotifierProvider(

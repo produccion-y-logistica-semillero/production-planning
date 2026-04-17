@@ -146,9 +146,10 @@ class OpenShopAdapter {
 
         final task = job.sequence!.tasks!.firstWhere((t) => t.id == taskId);
 
+        final jobName = job.jobName ?? 'Job ${job.jobId}';
         final displayName = current == 1
-            ? (job.sequence?.name ?? '')
-            : '${job.sequence?.name ?? ''}.${current - 1}';
+            ? jobName
+            : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: job.sequence!.id!,

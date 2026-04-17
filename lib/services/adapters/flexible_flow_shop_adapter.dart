@@ -12,7 +12,6 @@ import 'package:production_planning/services/algorithms/flexible_flow_shop.dart'
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
-
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
@@ -121,9 +120,10 @@ class FlexibleFlowShopAdapter {
 
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
+        final jobName = job.jobName ?? 'Job ${out.jobId}';
         final displayName = current == 1
-            ? (job.sequence?.name ?? sequence.name)
-            : '${job.sequence?.name ?? sequence.name}.${current - 1}';
+            ? jobName
+            : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
@@ -160,4 +160,3 @@ class FlexibleFlowShopAdapter {
     return Tuple2(planningMachines, metrics);
   }
 }
-

@@ -106,6 +106,20 @@ class NewOrderPage extends StatelessWidget {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
+                        _showMatrixDialog(context, colorScheme);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Definir matriz de tiempos de alistamiento'),
+                    ),
+                    const SizedBox(height: 16),
+
+                    ElevatedButton(
+                      onPressed: () {
                         bool isValid = _validateForm(state);
 
                         if (!isValid) {
@@ -164,6 +178,79 @@ class NewOrderPage extends StatelessWidget {
             TextButton(
               onPressed: () => Navigator.of(subcontext).pop(),
               child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showMatrixDialog(BuildContext context, ColorScheme colorScheme) {
+    final letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Matriz de tiempos de alistamiento"),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Máquina'),
+                  items: const [
+                    DropdownMenuItem(value: '1', child: Text('Máquina 1 (Ejemplo)')),
+                  ],
+                  onChanged: (value) {},
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.vertical,
+                      child: DataTable(
+                        columnSpacing: 16,
+                        headingRowHeight: 40,
+                        dataRowMinHeight: 40,
+                        dataRowMaxHeight: 40,
+                        columns: [
+                          const DataColumn(label: Text('')),
+                          ...letters.map((c) => DataColumn(label: Text(c, style: const TextStyle(fontWeight: FontWeight.bold)))),
+                        ],
+                        rows: letters.map((r) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(r, style: const TextStyle(fontWeight: FontWeight.bold))),
+                              ...letters.map((c) => DataCell(
+                                SizedBox(
+                                  width: 40,
+                                  child: TextField(
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cerrar"),
             ),
           ],
         );

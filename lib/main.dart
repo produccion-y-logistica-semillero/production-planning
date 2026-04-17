@@ -5,12 +5,15 @@ import 'package:production_planning/presentation/main_page/presentation/pages/ma
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final dir = await getApplicationSupportDirectory();
+  await dir.create(recursive: true);
 
   String workspace = 'default';
-  final workspaceFile = File('workspace.txt');
+  final workspaceFile = File('${dir.path}/workspace.txt');
   if (await workspaceFile.exists()) {
     workspace = await workspaceFile
         .readAsLines()
@@ -19,7 +22,7 @@ Future<void> main() async {
     await workspaceFile.writeAsString('default');
   }
 
-  final scheduleFile = File('schedule.txt');
+  final scheduleFile = File('${dir.path}/schedule.txt');
 
   if (await scheduleFile.exists()) {
     final lines = await scheduleFile.readAsLines();

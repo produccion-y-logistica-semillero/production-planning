@@ -21,7 +21,6 @@ class ParallelMachineAdapter {
     required this.machineRepository,
   });
 
-
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
       int orderId, String rule) async {
     //getting full order
@@ -62,7 +61,6 @@ class ParallelMachineAdapter {
     //we create an the empy input struct for machines
     final Map<int, List<Tuple2<DateTime, DateTime>>> machines = {};
     for (final machine in machineEntities) {
-
       machines[machine.id!] = [];
     }
 
@@ -84,9 +82,10 @@ class ParallelMachineAdapter {
       final jobSequence = job.sequence!;
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
+      final jobName = job.jobName ?? 'Job ${out.jobId}';
       final displayName = current == 1
-          ? (job.sequence?.name ?? jobSequence.name)
-          : '${job.sequence?.name ?? jobSequence.name}.${current - 1}';
+          ? jobName
+          : '$jobName (${current - 1})';
       final task = PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
@@ -96,7 +95,6 @@ class ParallelMachineAdapter {
         startDate: out.startDate,
         endDate: out.endDate,
         retarded: out.dueDate.isBefore(out.endDate),
-
         jobId: job.jobId!,
         orderId: orderId,
       );
@@ -106,7 +104,6 @@ class ParallelMachineAdapter {
       }
       machineTasksMap[out.machineId]!.add(task);
     }
-
 
     final List<PlanningMachineEntity> machinesResult =
         machineTasksMap.entries.map((entry) {
@@ -125,11 +122,8 @@ class ParallelMachineAdapter {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
         return Tuple4(out.startDate, out.endDate, out.dueDate, job.priority);
       }).toList(),
-
     );
 
     return Tuple2(machinesResult, metrics);
   }
-
 }
-

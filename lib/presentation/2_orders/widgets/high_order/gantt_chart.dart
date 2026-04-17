@@ -1,4 +1,3 @@
-
 import 'dart:math';
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:flutter/material.dart';
@@ -85,7 +84,7 @@ class _GanttChartState extends State<GanttChart> {
 
     for (final machine in widget.machines) {
       for (final task in machine.tasks) {
-        if(earliest == null){
+        if (earliest == null) {
           earliest = task.startDate;
           latest = earliest.add(const Duration(days: 1));
         }
@@ -98,7 +97,7 @@ class _GanttChartState extends State<GanttChart> {
         }
       }
     }
-    if(earliest == null){
+    if (earliest == null) {
       earliest = DateTime.now();
       latest = earliest.add(const Duration(days: 1));
     }
@@ -111,8 +110,8 @@ class _GanttChartState extends State<GanttChart> {
 
     _startDate = DateTime(earliest.year, earliest.month, earliest.day);
     _endDate = latest!;
-    _totalDays = _endDate.difference(_startDate).inDays+1;
-    if(_totalDays > 20){
+    _totalDays = _endDate.difference(_startDate).inDays + 1;
+    if (_totalDays > 20) {
       _totalDays = 20;
       _endDate = _startDate.add(const Duration(days: 20));
     }
@@ -134,15 +133,15 @@ class _GanttChartState extends State<GanttChart> {
     final chartContainerHeight = max((screenHeight - 300) * 0.9, 300);
 
     //total (virtual) width of the chart (with zoom)
-    final chartTotalWidth = (chartContainerWidth * _horizontalZoom) / widget.number;
+    final chartTotalWidth =
+        (chartContainerWidth * _horizontalZoom) / widget.number;
 
     //total (virtual) height for the tasks area
-    final chartTotalHeight = (widget.machines.length * (40.0 * _verticalZoom))
-        + (5 * (widget.machines.length - 1));
-
+    final chartTotalHeight = (widget.machines.length * (40.0 * _verticalZoom)) +
+        (5 * (widget.machines.length - 1));
 
     final dayWidth = chartTotalWidth / _totalDays;
-    _hourWidth = dayWidth / (endingHour-initialHour);
+    _hourWidth = dayWidth / (endingHour - initialHour);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -151,18 +150,15 @@ class _GanttChartState extends State<GanttChart> {
         const SizedBox(height: 8),
         _buildHorizontalZoomSlider(),
         const SizedBox(height: 8),
-
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildVerticalZoomSlider(chartContainerHeight.toDouble()),
-
             SizedBox(
               width: machineListWidth,
               height: chartContainerHeight.toDouble(),
               child: _buildMachineListArea(chartTotalHeight),
             ),
-
             Expanded(
               child: _buildChartArea(
                 chartContainerWidth: chartContainerWidth.toDouble(),
@@ -183,7 +179,9 @@ class _GanttChartState extends State<GanttChart> {
       children: [
         DropdownButton<int>(
           value: _selectedRule,
-          items: widget.items.where((item) => item.value == _selectedRule).toList(),
+          items: widget.items
+              .where((item) => item.value == _selectedRule)
+              .toList(),
           onChanged: (int? id) {
             if (id != null) {
               setState(() {
@@ -252,7 +250,9 @@ class _GanttChartState extends State<GanttChart> {
 
   Widget _buildMachineListArea(double chartTotalHeight) {
     return Container(
-      margin: const EdgeInsets.only(top: 55), //this is impportant, because this margin aligns the machines with the tasks
+      margin: const EdgeInsets.only(
+          top:
+              55), //this is impportant, because this margin aligns the machines with the tasks
       color: Theme.of(context).colorScheme.surface,
       child: SingleChildScrollView(
         controller: _verticalMachineScrollController,
@@ -452,7 +452,7 @@ class _GanttChartState extends State<GanttChart> {
                 child: FittedBox(
                   //Agregar id del job y el id de la secuencia
                   child: Text(
-                    '${task.sequenceName} (Job: ${task.jobId})',
+                    task.displayName,
                     style: const TextStyle(color: Colors.white),
                   ),
                 ),
@@ -470,7 +470,8 @@ class _GanttChartState extends State<GanttChart> {
     final totalDisplayedMinutes = _totalDays * hoursPerDay * 60;
 
     final dayIndex = date.difference(_startDate).inDays;
-    final clampedDayIndex = dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
+    final clampedDayIndex =
+        dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
 
     final hour = date.hour;
     final clampedHour = (hour < initialHour)
@@ -481,14 +482,13 @@ class _GanttChartState extends State<GanttChart> {
     if (hour < initialHour || hour >= endingHour) {
       minutePart = 0;
     }
-    final displayedMinutesSoFar = (clampedDayIndex * hoursPerDay * 60)
-        + ((clampedHour - initialHour) * 60)
-        + minutePart;
-    final fraction = (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
-    return (fraction * chartWidth) + (_hourWidth/2);
+    final displayedMinutesSoFar = (clampedDayIndex * hoursPerDay * 60) +
+        ((clampedHour - initialHour) * 60) +
+        minutePart;
+    final fraction =
+        (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
+    return (fraction * chartWidth) + (_hourWidth / 2);
   }
-
-
 
   Future<void> _selectDateRange(BuildContext context) async {
     final result = await showDateRangePicker(

@@ -69,6 +69,7 @@ class JobDaoSQLlite implements JobDao {
         jobId,
         map['sequence_id'] as int,
         map['amount'] as int,
+        map['job_name'] as String?,
         DateTime.parse(map['due_date'] as String),
         map['priority'] as int,
         DateTime.parse(map['available_date'] as String),
@@ -88,6 +89,7 @@ class JobDaoSQLlite implements JobDao {
         'sequence_id': job.sequence!.id,
         'order_id': orderId,
         'amount': job.amount,
+        'job_name': job.jobName,
         'due_date': job.dueDate.toIso8601String(), // due date
         'priority': job.priority,
         'available_date': job.availableDate.toIso8601String(),

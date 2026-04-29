@@ -41,4 +41,7 @@ abstract class MachineRepository {
       MachineInactivityEntity inactivity);
 
   Future<Either<Failure, bool>> deleteMachineInactivity(int inactivityId);
+  
+  Future<Either<Failure, bool>> updateMachine(MachineEntity machine);
+  
 }

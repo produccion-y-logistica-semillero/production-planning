@@ -337,6 +337,7 @@ class AddJobState extends State<AddJobWidget> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
+            
             const SizedBox(height: 8),
             TextFormField(
               controller: widget.priorityController,
@@ -356,24 +357,22 @@ class AddJobState extends State<AddJobWidget> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
+            
             Row(
-              children: [
-                Expanded(
-                  flex: 3,
+  children: [
+    Expanded(
+      child: selectDate('Seleccione fecha de disponibilidad',
+          availableDate, availableHour),
+    ),
+    const SizedBox(width: 12),
+    Expanded(
+      child: selectDate(
+          'Seleccione fecha de entrega', dueDate, dueHour),
+    ),
+  ],
+),
 
-                  child: selectDate('Seleccione fecha de disponibilidad',
-                      availableDate, availableHour),
-                ),
-                const Expanded(flex: 2, child: SizedBox()),
-                Expanded(
-                  flex: 3,
-
-                  child: selectDate(
-                      'Seleccione fecha de entrega', dueDate, dueHour),
-
-                ),
-              ],
-            ),
+           
             const SizedBox(height: 8),
             DropdownButton<int>(
               value: selectedSequenceValue,
@@ -421,76 +420,115 @@ class AddJobState extends State<AddJobWidget> {
       ),
     );
   }
-
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Row(
+  final colorScheme = Theme.of(context).colorScheme;
+  final hasDate = date != null;
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      border: Border.all(
+        color: hasDate ? colorScheme.primary : colorScheme.outline,
+        width: 1.2,
+      ),
+      borderRadius: BorderRadius.circular(10),
+      color: hasDate ? colorScheme.primary.withOpacity(0.04) : Colors.transparent,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-
-        selectHour(hour, date, label),
-
         Text(
-          date == null ? label : DateFormat('dd/MM/yyyy').format(date),
-          style: TextStyle(color: colorScheme.onSurface),
+          label == 'Seleccione fecha de disponibilidad' ? 'Disponibilidad' : 'Entrega',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurfaceVariant,
+            letterSpacing: 0.3,
+          ),
         ),
-        const Spacer(),
-        IconButton(
-          icon: Icon(Icons.calendar_today, color: colorScheme.primary),
-          onPressed: () {
-            _selectDate(context, label);
-          },
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            selectHour(hour, date, label),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                hasDate ? DateFormat('dd/MM/yyyy').format(date) : 'Seleccionar',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: hasDate ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.calendar_today_rounded, size: 16, color: colorScheme.primary),
+              onPressed: () => _selectDate(context, label),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
+ TextButton selectHour(TimeOfDay? hour, DateTime? date, String label) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return TextButton(
+    onPressed: () async {
+      final timeOfDay = await showTimePicker(
+        context: context,
+        initialTime: hour ?? TimeOfDay.now(),
+        initialEntryMode: TimePickerEntryMode.input,
+      );
 
-  TextButton selectHour(TimeOfDay? hour, DateTime? date, String label) {
-    return TextButton(
-      onPressed: () async {
-        final timeOfDay = await showTimePicker(
-          context: context,
-          initialTime: hour ?? TimeOfDay.now(),
-        );
-
-        if (timeOfDay != null) {
-          setState(() {
-            if (label == 'Seleccione fecha de disponibilidad') {
-              availableHour = timeOfDay;
-              widget.availableHour = timeOfDay;
-              if (availableDate != null) {
-                availableDate = DateTime(
-                  availableDate!.year,
-                  availableDate!.month,
-                  availableDate!.day,
-                  availableHour!.hour,
-                  availableHour!.minute,
-                );
-                widget.availableDate = availableDate;
-              }
-            } else if (label == 'Seleccione fecha de entrega') {
-              dueHour = timeOfDay;
-              widget.dueHour = timeOfDay;
-              if (dueDate != null) {
-                dueDate = DateTime(
-                  dueDate!.year,
-                  dueDate!.month,
-                  dueDate!.day,
-                  dueHour!.hour,
-                  dueHour!.minute,
-                );
-                widget.dueDate = dueDate;
-              }
+      if (timeOfDay != null) {
+        setState(() {
+          if (label == 'Seleccione fecha de disponibilidad') {
+            availableHour = timeOfDay;
+            widget.availableHour = timeOfDay;
+            if (availableDate != null) {
+              availableDate = DateTime(
+                availableDate!.year,
+                availableDate!.month,
+                availableDate!.day,
+                availableHour!.hour,
+                availableHour!.minute,
+              );
+              widget.availableDate = availableDate;
             }
-          });
-        }
-      },
-      child: hour == null
-          ? const Text("Hora")
-          : Text(
-              "${hour.hour.toString().padLeft(2, '0')}:${hour.minute.toString().padLeft(2, '0')}"),
-    );
-  }
+          } else if (label == 'Seleccione fecha de entrega') {
+            dueHour = timeOfDay;
+            widget.dueHour = timeOfDay;
+            if (dueDate != null) {
+              dueDate = DateTime(
+                dueDate!.year,
+                dueDate!.month,
+                dueDate!.day,
+                dueHour!.hour,
+                dueHour!.minute,
+              );
+              widget.dueDate = dueDate;
+            }
+          }
+        });
+      }
+    },
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.schedule_rounded, size: 14, color: colorScheme.primary),
+        const SizedBox(width: 4),
+        hour == null
+            ? const Text("Hora")
+            : Text(
+                "${hour.hour.toString().padLeft(2, '0')}:${hour.minute.toString().padLeft(2, '0')}"),
+      ],
+    ),
+  );
+}
 
   Widget _buildStationRow(TaskEntity task) {
     final machineTypeId = task.machineTypeId;
@@ -665,45 +703,372 @@ class AddJobState extends State<AddJobWidget> {
                         });
                       },
                     ),
-                  const SizedBox(height: 16),
-                  const Text('Tiempo de Procesamiento:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: processingController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS',
-                      border: OutlineInputBorder(),
-                    ),
-                    inputFormatters: [_HhMmSsTextInputFormatter()],
+                    const SizedBox(height: 16),
+const Text('Tiempo de Procesamiento:',
+    style: TextStyle(fontWeight: FontWeight.bold)),
+const SizedBox(height: 4),
+GestureDetector(
+  onTap: () async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final hhCtrl = TextEditingController(
+          text: processingController.text.isNotEmpty
+              ? processingController.text.split(':')[0]
+              : '00',
+        );
+        final mmCtrl = TextEditingController(
+          text: processingController.text.isNotEmpty
+              ? processingController.text.split(':')[1]
+              : '00',
+        );
+        final ssCtrl = TextEditingController(
+          text: processingController.text.isNotEmpty
+              ? processingController.text.split(':')[2]
+              : '00',
+        );
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            top: 24, left: 24, right: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Tiempo de Procesamiento',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Tiempo de Alistamiento:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: preparationController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS',
-                      border: OutlineInputBorder(),
-                    ),
-                    inputFormatters: [_HhMmSsTextInputFormatter()],
+                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Tiempo de Descanso:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: restController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS',
-                      border: OutlineInputBorder(),
+                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
+                ],
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final hh = hhCtrl.text.padLeft(2, '0');
+                    final mm = mmCtrl.text.padLeft(2, '0');
+                    final ss = ssCtrl.text.padLeft(2, '0');
+                    Navigator.of(ctx).pop('$hh:$mm:$ss');
+                  },
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    inputFormatters: [_HhMmSsTextInputFormatter()],
                   ),
+                  child: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result != null) {
+      setDialogState(() {
+        processingController.text = result;
+      });
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outline),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.timer_outlined, size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          processingController.text.isEmpty
+              ? '00:00:00'
+              : processingController.text,
+          style: TextStyle(
+            fontSize: 14,
+            color: processingController.text.isEmpty
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 16),
+const Text('Tiempo de Alistamiento:',
+    style: TextStyle(fontWeight: FontWeight.bold)),
+const SizedBox(height: 4),
+GestureDetector(                                      // Se vuleve clickable
+  onTap: () async {
+    final result = await showModalBottomSheet<String>( // Espea recibir un texto 
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final hhCtrl = TextEditingController(
+          text: preparationController.text.isNotEmpty
+              ? preparationController.text.split(':')[0] // Divide cada segmentod de los numeros
+              : '00',
+        );
+        final mmCtrl = TextEditingController(
+          text: preparationController.text.isNotEmpty
+              ? preparationController.text.split(':')[1]
+              : '00',
+        );
+        final ssCtrl = TextEditingController(
+          text: preparationController.text.isNotEmpty
+              ? preparationController.text.split(':')[2]
+              : '00',
+        );
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            top: 24, left: 24, right: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Tiempo de Alistamiento',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                  ),
+                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                  ),
+                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
+                ],
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final hh = hhCtrl.text.padLeft(2, '0'); // Rellena para que queden dos digitos minimos 
+                    final mm = mmCtrl.text.padLeft(2, '0');
+                    final ss = ssCtrl.text.padLeft(2, '0');
+                    Navigator.of(ctx).pop('$hh:$mm:$ss');
+                  },
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result != null) {
+      setDialogState(() {
+        preparationController.text = result;
+      });
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outline),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.timer_outlined, size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          preparationController.text.isEmpty
+              ? '00:00:00'
+              : preparationController.text,
+          style: TextStyle(
+            fontSize: 14,
+            color: preparationController.text.isEmpty
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+
+/*const SizedBox(height: 16),
+const Text('Tiempo de Descanso:',
+    style: TextStyle(fontWeight: FontWeight.bold)),
+const SizedBox(height: 4),
+GestureDetector(
+  onTap: () async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final hhCtrl = TextEditingController(
+          text: restController.text.isNotEmpty
+              ? restController.text.split(':')[0]
+              : '00',
+        );
+        final mmCtrl = TextEditingController(
+          text: restController.text.isNotEmpty
+              ? restController.text.split(':')[1]
+              : '00',
+        );
+        final ssCtrl = TextEditingController(
+          text: restController.text.isNotEmpty
+              ? restController.text.split(':')[2]
+              : '00',
+        );
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            top: 24, left: 24, right: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Tiempo de Descanso',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                  ),
+                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                  ),
+                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
+                ],
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final hh = hhCtrl.text.padLeft(2, '0');
+                    final mm = mmCtrl.text.padLeft(2, '0');
+                    final ss = ssCtrl.text.padLeft(2, '0');
+                    Navigator.of(ctx).pop('$hh:$mm:$ss');
+                  },
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result != null) {
+      setDialogState(() {
+        restController.text = result;
+      });
+    }
+  },
+  child: Container(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outline),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.timer_outlined, size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          restController.text.isEmpty
+              ? '00:00:00'
+              : restController.text,
+          style: TextStyle(
+            fontSize: 14,
+            color: restController.text.isEmpty
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ],
+    ),
+  ),
+),  
+*/       
+                               
                 ],
               ),
             ),
@@ -949,5 +1314,52 @@ class _HhMmSsTextInputFormatter extends TextInputFormatter {
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
+  }
+}
+Widget _bottomSheetSegment(TextEditingController ctrl, String label, int max) {
+  return Column(
+    children: [
+      Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      const SizedBox(height: 6),
+      SizedBox(
+        width: 72,
+        child: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          maxLength: 2,
+          autofocus: label == 'Horas',
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            _MaxValueFormatter(max),
+          ],
+          decoration: InputDecoration(
+            counterText: '',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        ),
+      ),
+    ],
+  );
+}
+
+class _MaxValueFormatter extends TextInputFormatter {
+  final int max;
+  _MaxValueFormatter(this.max);
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) return newValue;
+    final val = int.tryParse(newValue.text);
+    if (val == null || val > max) return oldValue;
+    return newValue;
   }
 }

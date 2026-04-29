@@ -124,4 +124,28 @@ class MachinesService {
   Future<Either<Failure, bool>> deleteMachineInactivity(int inactivityId) {
     return repository.deleteMachineInactivity(inactivityId);
   }
+  Future<Either<Failure, MachineEntity>> editMachine(
+  int machineId,
+  String machineName,
+  double processingPercentage,
+  double preparationPercentage,
+  double restPercentage,
+  int continueCapacity,
+  DateTime availabilityDateTime,
+) async {
+  final machine = MachineEntity(
+    id: machineId,
+    name: machineName,
+    status: null,
+    processingPercentage: processingPercentage,
+    preparationPercentage: preparationPercentage,
+    restPercentage: restPercentage,
+    continueCapacity: continueCapacity,
+    availabilityDateTime: availabilityDateTime,
+  );
+  final response = await repository.updateMachine(machine);
+  return response.fold((f) => Left(f), (success) => Right(machine));
+}
+ 
+
 }

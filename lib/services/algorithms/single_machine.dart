@@ -68,6 +68,7 @@ class SingleMachine {
       case "MINSLACK": scheduleMinimumSlack(); break;
       case "CR": scheduleCriticalRatio(); break;
       case "GENETICS": scheduleGeneticAlgorithm(); break;
+      case "TABU": scheduleTabuSearch(); break;
 
     }
   }
@@ -402,5 +403,104 @@ class SingleMachine {
     individual[j] = temp;
     return individual;
   }
+  Duration _calcularMakespanTabuSingle(List<SingleMachineInput> jobSequence) {
+  DateTime current = _getStartTime(jobSequence.first.availableDate);
+
+  for (var job in jobSequence) {
+    current = _getAvailableStartTime(current, job.machineDuration);
+    current = current.add(job.machineDuration);
+  }
+
+  return current.difference(_getStartTime(jobSequence.first.availableDate));
+}
+
+void scheduleTabuSearch() {
+
+
+  // numero maximo de iteraciones se puede incluir iteracion por mejora por consola
+  const int maxIterations = 200;
+  // tiempo que se bloquea 
+  const int tabuTenure = 8; // por consola 
+ // Se selecciona una secuencia alza Seleccionar el algo 
+  List<SingleMachineInput> currentSolution = List.from(input)..shuffle();
+  Duration currentFitness = _calcularMakespanTabuSingle(currentSolution); 
+  // Primera secuencia 
+
+  List<SingleMachineInput> bestSolution = List.from(currentSolution);
+  Duration bestFitness = currentFitness;
+  //Aunque explores soluciones peores temporalmente,guardas la mejor encontrada en toda la ejecución
+
+
+  List<Tuple2<Tuple2<int, int>, int>> tabuList = [];
+  // se guardan los swap que no mejoran el algortio y se penalizan (i,j , iteracion )
+
+  final random = Random();
+  final int n = currentSolution.length;
+  // Se revisa dentro de los jobs con un limite de 200 
+  for (int iter = 0; iter < maxIterations; iter++) {
+    // si un movimiento ya paso su tiempo se cambia 
+    tabuList.removeWhere((entry) => entry.value2 <= iter);
+
+    int i = random.nextInt(n);
+    int j;
+    // se escoje un las posiciones al zar 
+    do {
+      j = random.nextInt(n);
+    } while (j == i);
+     // Revisa si es tabu 
+    bool isTabu = tabuList.any(
+      (entry) =>
+          (entry.value1.value1 == i && entry.value1.value2 == j) ||
+          (entry.value1.value1 == j && entry.value1.value2 == i),
+    );
+    // Revisar 
+    if (isTabu) continue; 
+    // salta la iteracionm 
+
+    List<SingleMachineInput> newSolution = List.from(currentSolution);
+    // se copia la solucion nueva  y se hace el swap
+    final temp = newSolution[i];
+    newSolution[i] = newSolution[j];
+    newSolution[j] = temp;
+
+    // calculo del makespan 
+
+    Duration newFitness = _calcularMakespanTabuSingle(newSolution); 
+
+    if (newFitness < currentFitness) {
+      currentSolution = newSolution;
+      currentFitness = newFitness;
+      // mejora la actual 
+      if (newFitness < bestFitness) {
+        bestFitness = newFitness;
+        bestSolution = List.from(newSolution);
+      }
+    } else {
+      // Se castiga 
+      tabuList.add(Tuple2(Tuple2(i, j), iter + tabuTenure));
+    }
+  }
+
+  input = bestSolution;
+  // mejor solucion 
+  DateTime scheduleTime = _getStartTime(input[0].availableDate);
+  for (var job in input) {
+    DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
+    DateTime end = start.add(job.machineDuration);
+    Duration delay = end.isAfter(job.dueDate)
+        ? end.difference(job.dueDate)
+        : Duration.zero;
+    output.add(SingleMachineOutput(
+      job.jobId,
+      job.machineDuration,
+      start,
+      end,
+      job.dueDate,
+      delay,
+    ));
+    scheduleTime = end;
+  }
+}
+  
 
 }

@@ -96,6 +96,9 @@ class ParallelMachine {
       case "GENETICS":
         geneticsRule();
         break;
+      case "TABU":        
+        tabuSearchRule();
+      break;
 
 
     }
@@ -539,4 +542,104 @@ class ParallelMachine {
     individual[j] = temp;
     return individual;
   }
+  Duration _calcularMakespanTabu(List<ParallelInput> jobSequence) {
+  Map<int, DateTime> machineAvailability = {
+    for (var id in machines.keys) id: startDate,
+  };
+
+  DateTime latestEnd = startDate;
+
+  for (var job in jobSequence) {
+    DateTime bestEndTime = DateTime(9999);
+    int bestMachineId = -1;
+
+    for (var entry in job.durationsInMachines.entries) {
+      int machineId = entry.key;
+      Duration processing = entry.value;
+
+      DateTime available = machineAvailability[machineId]!;
+      DateTime start = job.availableDate.isAfter(available)
+          ? job.availableDate
+          : available;
+      start = _adjustForWorkingSchedule(start);
+      DateTime end = _adjustEndTimeForWorkingSchedule(start, processing);
+
+      if (end.isBefore(bestEndTime)) {
+        bestEndTime = end;
+        bestMachineId = machineId;
+      }
+    }
+
+    if (bestMachineId != -1) {
+      machineAvailability[bestMachineId] = bestEndTime;
+    }
+
+    if (bestEndTime.isAfter(latestEnd)) {
+      latestEnd = bestEndTime;
+    }
+  }
+
+  return latestEnd.difference(startDate);
+}
+void tabuSearchRule() {
+  const int maxIterations = 200;
+  const int tabuTenure = 8;
+
+  List<ParallelInput> currentSolution = List.from(inputJobs)..shuffle();
+  Duration currentFitness = _calcularMakespanTabu(currentSolution);
+
+  List<ParallelInput> bestSolution = List.from(currentSolution);
+  Duration bestFitness = currentFitness;
+
+  List<Tuple2<Tuple2<int, int>, int>> tabuList = [];
+
+  final random = Random();
+  final int n = currentSolution.length;
+
+  for (int iter = 0; iter < maxIterations; iter++) {
+    tabuList.removeWhere((entry) => entry.value2 <= iter);
+
+    int i = random.nextInt(n);
+    int j;
+    do {
+      j = random.nextInt(n);
+    } while (j == i);
+
+    bool isTabu = tabuList.any(
+      (entry) =>
+          (entry.value1.value1 == i && entry.value1.value2 == j) ||
+          (entry.value1.value1 == j && entry.value1.value2 == i),
+    );
+
+    if (isTabu) continue;
+
+    List<ParallelInput> newSolution = List.from(currentSolution);
+    final temp = newSolution[i];
+    newSolution[i] = newSolution[j];
+    newSolution[j] = temp;
+
+    Duration newFitness = _calcularMakespanTabu(newSolution);
+
+    if (newFitness < currentFitness) {
+      currentSolution = newSolution;
+      currentFitness = newFitness;
+
+      if (newFitness < bestFitness) {
+        bestFitness = newFitness;
+        bestSolution = List.from(newSolution);
+      }
+    } else {
+      tabuList.add(Tuple2(Tuple2(i, j), iter + tabuTenure));
+    }
+  }
+
+  inputJobs = bestSolution;
+  _assignJobsToMachines();
+}
+
+
+
+
+
+
 }

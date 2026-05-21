@@ -4,7 +4,8 @@ class OrderEntity{
   final int? orderId;
   final DateTime regDate; 
   List<JobEntity>? orderJobs;
+  final Map<String, Map<String, Map<String, int>>>? setupTimeMatrix;
 
-  OrderEntity(this.orderId, this.regDate, this.orderJobs);
+  OrderEntity(this.orderId, this.regDate, this.orderJobs, {this.setupTimeMatrix});
 }
 

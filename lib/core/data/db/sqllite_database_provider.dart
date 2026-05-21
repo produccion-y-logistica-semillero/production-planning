@@ -722,6 +722,29 @@ class SQLLiteDatabaseProvider {
         }
       },
     );
+    
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS job_machine_states (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id INTEGER NOT NULL,
+          machine_type_id INTEGER NOT NULL,
+          state_char TEXT NOT NULL,
+          FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+      );
+    ''');
+    
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS order_setup_matrix (
+          machine_name TEXT NOT NULL,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          from_state TEXT NOT NULL,
+          to_state TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders(order_id)
+      );
+    ''');
+
     return _database!;
   }
 

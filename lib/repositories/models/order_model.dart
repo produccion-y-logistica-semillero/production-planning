@@ -3,9 +3,10 @@ import 'package:production_planning/entities/order_entity.dart';
 
 class OrderModel {
   final int? orderId;
-  final DateTime regDate;
+  DateTime regDate;
+  Map<String, Map<String, Map<String, int>>>? setupTimeMatrix;
 
-  OrderModel(this.orderId, this.regDate);
+  OrderModel(this.orderId, this.regDate, {this.setupTimeMatrix});
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     return OrderModel(
@@ -14,11 +15,19 @@ class OrderModel {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'order_id': orderId,
+      'reg_date': regDate.toIso8601String(),
+    };
+  }
+
   OrderEntity toEntity(List<JobEntity> jobs) {
     return OrderEntity(
       orderId,
       regDate,
       jobs,
+      setupTimeMatrix: setupTimeMatrix,
     );
   }
 }

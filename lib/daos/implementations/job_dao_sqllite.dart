@@ -65,6 +65,21 @@ class JobDaoSQLlite implements JobDao {
         }
       }
 
+      // Obtener estados finales por máquina
+      final statesMaps = await db.query(
+        'job_machine_states',
+        where: 'job_id = ?',
+        whereArgs: [jobId],
+      );
+
+      Map<int, String>? machineFinalStates;
+      if (statesMaps.isNotEmpty) {
+        machineFinalStates = {};
+        for (var sm in statesMaps) {
+          machineFinalStates[sm['machine_type_id'] as int] = sm['state_char'] as String;
+        }
+      }
+
       jobs.add(JobModel(
         jobId,
         map['sequence_id'] as int,
@@ -75,6 +90,7 @@ class JobDaoSQLlite implements JobDao {
         DateTime.parse(map['available_date'] as String),
         preemptionMatrix: preemptionMatrix,
         taskMachineTimesMinutes: taskMachineTimes,
+        machineFinalStates: machineFinalStates,
       ));
     }
 
@@ -130,6 +146,17 @@ class JobDaoSQLlite implements JobDao {
           }
         }
       }
+      
+      // Insertar estados finales por máquina si existen
+      if (job.machineFinalStates != null && job.machineFinalStates!.isNotEmpty) {
+        for (var entry in job.machineFinalStates!.entries) {
+          await db.insert('job_machine_states', {
+            'job_id': jobId,
+            'machine_type_id': entry.key,
+            'state_char': entry.value,
+          });
+        }
+      }
     } catch (error) {
       print("ERROR AL INSERTAR JOB EN DAO: ${error.toString()}");
       throw LocalStorageFailure();
@@ -152,6 +179,15 @@ class JobDaoSQLlite implements JobDao {
       for (var job in jobs) {
         await db.delete(
           'job_preemption',
+          where: 'job_id = ?',
+          whereArgs: [job['job_id']],
+        );
+      }
+
+      // Eliminar registros de job_machine_states para cada job
+      for (var job in jobs) {
+        await db.delete(
+          'job_machine_states',
           where: 'job_id = ?',
           whereArgs: [job['job_id']],
         );

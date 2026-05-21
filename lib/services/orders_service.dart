@@ -29,7 +29,7 @@ class OrdersService {
   OrdersService(this.orderRepo, this.machineRepo, this.setupTimeService);
 
   Future<Either<Failure, bool>> addOrder(
-      List<NewOrderRequestModel> model) async {
+      List<NewOrderRequestModel> model, {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
     final List<JobEntity> jobs = model.map((jobModel) {
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
       if (jobModel.taskMachineTimesMinutes != null) {
@@ -57,6 +57,7 @@ class OrdersService {
         jobModel.availableDate,
         preemptionMatrix: jobModel.preemptionMatrix,
         taskMachineTimes: taskMachineTimes,
+        machineFinalStates: jobModel.machineFinalStates,
       );
     }).toList();
 
@@ -65,7 +66,7 @@ class OrdersService {
           'OrdersService.addOrder: sequence=${m.sequenceId} taskMachineTimesMinutes=${m.taskMachineTimesMinutes}');
     }
 
-    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs);
+    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs, setupTimeMatrix: setupTimeMatrix);
     return await orderRepo.createOrder(newOrder);
   }
 
@@ -163,9 +164,7 @@ class OrdersService {
       final taskIds = job.sequence?.tasks?.map((t) => t.id).toSet() ?? {};
 
       for (final dep in dependencies) {
-        if (dep.predecessor_id != null &&
-            dep.successor_id != null &&
-            dep.predecessor_id != dep.successor_id &&
+        if (dep.predecessor_id != dep.successor_id &&
             taskIds.contains(dep.predecessor_id) &&
             taskIds.contains(dep.successor_id)) {
           hasExplicitPrecedence = true;
@@ -231,7 +230,8 @@ class OrdersService {
       scheduleOrder(Tuple3<int, String, String> sch) async {
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
-              orderRepository: orderRepo, machineRepository: machineRepo)
+              orderRepository: orderRepo, 
+              machineRepository: machineRepo)
           .singleMachineAdapter(sch.value1, sch.value2)),
 
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
@@ -239,7 +239,8 @@ class OrdersService {
           .parallelMachineAdapter(sch.value1, sch.value2)),
 
       'FLOW SHOP' => Right(await FlowShopAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo)
+              machineRepository: machineRepo, 
+              orderRepository: orderRepo)
           .flowShopAdapter(sch.value1, sch.value2)),
 
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(

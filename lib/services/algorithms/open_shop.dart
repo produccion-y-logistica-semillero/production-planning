@@ -50,7 +50,10 @@ class OpenShop {
   final Map<int, Duration?> machineRestTime;
   Map<int, int> machineProcessedCount = {};
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<String, Map<String, int>>? stateSetupMatrix;
+  final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
+  final Map<int, int?> _machineLastJob = {};
   List<OpenShopOutput> output = [];
 
   OpenShop(
@@ -63,6 +66,8 @@ class OpenShop {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
     this.changeoverMatrix = const {},
+    this.stateSetupMatrix,
+    this.jobStates,
   }) {
     // Inicializar contador de procesamiento por máquina
     for (final machineId in machinesAvailability.keys) {
@@ -102,9 +107,11 @@ class OpenShop {
   void _initializeMachineLastSequence() {
     for (final machineId in machinesAvailability.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
     for (final machineId in changeoverMatrix.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
   }
 
@@ -431,15 +438,23 @@ class OpenShop {
       final start = selected.earliestStart;
 
       // Calcular setup time
-      final int? previousSequence =
-          _machineLastSequence.putIfAbsent(selected.machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(
-          selected.machineId, selected.job.sequenceId, previousSequence);
-      final Duration totalDuration = selected.duration + setupDuration;
+      final int? previousSequence = _machineLastSequence.putIfAbsent(selected.machineId, () => null);
+      final int? previousJobId = _machineLastJob.putIfAbsent(selected.machineId, () => null);
+      
+      Duration setupDuration = Duration.zero;
+      if (previousJobId != null && stateSetupMatrix != null && jobStates != null) {
+        final previousState = jobStates![previousJobId]?[selected.machineId];
+        final currentState = jobStates![selected.job.jobId]?[selected.machineId];
+        if (previousState != null && currentState != null) {
+          final mins = stateSetupMatrix![previousState]?[currentState] ?? 0;
+          setupDuration = Duration(minutes: mins);
+        }
+      } else {
+        setupDuration = _getSetupDuration(selected.machineId, selected.job.sequenceId, previousSequence);
+      }
 
-      final end = start.add(totalDuration);
-      final adjustedEnd =
-          _adjustEndTimeWithInactivities(selected.machineId, start, end);
+      final taskStart = _adjustEndTimeWithInactivities(selected.machineId, start, start.add(setupDuration));
+      final adjustedEnd = _adjustEndTimeWithInactivities(selected.machineId, taskStart, taskStart.add(selected.duration));
 
       // Aplicar descanso por continueCapacity
       DateTime finalEnd = adjustedEnd;
@@ -457,15 +472,16 @@ class OpenShop {
         }
       }
 
-      // Programar la operación
+      // Programar la operación con taskStart (así queda el gap de alistamiento)
       jobSchedulings[selected.job.jobId]![selected.taskId] =
-          Tuple2(selected.machineId, Range(start, adjustedEnd));
+          Tuple2(selected.machineId, Range(taskStart, adjustedEnd));
 
       // Actualizar disponibilidades
       machinesAvailability[selected.machineId] = finalEnd;
       jobAvailability[selected.job.jobId] = adjustedEnd;
       completedOperations[selected.job.jobId]!.add(selected.taskId);
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
+      _machineLastJob[selected.machineId] = selected.job.jobId;
     }
 
     // Generar outputs

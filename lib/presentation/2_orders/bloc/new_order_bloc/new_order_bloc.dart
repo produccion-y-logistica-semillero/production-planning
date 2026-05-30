@@ -37,6 +37,15 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     );
   }
 
+  int _getNextJobId(List<AddJobWidget> jobs) {
+    final parsedIds = jobs
+        .map((job) => int.tryParse(job.idController?.text ?? '') ?? 0)
+        .where((id) => id > 0)
+        .toList();
+    final maxId = parsedIds.isNotEmpty ? parsedIds.reduce((a, b) => a > b ? a : b) : 0;
+    return maxId + 1;
+  }
+
   void addJob() {
     if (state is NewOrdersState) {
       final currentState = state as NewOrdersState;
@@ -46,6 +55,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       int index = jobs.isNotEmpty
           ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b)
           : 0;
+      final nextJobId = _getNextJobId(jobs);
 
       jobs.add(AddJobWidget(
         availableDate: null,
@@ -54,7 +64,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         dueHour: null,
         priorityController: TextEditingController(),
         quantityController: TextEditingController(),
-        idController: TextEditingController(),
+        idController: TextEditingController(text: '$nextJobId'),
         index: index + 1,
         sequences: sequences,
       ));
@@ -83,10 +93,11 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       // Find the source job to copy
       final sourceJob = jobs.firstWhere((job) => job.index == index);
 
-      // Calculate next index
+      // Calculate next index and sequential job id
       int nextIndex = jobs.isNotEmpty
           ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b) + 1
           : 1;
+      final nextJobId = _getNextJobId(jobs);
 
       // Clone the job with all its current data
       jobs.add(AddJobWidget(
@@ -100,7 +111,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         quantityController: TextEditingController(
           text: sourceJob.quantityController?.text ?? '',
         ),
-        idController: TextEditingController(),
+        idController: TextEditingController(text: '$nextJobId'),
         index: nextIndex,
         sequences: sequences,
         selectedSequence: sourceJob.selectedSequence,

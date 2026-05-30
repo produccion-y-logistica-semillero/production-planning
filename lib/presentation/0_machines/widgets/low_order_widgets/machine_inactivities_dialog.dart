@@ -126,7 +126,7 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Pausa automática por límite de procesamientos',
+          'Tiempo de procesamiento continuo',
           style: theme.textTheme.titleMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
@@ -173,7 +173,7 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save),
-            label: const Text('Guardar pausa automática'),
+            label: const Text('Guardar tiempo de procesamiento continuo'),
           ),
         ),
       ],
@@ -282,8 +282,8 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.add),
-            label: const Text('Agregar'),
+                : const Icon(Icons.save),
+            label: const Text('Guardar programación recurrente'),
           ),
         ),
       ],

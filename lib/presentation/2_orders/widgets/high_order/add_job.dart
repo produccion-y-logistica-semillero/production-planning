@@ -294,17 +294,26 @@ class AddJobState extends State<AddJobWidget> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                onPressed: () {
-
-                  BlocProvider.of<NewOrderBloc>(context)
-                      .removeJob(widget.index);
-
-                },
-                icon: Icon(Icons.delete, color: colorScheme.error),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    BlocProvider.of<NewOrderBloc>(context)
+                        .duplicateJob(widget.index);
+                  },
+                  icon: Icon(Icons.copy_all, color: colorScheme.primary),
+                  tooltip: 'Duplicar job',
+                ),
+                IconButton(
+                  onPressed: () {
+                    BlocProvider.of<NewOrderBloc>(context)
+                        .removeJob(widget.index);
+                  },
+                  icon: Icon(Icons.delete, color: colorScheme.error),
+                  tooltip: 'Eliminar job',
+                ),
+              ],
             ),
             TextFormField(
               controller: widget.idController,
@@ -532,6 +541,19 @@ class AddJobState extends State<AddJobWidget> {
   );
 }
 
+  Widget _buildPreemptionOptionRow(
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        Switch(value: value, onChanged: onChanged),
+      ],
+    );
+  }
+
   Widget _buildStationRow(TaskEntity task) {
     final machineTypeId = task.machineTypeId;
     final machineOptions =
@@ -659,6 +681,11 @@ class AddJobState extends State<AddJobWidget> {
     int? selectedMachineId =
         existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
 
+    bool maintenancePreempt = selectedMachineId != null &&
+        (_preemptionMatrix[selectedMachineId] ?? 1) == 1;
+    bool restPreempt = maintenancePreempt;
+    bool endOfDayPreempt = maintenancePreempt;
+
     // Initialize with existing values or defaults
     final stationDefaults = _stationTimes[machineTypeId] ??
         bloc.getStandardTimesForType(machineTypeId);
@@ -702,6 +729,10 @@ class AddJobState extends State<AddJobWidget> {
                       onChanged: (v) {
                         setDialogState(() {
                           selectedMachineId = v;
+                          maintenancePreempt = (selectedMachineId != null &&
+                                  (_preemptionMatrix[selectedMachineId] ?? 1) == 1);
+                          restPreempt = maintenancePreempt;
+                          endOfDayPreempt = maintenancePreempt;
                         });
                       },
                     ),
@@ -1073,42 +1104,41 @@ GestureDetector(
                     const SizedBox(height: 16),
                     const Text('Permite Interrupciones (Preemption):',
                         style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     if (selectedMachineId != null)
-                      Row(
+                      Column(
                         children: [
-                          const Expanded(
-                            child: Text('¿Se puede interrumpir para descansos/mantenimientos?'),
-                          ),
-                          ToggleButtons(
-                            isSelected: [
-                              (_preemptionMatrix[selectedMachineId!] ?? 1) == 0, // default is 1 (Yes) to match current behavior
-                              (_preemptionMatrix[selectedMachineId!] ?? 1) == 1
-                            ],
-                            onPressed: (index) {
+                          _buildPreemptionOptionRow(
+                            '¿Se puede interrumpir para mantenimiento?',
+                            maintenancePreempt,
+                            (value) {
                               setDialogState(() {
-                                _preemptionMatrix[selectedMachineId!] = index;
-                              });
-                              setState(() {
-                                _preemptionMatrix[selectedMachineId!] = index;
+                                maintenancePreempt = value;
                               });
                             },
-                            borderRadius: BorderRadius.circular(8),
-                            constraints: const BoxConstraints(
-                                minWidth: 50, minHeight: 36),
-                            children: const [
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 12),
-                                child: Text('No'),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 12),
-                                child: Text('Sí'),
-                              ),
-                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _buildPreemptionOptionRow(
+                            '¿Se puede interrumpir para descanso?',
+                            restPreempt,
+                            (value) {
+                              setDialogState(() {
+                                restPreempt = value;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          _buildPreemptionOptionRow(
+                            '¿Se puede interrumpir por la finalización de la jornada de trabajo?',
+                            endOfDayPreempt,
+                            (value) {
+                              setDialogState(() {
+                                endOfDayPreempt = value;
+                              });
+                            },
                           ),
                         ],
-                      ),                               
+                      ),
                 ],
               ),
             ),
@@ -1134,6 +1164,10 @@ GestureDetector(
 
       setState(() {
         if (selectedMachineId != null) {
+          _preemptionMatrix[selectedMachineId!] =
+              (maintenancePreempt || restPreempt || endOfDayPreempt)
+                  ? 1
+                  : 0;
           _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
           _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
             'processing': processingMinutes,

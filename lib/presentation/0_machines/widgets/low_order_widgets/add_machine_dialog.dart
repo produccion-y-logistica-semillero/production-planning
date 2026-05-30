@@ -151,7 +151,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         const Divider(),
         const SizedBox(height: 16),
         Text(
-          'Pausa automática por límite de procesamientos',
+          'Tiempo de procesamiento continuo',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
@@ -195,10 +195,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
           child: ElevatedButton.icon(
             onPressed: () {
               FocusScope.of(context).unfocus();
-              _showSnack('Pausa automática lista para guardarse con la máquina.');
+              _showSnack('Tiempo de procesamiento continuo listo para guardarse con la máquina.');
             },
             icon: const Icon(Icons.save),
-            label: const Text('Guardar pausa automática'),
+            label: const Text('Guardar tiempo de procesamiento continuo'),
           ),
         ),
       ],

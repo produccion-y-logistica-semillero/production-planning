@@ -36,7 +36,7 @@ class AddJobWidget extends StatefulWidget {
     required this.idController,
     required this.index,
     required this.sequences,
-
+    this.selectedSequence,
   }) : super(key: stateKey);
 
   factory AddJobWidget({
@@ -49,6 +49,7 @@ class AddJobWidget extends StatefulWidget {
     required TextEditingController? idController,
     required int index,
     required List<dartz.Tuple2<int, String>> sequences,
+    int? selectedSequence,
     GlobalKey<AddJobState>? stateKey,
   }) {
     final key = stateKey ?? GlobalKey<AddJobState>();
@@ -63,6 +64,7 @@ class AddJobWidget extends StatefulWidget {
       idController: idController,
       index: index,
       sequences: sequences,
+      selectedSequence: selectedSequence,
     );
   }
 
@@ -1068,7 +1070,45 @@ GestureDetector(
   ),
 ),  
 */       
-                               
+                    const SizedBox(height: 16),
+                    const Text('Permite Interrupciones (Preemption):',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    if (selectedMachineId != null)
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text('¿Se puede interrumpir para descansos/mantenimientos?'),
+                          ),
+                          ToggleButtons(
+                            isSelected: [
+                              (_preemptionMatrix[selectedMachineId!] ?? 1) == 0, // default is 1 (Yes) to match current behavior
+                              (_preemptionMatrix[selectedMachineId!] ?? 1) == 1
+                            ],
+                            onPressed: (index) {
+                              setDialogState(() {
+                                _preemptionMatrix[selectedMachineId!] = index;
+                              });
+                              setState(() {
+                                _preemptionMatrix[selectedMachineId!] = index;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            constraints: const BoxConstraints(
+                                minWidth: 50, minHeight: 36),
+                            children: const [
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('No'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('Sí'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),                               
                 ],
               ),
             ),

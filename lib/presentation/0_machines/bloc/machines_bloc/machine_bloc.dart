@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/services/machines_service.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 
 class MachineBloc extends Cubit<MachinesState> {
   final MachinesService service;
@@ -23,6 +24,7 @@ class MachineBloc extends Cubit<MachinesState> {
     String machineName,
     int typeId,
     String availabilityDateTimeStr,
+    List<MachineInactivityEntity> scheduledInactivities,
   ) async {
     List<MachineEntity> machines = [];
 
@@ -41,7 +43,10 @@ class MachineBloc extends Cubit<MachinesState> {
         availabilityDateTime);
 
     response.fold((f) => MachinesRetrievingSuccess(machines, state.typeId),
-        (mac) {
+        (mac) async {
+      for (final inactivity in scheduledInactivities) {
+        await service.addMachineInactivity(inactivity.copyWith(machineId: mac.id));
+      }
       //NEED TO CHECK BECAUSE WHEN ADDING THE NEW MACHINE IT SAYS ID IS NULL EVEN TOUGH IS NOT
       emit(MachinesRetrievingSuccess(machines, state.typeId));
     });

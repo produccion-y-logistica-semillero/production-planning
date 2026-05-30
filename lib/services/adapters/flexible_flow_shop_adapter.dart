@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -88,6 +89,17 @@ class FlexibleFlowShopAdapter {
       machinesAvailability[machine.id!] = order.regDate;
     }
 
+    // Crear mapa de inactividades por máquina
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      machineRestTimeMap[machine.id!] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
     // Ejecutar el algoritmo Flexible Flow Shop
     final output = FlexibleFlowShop(
       order.regDate,
@@ -95,6 +107,9 @@ class FlexibleFlowShopAdapter {
       inputJobs,
       machinesAvailability,
       rule,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
     ).output;
 
     // Transformar la salida en PlanningMachineEntity

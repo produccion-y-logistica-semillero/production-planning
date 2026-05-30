@@ -27,6 +27,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
   late MetricsBloc _metricsBloc;
   late GanttBloc _ganttBloc;
   List<int> _visibleToOriginalIndex = const [];
+  final ScrollController _horizontalScrollController = ScrollController();
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -262,10 +264,16 @@ class _OrderMetricsState extends State<OrderMetrics> {
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Container(
-                              decoration: BoxDecoration(
+                          child: Scrollbar(
+                            controller: _horizontalScrollController,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _horizontalScrollController,
+                              scrollDirection: Axis.horizontal,
+                              child: Container(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
                                 color: colorScheme.surfaceContainer,
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
@@ -592,9 +600,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
                           ),
                         ),
                       ),
+                    ),
 
-                      const SizedBox(height: 16),
-                    ],
+                    const SizedBox(height: 16),
+                  ],
                   );
                 },
               );

@@ -247,7 +247,7 @@ class _MachinesListViewState extends State<MachinesListView> {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController controllerCapacity = TextEditingController(text: "100.0");
     final TextEditingController controllerPreparation = TextEditingController(text: "100.0");
-    final TextEditingController controllerRestTime = TextEditingController(text: "100.0");
+    final TextEditingController controllerRestTime = TextEditingController(text: "60");
     final TextEditingController controllerContinue = TextEditingController(text: "1");
 
 
@@ -281,14 +281,13 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: controllerContinue,
           availabilityDateTimeController: availabilityDateTimeController,
           quantityController: quantityController,
-          addMachineHandle: () async {
+          addMachineHandle: (scheduledInactivities) async {
             final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
             final processingPercent = parsePercentage(controllerCapacity.text);
-            final preparationPercent =
-                parsePercentage(controllerPreparation.text);
-            final restPercent = parsePercentage(controllerRestTime.text);
-            final continueCapacity =
-                int.tryParse(controllerContinue.text.trim());
+            final preparationPercent = parsePercentage(controllerPreparation.text);
+            final restMinutes = int.tryParse(controllerRestTime.text.trim());
+            final restPercent = restMinutes != null ? (restMinutes * 100) / 60 : null;
+            final continueCapacity = int.tryParse(controllerContinue.text.trim());
 
             final hasInvalidFields = processingPercent == null ||
                 processingPercent <= 0 ||
@@ -353,6 +352,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                 newName,
                 machineId,
                 availabilityDateTimeController.text,
+                scheduledInactivities,
               );
             }
 
@@ -380,8 +380,9 @@ class _MachinesListViewState extends State<MachinesListView> {
         text: machine.processingPercentage.toStringAsFixed(1));
     final preparationController = TextEditingController(
         text: machine.preparationPercentage.toStringAsFixed(1));
+    final restMinutes = (60 * machine.restPercentage / 100).round();
     final restController = TextEditingController(
-        text: machine.restPercentage.toStringAsFixed(1));
+        text: restMinutes.toString());
     final continueController = TextEditingController(
         text: machine.continueCapacity.toString());
     final availabilityController = TextEditingController(
@@ -403,12 +404,13 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: continueController,
           availabilityDateTimeController: availabilityController,
           quantityController: quantityController,
-          addMachineHandle: () async {
+          isEditing: true,
+          addMachineHandle: (_) async {
             BlocProvider.of<MachineBloc>(context).editMachine(
               machine.id!,
               double.tryParse(capacityController.text) ?? 100.0,
               double.tryParse(preparationController.text) ?? 100.0,
-              double.tryParse(restController.text) ?? 100.0,
+              ((int.tryParse(restController.text) ?? 60) * 100) / 60,
               int.tryParse(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),

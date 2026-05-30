@@ -68,6 +68,65 @@ class OrdersService {
     return await orderRepo.createOrder(newOrder);
   }
 
+  Future<Either<Failure, bool>> updateOrder(
+      int orderId, List<NewOrderRequestModel> model) async {
+    final List<JobEntity> jobs = model.map((jobModel) {
+      Map<int, Map<int, MachineTimes>>? taskMachineTimes;
+      if (jobModel.taskMachineTimesMinutes != null) {
+        taskMachineTimes = {};
+        jobModel.taskMachineTimesMinutes!.forEach((taskId, mm) {
+          final inner = <int, MachineTimes>{};
+          mm.forEach((machineId, timesMap) {
+            inner[machineId] = MachineTimes(
+              processing: Duration(minutes: timesMap['processing'] ?? 0),
+              preparation: Duration(minutes: timesMap['preparation'] ?? 0),
+              rest: Duration(minutes: timesMap['rest'] ?? 0),
+            );
+          });
+          taskMachineTimes![taskId] = inner;
+        });
+      }
+
+      return JobEntity(
+        null,
+        SequenceEntity(jobModel.sequenceId, null, "", null),
+        jobModel.amount,
+        jobModel.dueDate,
+        jobModel.priority,
+        jobModel.availableDate,
+        preemptionMatrix: jobModel.preemptionMatrix,
+        taskMachineTimes: taskMachineTimes,
+      );
+    }).toList();
+
+    final OrderEntity updatedOrder = OrderEntity(orderId, DateTime.now(), jobs);
+    return await orderRepo.updateOrder(updatedOrder);
+  }
+
+  Future<Either<Failure, bool>> duplicateOrder(int orderId) async {
+    final result = await orderRepo.getFullOrder(orderId);
+    return await result.fold(
+      (failure) async => Left(failure),
+      (order) async {
+        final List<JobEntity> newJobs = order.orderJobs?.map((job) {
+          return JobEntity(
+            null,
+            job.sequence,
+            job.amount,
+            job.dueDate,
+            job.priority,
+            job.availableDate,
+            preemptionMatrix: job.preemptionMatrix,
+            taskMachineTimes: job.taskMachineTimes,
+          );
+        }).toList() ?? [];
+
+        final OrderEntity newOrder = OrderEntity(null, order.regDate, newJobs);
+        return await orderRepo.createOrder(newOrder);
+      },
+    );
+  }
+
   Future<Either<Failure, bool>> deleteOrder(int id) async {
     return await orderRepo.deleteOrder(id);
   }

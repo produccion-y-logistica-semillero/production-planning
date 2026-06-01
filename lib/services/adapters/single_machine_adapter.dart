@@ -48,15 +48,26 @@ class SingleMachineAdapter {
     // Expand jobs according to their `amount` (cantidad)
     final List<SingleMachineInput> input = [];
     for (final job in order.orderJobs!) {
-      // Prefer explicit per-job per-task per-machine time if provided (robust)
+      // Priority 1: Explicit per-job per-task per-machine time
       final taskId = job.sequence!.tasks![0].id!;
-      final explicit =
-          getExplicitProcessingDuration(job, taskId, machineEntity);
-      // Calculate duration from machine percentage (100% = 1 hour base)
-      final baseDuration = Duration(
-          minutes: (60 * machineEntity.processingPercentage / 100).round());
-      final Duration duration = explicit ??
-          ruleOf3(baseDuration, job.sequence!.tasks![0].processingUnits);
+      final explicit = getExplicitProcessingDuration(job, taskId, machineEntity);
+      
+      late final Duration duration;
+      if (explicit != null) {
+        duration = explicit;
+      } else {
+        // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
+        if (machineEntity.processingPercentage == 100 || machineEntity.processingPercentage <= 0) {
+          // Standard machine: use processingUnits as-is
+          duration = job.sequence!.tasks![0].processingUnits;
+        } else {
+          // Non-standard machine: scale processingUnits by machine percentage
+          final ratio = machineEntity.processingPercentage / 100.0;
+          final scaledMillis = (job.sequence!.tasks![0].processingUnits.inMilliseconds * ratio).round();
+          duration = Duration(milliseconds: scaledMillis);
+        }
+      }
+      
       for (var i = 0; i < job.amount; i++) {
         input.add(SingleMachineInput(
           job.jobId!,
@@ -116,7 +127,7 @@ class SingleMachineAdapter {
       machinesResult,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-        return Tuple4(out.startDate, out.endDate, out.dueDate, job.priority);
+        return Tuple4(job.availableDate, out.endDate, out.dueDate, job.priority);
       }).toList(),
     );
     return Tuple2(machinesResult, metrics);

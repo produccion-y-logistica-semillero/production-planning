@@ -1,6 +1,5 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
-import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/entities/environment_entity.dart';
 import 'package:production_planning/entities/machine_times.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -8,8 +7,6 @@ import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/job_entity.dart';
 import 'package:production_planning/entities/order_entity.dart';
-import 'package:production_planning/entities/task_entity.dart';
-import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
@@ -67,7 +64,13 @@ class OrdersService {
     }
 
     final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs, setupTimeMatrix: setupTimeMatrix);
-    return await orderRepo.createOrder(newOrder);
+    try {
+      return await orderRepo.createOrder(newOrder);
+    } catch (error, stack) {
+      print('OrdersService.addOrder error: ${error.toString()}');
+      print(stack.toString());
+      return Left(LocalStorageFailure());
+    }
   }
 
   Future<Either<Failure, bool>> deleteOrder(int id) async {

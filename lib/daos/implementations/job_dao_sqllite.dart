@@ -57,7 +57,7 @@ class JobDaoSQLlite implements JobDao {
           final restMinutes = tm['rest_minutes'] as int;
           print(
               'JobDao: loaded time for job $jobId task $tId machine $mId = $processingMinutes/$preparationMinutes/$restMinutes minutes');
-          taskMachineTimes!.putIfAbsent(tId, () => {})[mId] = {
+          taskMachineTimes.putIfAbsent(tId, () => {})[mId] = {
             'processing': processingMinutes,
             'preparation': preparationMinutes,
             'rest': restMinutes,
@@ -100,63 +100,65 @@ class JobDaoSQLlite implements JobDao {
   @override
   Future<void> insertJob(JobEntity job, int orderId) async {
     try {
-      // map job data for data base
-      final jobMap = {
-        'sequence_id': job.sequence!.id,
-        'order_id': orderId,
-        'amount': job.amount,
-        'job_name': job.jobName,
-        'due_date': job.dueDate.toIso8601String(), // due date
-        'priority': job.priority,
-        'available_date': job.availableDate.toIso8601String(),
-      };
+      await db.transaction((txn) async {
+        // map job data for data base
+        final jobMap = {
+          'sequence_id': job.sequence!.id,
+          'order_id': orderId,
+          'amount': job.amount,
+          'job_name': job.jobName,
+          'due_date': job.dueDate.toIso8601String(), // due date
+          'priority': job.priority,
+          'available_date': job.availableDate.toIso8601String(),
+        };
 
-      // insert job to data base
-      final jobId = await db.insert('jobs', jobMap);
+        // insert job to data base
+        final jobId = await txn.insert('jobs', jobMap);
 
-      // Insertar preemption matrix si existe
-      if (job.preemptionMatrix != null && job.preemptionMatrix!.isNotEmpty) {
-        for (var entry in job.preemptionMatrix!.entries) {
-          await db.insert('job_preemption', {
-            'job_id': jobId,
-            'machine_id': entry.key,
-            'can_preempt': entry.value,
-          });
-        }
-      }
-      // Insertar tiempos por tarea/máquina si existen
-      if (job.taskMachineTimes != null && job.taskMachineTimes!.isNotEmpty) {
-        for (final entry in job.taskMachineTimes!.entries) {
-          final taskId = entry.key;
-          final inner = entry.value;
-          for (final e in inner.entries) {
-            final processingMinutes = e.value.processing.inMinutes;
-            final preparationMinutes = e.value.preparation.inMinutes;
-            final restMinutes = e.value.rest.inMinutes;
-            print(
-                'JobDao: inserting time for job $jobId task $taskId machine ${e.key} = $processingMinutes/$preparationMinutes/$restMinutes minutes');
-            await db.insert('job_task_machine_times', {
+        // Insertar preemption matrix si existe
+        if (job.preemptionMatrix != null && job.preemptionMatrix!.isNotEmpty) {
+          for (var entry in job.preemptionMatrix!.entries) {
+            await txn.insert('job_preemption', {
               'job_id': jobId,
-              'task_id': taskId,
-              'machine_id': e.key,
-              'processing_minutes': processingMinutes,
-              'preparation_minutes': preparationMinutes,
-              'rest_minutes': restMinutes,
+              'machine_id': entry.key,
+              'can_preempt': entry.value,
             });
           }
         }
-      }
-      
-      // Insertar estados finales por máquina si existen
-      if (job.machineFinalStates != null && job.machineFinalStates!.isNotEmpty) {
-        for (var entry in job.machineFinalStates!.entries) {
-          await db.insert('job_machine_states', {
-            'job_id': jobId,
-            'machine_type_id': entry.key,
-            'state_char': entry.value,
-          });
+        // Insertar tiempos por tarea/máquina si existen
+        if (job.taskMachineTimes != null && job.taskMachineTimes!.isNotEmpty) {
+          for (final entry in job.taskMachineTimes!.entries) {
+            final taskId = entry.key;
+            final inner = entry.value;
+            for (final e in inner.entries) {
+              final processingMinutes = e.value.processing.inMinutes;
+              final preparationMinutes = e.value.preparation.inMinutes;
+              final restMinutes = e.value.rest.inMinutes;
+              print(
+                  'JobDao: inserting time for job $jobId task $taskId machine ${e.key} = $processingMinutes/$preparationMinutes/$restMinutes minutes');
+              await txn.insert('job_task_machine_times', {
+                'job_id': jobId,
+                'task_id': taskId,
+                'machine_id': e.key,
+                'processing_minutes': processingMinutes,
+                'preparation_minutes': preparationMinutes,
+                'rest_minutes': restMinutes,
+              });
+            }
+          }
         }
-      }
+        
+        // Insertar estados finales por máquina si existen
+        if (job.machineFinalStates != null && job.machineFinalStates!.isNotEmpty) {
+          for (var entry in job.machineFinalStates!.entries) {
+            await txn.insert('job_machine_states', {
+              'job_id': jobId,
+              'machine_type_id': entry.key,
+              'state_char': entry.value,
+            });
+          }
+        }
+      });
     } catch (error) {
       print("ERROR AL INSERTAR JOB EN DAO: ${error.toString()}");
       throw LocalStorageFailure();
@@ -169,7 +171,7 @@ class JobDaoSQLlite implements JobDao {
     try {
       // Obtener job_ids antes de eliminar
       final jobs = await db.query(
-        'JOBS',
+        'jobs',
         columns: ['job_id'],
         where: 'order_id = ?',
         whereArgs: [orderId],
@@ -195,7 +197,7 @@ class JobDaoSQLlite implements JobDao {
 
       // Eliminar jobs
       await db.delete(
-        'JOBS',
+        'jobs',
         where: 'order_id = ?',
         whereArgs: [orderId],
       );

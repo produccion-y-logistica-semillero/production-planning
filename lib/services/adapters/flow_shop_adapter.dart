@@ -30,12 +30,13 @@ class FlowShopAdapter {
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
     if (order == null) return null;
 
-    //We get all machines
-    final List<int> machinesTypesIds = order.orderJobs![0].sequence!.tasks!
-        .map((t) => t.machineTypeId)
+    // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
+    final List<int> machineTypeIds = order.orderJobs!
+        .expand((job) => job.sequence!.tasks!.map((t) => t.machineTypeId))
+        .toSet()
         .toList();
     final List<MachineEntity> machines = [];
-    for (final typeId in machinesTypesIds) {
+    for (final typeId in machineTypeIds) {
       final machinesSpecific =
           await machineRepository.getAllMachinesFromType(typeId);
       final machineList = machinesSpecific.fold((_) => null, (m) => m);
@@ -52,6 +53,11 @@ class FlowShopAdapter {
     final mergedMatrix =
         _mergeChangeoverMatrices(defaultMatrix, changeoverMatrix);
 
+    final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
+      buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
+    final Map<int, Map<int, String>> jobStates =
+      buildJobMachineStates(order.orderJobs!, machines);
+
     //we create the input and expand jobs by their `amount` (cantidad)
     final List<FlowShopInput> inputJobs = [];
     for (final job in order.orderJobs!) {
@@ -60,16 +66,25 @@ class FlowShopAdapter {
       //iterating over all tasks, and for each one, we get the time it takes on the machine we have for the machine type
       for (final task in job.sequence!.tasks!) {
         final machineOfTask =
-            machines.where((m) => m.machineTypeId == task.machineTypeId).first;
-        // Prefer explicit job-task-machine time when present (robust)
-        final explicit =
-            getExplicitProcessingDuration(job, task.id!, machineOfTask);
-        // Calculate duration from machine percentage (100% = 1 hour base)
-        final baseDuration = Duration(
-            minutes: (60 * machineOfTask.processingPercentage / 100).round());
-        taskTimes[task.id!] =
-            explicit ?? ruleOf3(baseDuration, task.processingUnits);
-        taskSequence.add(Tuple2(task.id!, task.machineTypeId));
+            machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
+        
+        // Priority 1: Explicit per-job per-task per-machine time
+        final explicit = getExplicitProcessingDuration(job, task.id!, machineOfTask);
+        if (explicit != null) {
+          taskTimes[task.id!] = explicit;
+        } else {
+          // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
+          if (machineOfTask.processingPercentage == 100 || machineOfTask.processingPercentage <= 0) {
+            // Standard machine: use processingUnits as-is
+            taskTimes[task.id!] = task.processingUnits;
+          } else {
+            // Non-standard machine: scale processingUnits by machine percentage
+            final ratio = machineOfTask.processingPercentage / 100.0;
+            final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
+            taskTimes[task.id!] = Duration(milliseconds: scaledMillis);
+          }
+        }
+        taskSequence.add(Tuple2(task.id!, machineOfTask.id!));
       }
       for (var i = 0; i < job.amount; i++) {
         inputJobs.add(FlowShopInput(
@@ -86,8 +101,10 @@ class FlowShopAdapter {
 
     //we create the sequence
     final Map<int, DateTime> machinesAvailability = {};
-    for (final task in order.orderJobs!.first.sequence!.tasks!) {
-      machinesAvailability[task.machineTypeId] = DateTime.now();
+    for (final machine in machines) {
+      if (machine.id != null) {
+        machinesAvailability[machine.id!] = order.regDate;
+      }
     }
 
     //we call the algorithm and receive the output
@@ -98,17 +115,21 @@ class FlowShopAdapter {
       machinesAvailability,
       rule,
       changeoverMatrix: mergedMatrix,
+      stateSetupMatrix: stateSetupMatrix,
+      jobStates: jobStates,
     ).output;
 
     //transform to planning machines
     final List<PlanningMachineEntity> planningMachines = [];
     for (final m in machines) {
-      planningMachines.add(PlanningMachineEntity(
-        m.machineTypeId!,
-        m.name,
-        [],
-        scheduledInactivities: m.scheduledInactivities,
-      ));
+      if (m.id != null) {
+        planningMachines.add(PlanningMachineEntity(
+          m.id!,
+          m.name,
+          [],
+          scheduledInactivities: m.scheduledInactivities,
+        ));
+      }
     }
 
     final Map<int, int> jobCounter = {};
@@ -149,8 +170,8 @@ class FlowShopAdapter {
     final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      jobsDates
-          .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
+      jobsDates.add(Tuple4(
+          job.availableDate, out.endTime, out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(
@@ -166,8 +187,8 @@ class FlowShopAdapter {
   ) {
     final Map<int, Map<int?, Map<int, Duration>>> matrix = {};
     for (final machine in machines) {
-      if (machine.machineTypeId == null) continue;
-      final machineId = machine.machineTypeId!;
+      if (machine.id == null) continue;
+      final machineId = machine.id!;
       if (matrix.containsKey(machineId)) continue;
       // Calculate preparation duration from percentage (100% = 1 hour base)
       final Duration baseDuration =

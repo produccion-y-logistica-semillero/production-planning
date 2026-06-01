@@ -57,19 +57,22 @@ class OpenShopAdapter {
         final Map<int, Duration> machineDurations = {};
         for (final machine
             in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
-          // prefer explicit per-job times when available
-          final explicit =
-              getExplicitProcessingDuration(job, task.id!, machine);
-          // Calculate duration from machine percentage (100% = 1 hour base)
-          final baseDuration = Duration(
-              minutes: (60 * machine.processingPercentage / 100).round());
-          final Duration duration =
-              explicit ?? ruleOf3(baseDuration, task.processingUnits);
-
-          if (duration == Duration.zero) {
-            continue;
+          // Priority 1: Explicit per-job per-task per-machine time
+          final explicit = getExplicitProcessingDuration(job, task.id!, machine);
+          if (explicit != null) {
+            machineDurations[machine.id!] = explicit;
+          } else {
+            // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
+            if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+              // Standard machine: use processingUnits as-is
+              machineDurations[machine.id!] = task.processingUnits;
+            } else {
+              // Non-standard machine: scale processingUnits by machine percentage
+              final ratio = machine.processingPercentage / 100.0;
+              final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
+              machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
+            }
           }
-          machineDurations[machine.id!] = duration;
         }
 
         if (machineDurations.isNotEmpty) {
@@ -115,6 +118,11 @@ class OpenShopAdapter {
       (matrix) => matrix,
     );
 
+    final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
+      buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
+    final Map<int, Map<int, String>> jobStates =
+      buildJobMachineStates(order.orderJobs!, machines);
+
     // Ejecutar el algoritmo Open Shop
 
     final output = OpenShop(
@@ -127,6 +135,8 @@ class OpenShopAdapter {
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
       changeoverMatrix: changeoverMatrix,
+      stateSetupMatrix: stateSetupMatrix,
+      jobStates: jobStates,
     ).output;
 
     // Transformar la salida en PlanningMachineEntity
@@ -187,7 +197,7 @@ class OpenShopAdapter {
       planningMachines,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-        return Tuple4(out.startDate, out.endTime, out.dueDate, job.priority);
+        return Tuple4(job.availableDate, out.endTime, out.dueDate, job.priority);
       }).toList(),
     );
 

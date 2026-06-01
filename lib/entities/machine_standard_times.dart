@@ -24,13 +24,17 @@ class MachineStandardTimes {
     MachineEntity machine, {
     MachineStandardTimes? fallback,
   }) {
-    // Calculate duration from percentage (100% = 1 hour base)
+    final baseProcessing = fallback?.processing ?? _defaultUnit;
+    final basePreparation = fallback?.preparation ?? _defaultUnit;
+    final baseRest = fallback?.rest ?? _defaultUnit;
+
+    // Calculate duration from percentage scaled against the base/fallback values
     return MachineStandardTimes(
       processing:
-          Duration(minutes: (60 * machine.processingPercentage / 100).round()),
+          Duration(minutes: (baseProcessing.inMinutes * machine.processingPercentage / 100).round()),
       preparation:
-          Duration(minutes: (60 * machine.preparationPercentage / 100).round()),
-      rest: Duration(minutes: (60 * machine.restPercentage / 100).round()),
+          Duration(minutes: (basePreparation.inMinutes * machine.preparationPercentage / 100).round()),
+      rest: Duration(minutes: (baseRest.inMinutes * machine.restPercentage / 100).round()),
     );
   }
 

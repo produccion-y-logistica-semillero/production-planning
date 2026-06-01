@@ -267,12 +267,14 @@ class AddJobState extends State<AddJobWidget> {
               final machine = machines.first;
               _selectedMachines[machineTypeId] = machine;
 
+              final times = initialTimes[machineTypeId];
+              final baseProcessingMinutes = times?.processing.inMinutes ?? task.processingUnits.inMinutes;
+
               final processingMinutes =
-                  (60 * machine.processingPercentage / 100).round();
-              final preparationMinutes =
-                  (60 * machine.preparationPercentage / 100).round();
+                  (baseProcessingMinutes * machine.processingPercentage / 100).round();
+              final preparationMinutes = 0; // comes from matrix — always 0 here
               final restMinutes =
-                  (60 * machine.restPercentage / 100).round();
+                  times?.rest?.inMinutes ?? (60 * machine.restPercentage / 100).round();
 
               _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
               _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
@@ -616,6 +618,18 @@ class AddJobState extends State<AddJobWidget> {
       final updated =
           MachineStandardTimes.fromMachine(selected, fallback: fallback);
       _stationTimes[task.machineTypeId] = updated;
+
+      // Update explicit times mapping for this task & machine
+      final baseProcessingMinutes = updated.processing.inMinutes;
+      final restMinutes = updated.rest?.inMinutes ?? (60 * selected.restPercentage / 100).round();
+      _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+      _explicitTaskMachineMinutes[task.id!]!.clear();
+      _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
+        'processing': baseProcessingMinutes,
+        'preparation': 0, // setup times come from matrix
+        'rest': restMinutes,
+      };
+
       bloc.updateStandardTimesForType(task.machineTypeId, updated);
       _syncStandardTimesToMachines(task.machineTypeId, updated);
     });
@@ -762,7 +776,11 @@ class AddJobState extends State<AddJobWidget> {
 
       setState(() {
         if (selectedMachineId != null) {
+          final newSelMachine = machines.firstWhere((m) => m.id == selectedMachineId);
+          _selectedMachines[machineTypeId] = newSelMachine;
+
           _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+          _explicitTaskMachineMinutes[task.id!]!.clear();
           _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
             'processing': processingMinutes,
             'preparation': 0, // comes from matrix — always 0 here

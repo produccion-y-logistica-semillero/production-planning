@@ -32,13 +32,17 @@ class MetricsPage extends StatelessWidget {
               _buildMetricRow('Total trabajos', metrics.totalJobs.toString()),
 
               _buildMetricRow(
-                  'Tardanza maxima', _formatDuration(metrics.maxDelay)),
+                  'Tardanza máxima', _formatDuration(metrics.maxTardiness)),
               _buildMetricRow('Flujo promedio',
                   _formatDuration(metrics.avarageProcessingTime)),
               _buildMetricRow('Tardanza promedio',
                   _formatDuration(metrics.avarageDelayTime)),
               _buildMetricRow('Retardo promedio',
                   _formatDuration(metrics.avarageLatenessTime)),
+              _buildMetricRow('Tardanza total',
+                  _formatDuration(metrics.totalTardiness)),
+              _buildMetricRow('Retardo ponderado',
+                  _formatDuration(metrics.totalWeightedTardiness)),
               _buildMetricRow(
                   'Trabajos retrasados', metrics.delayedJobs.toString()),
               _buildMetricRow('Porcentaje trabajos retrasados',

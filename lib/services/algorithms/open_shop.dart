@@ -50,7 +50,7 @@ class OpenShop {
   final Map<int, Duration?> machineRestTime;
   Map<int, int> machineProcessedCount = {};
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
-  final Map<String, Map<String, int>>? stateSetupMatrix;
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
@@ -442,12 +442,17 @@ class OpenShop {
       final int? previousJobId = _machineLastJob.putIfAbsent(selected.machineId, () => null);
       
       Duration setupDuration = Duration.zero;
-      if (previousJobId != null && stateSetupMatrix != null && jobStates != null) {
-        final previousState = jobStates![previousJobId]?[selected.machineId];
-        final currentState = jobStates![selected.job.jobId]?[selected.machineId];
-        if (previousState != null && currentState != null) {
-          final mins = stateSetupMatrix![previousState]?[currentState] ?? 0;
-          setupDuration = Duration(minutes: mins);
+      if (previousJobId != null && stateSetupMatrix != null && jobStates != null && previousJobId > 0) {
+        final machineStates = stateSetupMatrix![selected.machineId];
+        if (machineStates != null) {
+          final previousState = jobStates![previousJobId]?[selected.machineId];
+          final currentState = jobStates![selected.job.jobId]?[selected.machineId];
+          if (previousState != null && currentState != null) {
+            final setupMinutes = machineStates[previousState]?[currentState];
+            if (setupMinutes != null && setupMinutes > 0) {
+              setupDuration = Duration(minutes: setupMinutes);
+            }
+          }
         }
       } else {
         setupDuration = _getSetupDuration(selected.machineId, selected.job.sequenceId, previousSequence);

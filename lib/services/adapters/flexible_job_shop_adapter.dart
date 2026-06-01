@@ -51,7 +51,7 @@ class FlexibleJobShopAdapter {
       machines.addAll(machineList); // Agregar todas las máquinas del tipo
     }
 
-    // Crear el input para el algoritmo Flexible Job Shop
+    // Crear el input para el algoritmo Flexible Job Shop y expandir por `amount` (cantidad)
     final List<FlexibleJobInput> inputJobs = [];
     for (final job in order.orderJobs!) {
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
@@ -60,29 +60,37 @@ class FlexibleJobShopAdapter {
 
         for (final machine
             in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
-          final explicit =
-              getExplicitProcessingDuration(job, task.id!, machine);
-          // Calculate duration from machine percentage (100% = 1 hour base)
-          final baseDuration = Duration(
-              minutes: (60 * machine.processingPercentage / 100).round());
-          final Duration duration =
-              explicit ?? ruleOf3(baseDuration, task.processingUnits);
-
-          if (duration == Duration.zero) continue;
-          machineDurations[machine.id!] = duration;
+          // Priority 1: Explicit per-job per-task per-machine time
+          final explicit = getExplicitProcessingDuration(job, task.id!, machine);
+          if (explicit != null) {
+            machineDurations[machine.id!] = explicit;
+          } else {
+            // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
+            if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+              // Standard machine: use processingUnits as-is
+              machineDurations[machine.id!] = task.processingUnits;
+            } else {
+              // Non-standard machine: scale processingUnits by machine percentage
+              final ratio = machine.processingPercentage / 100.0;
+              final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
+              machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
+            }
+          }
         }
 
         taskSequence.add(Tuple2(task.id!, machineDurations));
       }
 
-      inputJobs.add(FlexibleJobInput(
-        job.jobId!,
-        job.sequence!.id!,
-        job.dueDate,
-        job.priority,
-        job.availableDate,
-        taskSequence,
-      ));
+      for (var i = 0; i < job.amount; i++) {
+        inputJobs.add(FlexibleJobInput(
+          job.jobId!,
+          job.sequence!.id!,
+          job.dueDate,
+          job.priority,
+          job.availableDate,
+          taskSequence,
+        ));
+      }
     }
 
     // Crear la disponibilidad inicial de las máquinas
@@ -98,10 +106,22 @@ class FlexibleJobShopAdapter {
     for (final machine in machines) {
       machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
       machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      // Calculate rest duration from percentage (100% = 1 hour base)
-      machineRestTimeMap[machine.id!] =
-          Duration(minutes: (60 * machine.restPercentage / 100).round());
+      // Calculate rest duration directly (if percentage != 100, scale it)
+      if (machine.restPercentage == 100 || machine.restPercentage <= 0) {
+        // Standard rest: 1 hour as base
+        machineRestTimeMap[machine.id!] = const Duration(hours: 1);
+      } else {
+        // Non-standard rest: scale 1 hour by machine percentage
+        final ratio = machine.restPercentage / 100.0;
+        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
+        machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
+      }
     }
+
+    final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
+        buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
+    final Map<int, Map<int, String>> jobStates =
+        buildJobMachineStates(order.orderJobs!, machines);
 
     // Ejecutar el algoritmo Flexible Job Shop
     final output = FlexibleJobShop(
@@ -113,6 +133,8 @@ class FlexibleJobShopAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
+      stateSetupMatrix: stateSetupMatrix,
+      jobStates: jobStates,
     ).output;
 
     // Transformar la salida en PlanningMachineEntity
@@ -168,8 +190,8 @@ class FlexibleJobShopAdapter {
     final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      jobsDates
-          .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
+      jobsDates.add(Tuple4(
+          job.availableDate, out.endTime, out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(

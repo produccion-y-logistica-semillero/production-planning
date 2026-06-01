@@ -79,30 +79,32 @@ class OrderDaoSqlLite implements OrderDao {
   @override
   Future<int> insertOrder(OrderEntity order) async {
     try {
-      // this only send reg_date to data base because the id is automatically generated, and the list isn't part of orders table.
-      final orderMap = {
-        'reg_date': order.regDate.toIso8601String(),
-      };
+      return await db.transaction<int>((txn) async {
+        // this only send reg_date to data base because the id is automatically generated, and the list isn't part of orders table.
+        final orderMap = {
+          'reg_date': order.regDate.toIso8601String(),
+        };
 
-      final orderId = await db.insert('orders', orderMap);
+        final orderId = await txn.insert('orders', orderMap);
 
-      if (order.setupTimeMatrix != null) {
-        for (var mEntry in order.setupTimeMatrix!.entries) {
-          for (var entry in mEntry.value.entries) {
-            for (var subEntry in entry.value.entries) {
-              await db.insert('order_setup_matrix', {
-                'order_id': orderId,
-                'machine_name': mEntry.key,
-                'from_state': entry.key,
-                'to_state': subEntry.key,
-                'duration_minutes': subEntry.value,
-              });
+        if (order.setupTimeMatrix != null) {
+          for (var mEntry in order.setupTimeMatrix!.entries) {
+            for (var entry in mEntry.value.entries) {
+              for (var subEntry in entry.value.entries) {
+                await txn.insert('order_setup_matrix', {
+                  'order_id': orderId,
+                  'machine_name': mEntry.key,
+                  'from_state': entry.key,
+                  'to_state': subEntry.key,
+                  'duration_minutes': subEntry.value,
+                });
+              }
             }
           }
         }
-      }
 
-      return orderId;
+        return orderId;
+      });
     } catch (error) {
       print("ERROR AL INSERTAR ORDEN EN DAO: ${error.toString()}");
       throw LocalStorageFailure();
@@ -117,9 +119,8 @@ class OrderDaoSqlLite implements OrderDao {
         where: 'order_id = ?',
         whereArgs: [orderId],
       );
-      int n = await db.delete(
-
-        'ORDERS',
+      await db.delete(
+        'orders',
         where: 'order_id = ?',
         whereArgs: [orderId],
       );

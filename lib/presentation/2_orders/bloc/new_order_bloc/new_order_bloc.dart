@@ -8,9 +8,9 @@ import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
+import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/services/machines_service.dart';
 import 'package:production_planning/services/orders_service.dart';
-import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/sequences_service.dart';
 
 class NewOrderBloc extends Cubit<NewOrderState> {
@@ -200,7 +200,14 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         );
       }).toList();
 
-      final response = await orderService.addOrder(jobs, setupTimeMatrix: currentState.setupTimeMatrix);
+      late Either<Failure, bool> response;
+      try {
+        response = await orderService.addOrder(jobs, setupTimeMatrix: currentState.setupTimeMatrix);
+      } catch (error, stack) {
+        print('NewOrderBloc.saveOrder error: ${error.toString()}');
+        print(stack.toString());
+        response = Left(LocalStorageFailure());
+      }
 
       // Diagnostic: print the taskMachineTimesMinutes for each job before saving
       for (var j in jobs) {

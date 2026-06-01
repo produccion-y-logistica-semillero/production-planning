@@ -37,7 +37,10 @@ class FlexibleJobShop {
   final Map<int, Duration?> machineRestTime;
   Map<int, int> machineProcessedCount = {};
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
+  final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
+  final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
 
   FlexibleJobShop(
@@ -51,6 +54,8 @@ class FlexibleJobShop {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
     this.changeoverMatrix = const {},
+    this.stateSetupMatrix,
+    this.jobStates,
   }) {
     // Inicializar contador de procesamiento por máquina
     for (final machineId in machinesAvailability.keys) {
@@ -93,17 +98,51 @@ class FlexibleJobShop {
   void _initializeMachineLastSequence() {
     for (final machineId in machinesAvailability.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
     for (final machineId in changeoverMatrix.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
   }
 
   Duration _getSetupDuration(
     int machineId,
-    int currentSequenceId,
-    int? previousSequenceId,
+    int currentJobId,
+    int? previousJobId,
   ) {
+    if (previousJobId != null &&
+        previousJobId > 0 &&
+        stateSetupMatrix != null &&
+        jobStates != null) {
+      final machineStates = stateSetupMatrix![machineId];
+      if (machineStates != null) {
+        final previousState = jobStates![previousJobId]?[machineId];
+        final currentState = jobStates![currentJobId]?[machineId];
+        if (previousState != null && currentState != null) {
+          final setupMinutes = machineStates[previousState]?[currentState];
+          if (setupMinutes != null && setupMinutes > 0) {
+            return Duration(minutes: setupMinutes);
+          }
+        }
+      }
+    }
+
+    // Fallback to sequence-based changeover
+    final currentJob = inputJobs.firstWhere((j) => j.jobId == currentJobId);
+    FlexibleJobInput? previousJob;
+    if (previousJobId != null && previousJobId > 0) {
+      for (final j in inputJobs) {
+        if (j.jobId == previousJobId) {
+          previousJob = j;
+          break;
+        }
+      }
+    }
+
+    final currentSequenceId = currentJob.sequenceId;
+    final previousSequenceId = previousJob?.sequenceId;
+
     final machineMatrix = changeoverMatrix[machineId];
     if (machineMatrix == null) return Duration.zero;
 
@@ -373,10 +412,10 @@ class FlexibleJobShop {
       final start = selected.earliestStart;
 
       // Calcular tiempo de alistamiento
-      final int? previousSequence =
-          _machineLastSequence.putIfAbsent(selected.machineId, () => null);
+      final int? previousJob =
+          _machineLastJob.putIfAbsent(selected.machineId, () => null);
       final Duration setupDuration = _getSetupDuration(
-          selected.machineId, selected.job.sequenceId, previousSequence);
+          selected.machineId, selected.job.jobId, previousJob);
       final Duration totalDuration = selected.duration + setupDuration;
 
       final end = start.add(totalDuration);
@@ -406,6 +445,7 @@ class FlexibleJobShop {
       jobOperationIndex[selected.job.jobId] =
           (jobOperationIndex[selected.job.jobId] ?? 0) + 1;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
+      _machineLastJob[selected.machineId] = selected.job.jobId;
     }
 
     for (var job in inputJobs) {

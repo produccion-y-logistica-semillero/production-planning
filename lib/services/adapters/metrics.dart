@@ -42,8 +42,10 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
       delayedJobs: 0,
       makespan: Duration.zero,
       totalFlow: Duration.zero,
-      totalWeightedDelay: Duration.zero,
-
+      totalTardiness: Duration.zero,
+      maxTardiness: Duration.zero,
+      totalWeightedTardiness: Duration.zero,
+      maxLateness: Duration.zero,
     );
   }
 
@@ -54,24 +56,20 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   final averageProcessingTime =
       Duration(minutes: totalProcessingTime.inMinutes ~/ jobsDates.length);
 
-  // average delay
-  final totalDelayTime = jobsDates
-
+  // average tardiness
+  final totalTardiness = jobsDates
       .map((dates) => dates.value2.isAfter(dates.value3)
           ? dates.value2.difference(dates.value3)
           : Duration.zero)
-
       .fold(Duration.zero, (a, b) => a + b);
-  final averageDelay =
-      Duration(minutes: totalDelayTime.inMinutes ~/ jobsDates.length);
+  final averageTardiness =
+      Duration(minutes: totalTardiness.inMinutes ~/ jobsDates.length);
 
-  // max delay
-  final maxDelay = jobsDates
-
+  // max tardiness
+  final maxTardiness = jobsDates
       .map((dates) => dates.value2.isAfter(dates.value3)
           ? dates.value2.difference(dates.value3)
           : Duration.zero)
-
       .fold(Duration.zero, (a, b) => a.inMinutes > b.inMinutes ? a : b);
 
   // average lateness (can be negative)
@@ -81,26 +79,33 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   final averageLateness =
       Duration(minutes: totalLatenessTime.inMinutes ~/ jobsDates.length);
 
-  // late jobs
+  // max lateness
+  final maxLateness = jobsDates
+      .map((dates) => dates.value2.difference(dates.value3))
+      .fold(Duration.zero, (a, b) => a.inMinutes > b.inMinutes ? a : b);
 
+  // late jobs
   final delayedJobs =
       jobsDates.where((dates) => dates.value2.isAfter(dates.value3)).length;
-  // total weighted delay: sum of max(delay,0) * priority
-  int totalWeightedDelayMinutes = 0;
+
+  // total weighted tardiness: sum of max(delay,0) * priority
+  int totalWeightedTardinessMinutes = 0;
   for (final dates in jobsDates) {
     final delay = dates.value2.isAfter(dates.value3)
         ? dates.value2.difference(dates.value3)
         : Duration.zero;
     final priority = dates.value4;
-    totalWeightedDelayMinutes += delay.inMinutes * priority;
+    totalWeightedTardinessMinutes += delay.inMinutes * priority;
   }
-  final totalWeightedDelay = Duration(minutes: totalWeightedDelayMinutes);
-  // makespan: difference between earliest start and latest end
-  DateTime earliestStart =
+  final totalWeightedTardiness =
+      Duration(minutes: totalWeightedTardinessMinutes);
+
+  // makespan: difference between earliest release and latest delivery
+  DateTime earliestRelease =
       jobsDates.map((t) => t.value1).reduce((a, b) => a.isBefore(b) ? a : b);
   DateTime latestEnd =
       jobsDates.map((t) => t.value2).reduce((a, b) => a.isAfter(b) ? a : b);
-  final makespan = latestEnd.difference(earliestStart);
+  final makespan = latestEnd.difference(earliestRelease);
 
   // total flow: sum of (end - start) per job
   final totalFlow = totalProcessingTime;
@@ -108,14 +113,17 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   return Metrics(
     idle: idle,
     totalJobs: jobsDates.length,
-    maxDelay: maxDelay,
+    maxDelay: maxTardiness,
     avarageProcessingTime: averageProcessingTime,
-    avarageDelayTime: averageDelay,
+    avarageDelayTime: averageTardiness,
     avarageLatenessTime: averageLateness,
     delayedJobs: delayedJobs,
     makespan: makespan,
     totalFlow: totalFlow,
-    totalWeightedDelay: totalWeightedDelay,
+    totalTardiness: totalTardiness,
+    maxTardiness: maxTardiness,
+    totalWeightedTardiness: totalWeightedTardiness,
+    maxLateness: maxLateness,
   );
 }
 

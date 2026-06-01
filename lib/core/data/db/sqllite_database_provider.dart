@@ -719,6 +719,13 @@ class SQLLiteDatabaseProvider {
         }
         if (oldVersion < 9) {
           await db.execute('ALTER TABLE jobs ADD COLUMN job_name VARCHAR(100);');
+
+          // Ensure legacy order_setup_matrix tables are upgraded to include machine_name.
+          try {
+            await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
+          } catch (_) {
+            // Ignore if the column already exists or the table does not exist yet.
+          }
         }
       },
     );
@@ -745,7 +752,34 @@ class SQLLiteDatabaseProvider {
       );
     ''');
 
+    await _ensureOrderSetupMatrixSchema(_database!);
+
     return _database!;
+  }
+
+  static Future<void> _ensureOrderSetupMatrixSchema(Database db) async {
+    final columns = await _getTableColumns(db, 'order_setup_matrix');
+    if (columns.isEmpty) {
+      return;
+    }
+
+    if (!columns.contains('machine_name')) {
+      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
+    }
+    if (!columns.contains('from_state')) {
+      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN from_state TEXT NOT NULL DEFAULT "";');
+    }
+    if (!columns.contains('to_state')) {
+      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN to_state TEXT NOT NULL DEFAULT "";');
+    }
+    if (!columns.contains('duration_minutes')) {
+      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 0;');
+    }
+  }
+
+  static Future<List<String>> _getTableColumns(Database db, String table) async {
+    final info = await db.rawQuery('PRAGMA table_info($table);');
+    return info.map((row) => row['name'] as String).toList();
   }
 
   static Future<void> closeDatabaseConnection() async {

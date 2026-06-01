@@ -1,5 +1,6 @@
 
 import 'package:production_planning/entities/job_entity.dart';
+import 'package:production_planning/entities/machine_times.dart';
 
 class JobModel {
   final int jobId;
@@ -33,26 +34,24 @@ class JobModel {
   }
   JobEntity toEntity() {
     // convert minutes map to MachineTimes map
-    Map<int, Map<int, dynamic>>? taskTimes;
+    Map<int, Map<int, MachineTimes>>? taskTimes;
     if (taskMachineTimesMinutes != null) {
       taskTimes = {};
       taskMachineTimesMinutes!.forEach((taskId, mm) {
-        final inner = <int, dynamic>{};
+        final inner = <int, MachineTimes>{};
         mm.forEach((machineId, mMap) {
-          final processing = Duration(minutes: mMap['processing'] ?? 0);
-          final preparation = Duration(minutes: mMap['preparation'] ?? 0);
-          final rest = Duration(minutes: mMap['rest'] ?? 0);
-          inner[machineId] = (processing, preparation, rest);
+          inner[machineId] = MachineTimes(
+            processing: Duration(minutes: mMap['processing'] ?? 0),
+            preparation: Duration(minutes: mMap['preparation'] ?? 0),
+            rest: Duration(minutes: mMap['rest'] ?? 0),
+          );
         });
         taskTimes![taskId] = inner;
       });
     }
 
-    // Note: JobEntity.taskMachineTimes expects MachineTimes objects; conversion
-    // to MachineTimes is handled later in repository implementation where
-    // sequence/tasks are available.
     return JobEntity(jobId, null, amount, jobName, dueDate, priority, availableDate,
-        preemptionMatrix: preemptionMatrix, taskMachineTimes: null, machineFinalStates: machineFinalStates);
+        preemptionMatrix: preemptionMatrix, taskMachineTimes: taskTimes, machineFinalStates: machineFinalStates);
 
   }
 }

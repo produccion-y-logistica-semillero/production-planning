@@ -69,7 +69,8 @@ class FlowShop {
     this.jobStates,
   }) : changeoverMatrix = changeoverMatrix ?? {} {
     _initializeMachineLastSequence();
-    switch (rule) {
+    final r = rule.toUpperCase();
+    switch (r) {
       case "EDD":
         eddRule();
         break;
@@ -327,7 +328,7 @@ class FlowShop {
         final currentState = jobStates![currentJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];
-          if (setupMinutes != null && setupMinutes > 0) {
+          if (setupMinutes != null) {
             return Duration(minutes: setupMinutes);
           }
         }

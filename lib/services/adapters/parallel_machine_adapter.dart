@@ -79,7 +79,7 @@ class ParallelMachineAdapter {
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       machines,
-      rule,
+      rule.toUpperCase(),
     ).output;
 
     //we transform the output to planning machines

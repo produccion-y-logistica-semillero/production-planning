@@ -113,7 +113,7 @@ class FlowShopAdapter {
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       machinesAvailability,
-      rule,
+      rule.toUpperCase(),
       changeoverMatrix: mergedMatrix,
       stateSetupMatrix: stateSetupMatrix,
       jobStates: jobStates,

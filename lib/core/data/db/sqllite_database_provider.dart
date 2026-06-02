@@ -37,7 +37,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -317,6 +317,10 @@ class SQLLiteDatabaseProvider {
           'environment_id': 7,
           'name': 'OPEN SHOP',
         });
+        batch.insert('environments', {
+          'environment_id': 8,
+          'name': 'FLEXIBLE OPEN SHOP',
+        });
 
         // Dispatch Rules
         // Single Machine (IDs 1-13)
@@ -486,11 +490,17 @@ class SQLLiteDatabaseProvider {
           24,
         ].forEach((r) => addRule(4, r));
 
+        // 5: Job Shop
+        [1, 2, 3, 4, 5, 12, 13, 24].forEach((r) => addRule(5, r));
+
         // 6: Flexible Job Shop
         [1, 2, 3, 4, 5, 12, 13, 21, 24].forEach((r) => addRule(6, r));
 
         // 7: Open Shop
         [1, 2, 3, 4, 5, 11, 12, 13, 24].forEach((r) => addRule(7, r));
+
+        // 8: Flexible Open Shop
+        [1, 2, 3, 4, 5, 11, 12, 13, 24].forEach((r) => addRule(8, r));
 
         // Orders
         batch.insert('orders', {'reg_date': '2024-09-08'});
@@ -661,6 +671,61 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
           ''');
         }
+        if (oldVersion < 10) {
+          // Asegurar que los ambientes y reglas básicos existen en versiones anteriores
+          await db.execute('''
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(5, 'JOB SHOP');
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(6, 'FLEXIBLE JOB SHOP');
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(8, 'FLEXIBLE OPEN SHOP');
+
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (11, 'MINSLACK');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (12, 'CR');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (13, 'ATCS');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (21, 'MS');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (23, 'JOHNSON');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (24, 'GENETICS');
+
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 13);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 24);
+
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 13);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 24);
+
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
+
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 11);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 13);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
+          ''');
+        }
         if (oldVersion < 8) {
           // Migración a versión 8: convertir tiempos a porcentajes en MACHINES
           // Crear nueva tabla con esquema actualizado
@@ -678,7 +743,7 @@ class SQLLiteDatabaseProvider {
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
-        ''');
+        ''' );
           // Migrar datos existentes con porcentaje 100%
           await db.execute('''
           INSERT INTO MACHINES_NEW (machine_id, machine_name, machine_type_id, status_id, 
@@ -726,6 +791,22 @@ class SQLLiteDatabaseProvider {
           } catch (_) {
             // Ignore if the column already exists or the table does not exist yet.
           }
+        }
+        if (oldVersion < 10) {
+          await db.execute('''
+            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(8, 'FLEXIBLE OPEN SHOP');
+          ''');
+          await db.execute('''
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 11);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 13);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
+          ''');
         }
       },
     );

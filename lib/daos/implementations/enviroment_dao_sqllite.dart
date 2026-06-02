@@ -13,8 +13,10 @@ class EnviromentDaoSqllite implements EnviromentDao{
   @override
   Future<EnviromentModel> getEnviromentByName(String name) async {
     try {
-      return (await db
-              .query('environments', where: 'name = ?', whereArgs: [name]))
+      return (await db.query(
+              'environments',
+              where: 'UPPER(name) = UPPER(?)',
+              whereArgs: [name]))
           .map((map) => EnviromentModel.fromJSON(map))
           .first;
     } catch (failure) {

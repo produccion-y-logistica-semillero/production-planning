@@ -12,6 +12,7 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/flexible_flow_shop_adapter.dart';
 import 'package:production_planning/services/adapters/flexible_job_shop_adapter.dart';
+import 'package:production_planning/services/adapters/job_shop_adapter.dart';
 import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
@@ -308,9 +309,9 @@ class OrdersService {
       // Clasificar este job con las mismas reglas del paso 10
       String jobEnv;
       if (hasRecurringPrecedence && !allOne) {
-        jobEnv = "PRECEDENCIA RECURRENTE FLEXIBLE";
+        jobEnv = "FLEXIBLE JOB SHOP";
       } else if (hasRecurringPrecedence && allOne) {
-        jobEnv = "PRECEDENCIA RECURRENTE";
+        jobEnv = "JOB SHOP";
       } else if (jobDifferentMachine &&
           !allOne &&
           hasExplicitPrecedence &&
@@ -532,9 +533,9 @@ class OrdersService {
     required bool hasRecurringPrecedence,
   }) {
     if (isRecurringFlexible) {
-      return "PRECEDENCIA RECURRENTE FLEXIBLE";
+      return "FLEXIBLE JOB SHOP";
     } else if (isRecurring) {
-      return "PRECEDENCIA RECURRENTE";
+      return "JOB SHOP";
     } else if (isFlexibleJobShop) {
       return "FLEXIBLE JOB SHOP";
     } else if (isJobShop) {
@@ -580,14 +581,17 @@ class OrdersService {
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .flexibleFlowShopAdapter(sch.value1, sch.value2)),
-      'FLEXIBLE JOB SHOP' => Right(await FlexibleJobShopAdapter(
+      'FLEXIBLE JOB SHOP' => await FlexibleJobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleJobShopAdapter(sch.value1, sch.value2)),
-      'OPEN SHOP' => Right(await OpenShopAdapter(
+          .flexibleJobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+          'JOB SHOP' => await JobShopAdapter(
+              machineRepository: machineRepo, orderRepository: orderRepo)
+            .jobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+      'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo,
               orderRepository: orderRepo,
               setupTimeService: setupTimeService)
-          .openShopAdapter(sch.value1, sch.value2)),
+          .openShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
       String() => Left(EnviromentNotCorrectFailure()),
     };
   }

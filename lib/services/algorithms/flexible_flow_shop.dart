@@ -49,7 +49,8 @@ class FlexibleFlowShop {
     this.stateSetupMatrix,
     this.jobStates,
   }) {
-    switch (rule) {
+    final r = rule.toUpperCase();
+    switch (r) {
       case "EDD":
         eddRule();
         break;
@@ -95,6 +96,14 @@ class FlexibleFlowShop {
 
       case "CDS":
         cdsAlgorithm();
+        break;
+      case "GENETICS":
+        // Fallback genetics: order by combined score
+        _schedule((a, b) {
+          final scoreA = (a.priority / max(1, _totalProcessingTime(a))) + (1 / max(1, _totalProcessingTime(a)));
+          final scoreB = (b.priority / max(1, _totalProcessingTime(b))) + (1 / max(1, _totalProcessingTime(b)));
+          return scoreB.compareTo(scoreA);
+        });
         break;
     }
   }
@@ -307,7 +316,7 @@ class FlexibleFlowShop {
         final currentState = jobStates![currentJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];
-          if (setupMinutes != null && setupMinutes > 0) {
+          if (setupMinutes != null) {
             return Duration(minutes: setupMinutes);
           }
         }
@@ -637,6 +646,85 @@ class FlexibleFlowShop {
     return makespanEndTime.difference(startDate).inMinutes;
   }
 
-}   
+List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload) {
+  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+  final workingSchedule = Tuple2(
+    TimeOfDay(hour: payload['workingStartHour'] as int, minute: payload['workingStartMinute'] as int),
+    TimeOfDay(hour: payload['workingEndHour'] as int, minute: payload['workingEndMinute'] as int),
+  );
+
+  final inputJobs = (payload['inputJobs'] as List<dynamic>).map((jobData) {
+    final jobMap = Map<String, dynamic>.from(jobData as Map);
+    final taskSequence = (jobMap['taskSequence'] as List<dynamic>).map((taskData) {
+      final taskMap = Map<String, dynamic>.from(taskData as Map);
+      final machineDurations = (taskMap['machineDurations'] as Map<dynamic, dynamic>).map(
+        (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
+      );
+      return Tuple2(taskMap['taskId'] as int, machineDurations);
+    }).toList();
+
+    return FlexibleFlowInput(
+      jobMap['jobId'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['dueDate'] as int),
+      jobMap['priority'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['availableDate'] as int),
+      taskSequence,
+    );
+  }).toList();
+
+  final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
+      .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
+
+  final stateSetupMatrix = payload['stateSetupMatrix'] == null
+      ? null
+      : (payload['stateSetupMatrix'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+                key as int,
+                (Map<dynamic, dynamic>.from(value as Map)).map(
+                  (prev, curr) => MapEntry(
+                    prev as String,
+                    (Map<dynamic, dynamic>.from(curr as Map)).map(
+                      (next, minutes) => MapEntry(next as String, minutes as int),
+                    ),
+                  ),
+                ),
+              ),
+        );
+
+  final jobStates = payload['jobStates'] == null
+      ? null
+      : (payload['jobStates'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+            key as int,
+            (Map<dynamic, dynamic>.from(value as Map)).map((mKey, state) => MapEntry(mKey as int, state as String)),
+          ),
+        );
+
+  final output = FlexibleFlowShop(
+    startDate,
+    workingSchedule,
+    inputJobs,
+    machinesAvailability,
+    payload['rule'] as String,
+    stateSetupMatrix: stateSetupMatrix,
+    jobStates: jobStates,
+  ).output;
+
+  return output.map((out) {
+    return {
+      'jobId': out.jobId,
+      'dueDate': out.dueDate.millisecondsSinceEpoch,
+      'startDate': out.startDate.millisecondsSinceEpoch,
+      'endTime': out.endTime.millisecondsSinceEpoch,
+      'scheduling': out.scheduling.map((key, value) => MapEntry(key.toString(), {
+            'machineId': value.value1,
+            'start': value.value2.startDate.millisecondsSinceEpoch,
+            'end': value.value2.endDate.millisecondsSinceEpoch,
+          })),
+    };
+  }).toList();
+}
+
+}
 
 

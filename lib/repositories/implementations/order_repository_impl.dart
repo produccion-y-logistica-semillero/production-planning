@@ -121,7 +121,49 @@ class OrderRepositoryImpl implements OrderRepository {
       final EnviromentModel env = await enviromentDao.getEnviromentByName(name);
       final dispatchRules = await dispatchRulesDao.getDispatchRules(env.id);
 
-      return Right(EnvironmentEntity(env.id, env.name, dispatchRules));
+      // Fallback: if DB returns no rules (old DB/migration issue), provide sensible defaults
+      List<Tuple2<int, String>> finalRules = dispatchRules;
+      if (finalRules.isEmpty) {
+        final upper = env.name.toUpperCase();
+        if (upper == 'JOB SHOP') {
+          finalRules = [
+            Tuple2(1, 'EDD'),
+            Tuple2(2, 'SPT'),
+            Tuple2(3, 'LPT'),
+            Tuple2(4, 'FIFO'),
+            Tuple2(5, 'WSPT'),
+            Tuple2(12, 'CR'),
+            Tuple2(13, 'ATCS'),
+            Tuple2(24, 'GENETICS'),
+          ];
+        } else if (upper == 'FLEXIBLE JOB SHOP') {
+          finalRules = [
+            Tuple2(1, 'EDD'),
+            Tuple2(2, 'SPT'),
+            Tuple2(3, 'LPT'),
+            Tuple2(4, 'FIFO'),
+            Tuple2(5, 'WSPT'),
+            Tuple2(12, 'CR'),
+            Tuple2(13, 'ATCS'),
+            Tuple2(21, 'MS'),
+            Tuple2(24, 'GENETICS'),
+          ];
+        } else if (upper == 'OPEN SHOP' || upper == 'FLEXIBLE OPEN SHOP') {
+          finalRules = [
+            Tuple2(1, 'EDD'),
+            Tuple2(2, 'SPT'),
+            Tuple2(3, 'LPT'),
+            Tuple2(4, 'FIFO'),
+            Tuple2(5, 'WSPT'),
+            Tuple2(11, 'MINSLACK'),
+            Tuple2(12, 'CR'),
+            Tuple2(13, 'ATCS'),
+            Tuple2(24, 'GENETICS'),
+          ];
+        }
+      }
+
+      return Right(EnvironmentEntity(env.id, env.name, finalRules));
     } on Failure catch (error) {
       return Left(error);
 

@@ -23,6 +23,7 @@ class GanttBloc extends Cubit<GanttState> {
         },
             (env) {
           print("SUCCESS: Environment obtenido para orden $id: ${env.name}");
+              print("DEBUG: Environment rules count=${env.rules.length} -> ${env.rules}");
 
           emit(GanttOrderRetrieved(id, env, null));
         },
@@ -70,12 +71,17 @@ class GanttBloc extends Cubit<GanttState> {
           emit(GanttPlanningError(state.orderId, state.enviroment, ruleId));
         },
             (result) {
+          if (result == null) {
+            print("ERROR: scheduling returned null for regla $ruleId");
+            emit(GanttPlanningError(state.orderId, state.enviroment, ruleId));
+            return;
+          }
           print("SUCCESS: Planificación exitosa para regla $ruleId");
 
           emit(GanttPlanningSuccess(
             state.orderId,
             state.enviroment,
-            result!.value1,
+            result.value1,
             result.value2,
             ruleId,
           ));

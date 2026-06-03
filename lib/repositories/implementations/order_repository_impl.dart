@@ -53,12 +53,17 @@ class OrderRepositoryImpl implements OrderRepository {
         List<JobEntity> jobsEntities = [];
         for (final model in jobs) {
           final sequenceModel =
-              await sequencesDao.getSequenceById(model.sequenceId);
-          final List<TaskModel> tasks =
-              await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
-          final List<TaskDependencyModel> dependenciesM =
-              await taskDependencyDao
-                  .getDependenciesBySequenceId(sequenceModel.sequenceId!);
+            await sequencesDao.getSequenceById(model.sequenceId);
+        if (sequenceModel == null || sequenceModel.sequenceId == null) {
+          print(
+              'OrderRepositoryImpl.getAllOrders: missing sequence ${model.sequenceId} for job ${model.jobId} in order ${orderModel.orderId}');
+          continue;
+        }
+        final int sequenceId = sequenceModel.sequenceId!;
+        final List<TaskModel> tasks =
+            await tasksDao.getTasksBySequenceId(sequenceId);
+        final List<TaskDependencyModel> dependenciesM =
+            await taskDependencyDao.getDependenciesBySequenceId(sequenceId);
           // Convert optional taskMachineTimesMinutes (minutes) to MachineTimes map
           Map<int, Map<int, MachineTimes>>? taskTimes;
           if (model.taskMachineTimesMinutes != null) {
@@ -93,6 +98,11 @@ class OrderRepositoryImpl implements OrderRepository {
               machineFinalStates: model.machineFinalStates);
 
           jobsEntities.add(jobEntity);
+        }
+        if (jobsEntities.isEmpty) {
+          print(
+              'OrderRepositoryImpl.getAllOrders: skipping order ${orderModel.orderId} because no valid jobs were loaded');
+          continue;
         }
         orders.add(OrderEntity(
           orderModel.orderId,
@@ -179,10 +189,16 @@ class OrderRepositoryImpl implements OrderRepository {
       for (final model in jobs) {
         final sequenceModel =
             await sequencesDao.getSequenceById(model.sequenceId);
+        if (sequenceModel == null || sequenceModel.sequenceId == null) {
+          print(
+              'OrderRepositoryImpl.getFullOrder: missing sequence ${model.sequenceId} for job ${model.jobId} in order $id');
+          return Left(LocalStorageFailure());
+        }
+        final int sequenceId = sequenceModel.sequenceId!;
         final List<TaskModel> tasks =
-            await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
+            await tasksDao.getTasksBySequenceId(sequenceId);
         final List<TaskDependencyModel> dependenciesM = await taskDependencyDao
-            .getDependenciesBySequenceId(sequenceModel.sequenceId!);
+            .getDependenciesBySequenceId(sequenceId);
 
         // Convert optional taskMachineTimesMinutes (minutes) to MachineTimes
         // and build the exact nested map expected by JobEntity.

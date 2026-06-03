@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_cubit.dart';
+import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_inactivities_dialog.dart';
 
 
@@ -92,6 +93,7 @@ class MachineDisplayTile extends StatelessWidget {
 
 
   void _openInactivitiesDialog(BuildContext context) {
+    final typeId = machine.machineTypeId;
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -101,6 +103,9 @@ class MachineDisplayTile extends StatelessWidget {
           child: MachineInactivitiesDialog(machine: machine),
         );
       },
-    );
+    ).then((_) {
+      if (!context.mounted || typeId == null) return;
+      context.read<MachineBloc>().retrieveMachines(typeId);
+    });
   }
 }

@@ -25,10 +25,11 @@ class MachineInactivitiesCubit extends Cubit<MachineInactivitiesState> {
 
     emit(state.copyWith(
       machineId: id,
+      machineTypeId: machine.machineTypeId,
       machineName: machine.name,
       continueCapacity: machine.continueCapacity,
-      // Calculate rest duration from percentage (100% = 1 hour base)
-      restTime: Duration(minutes: (60 * machine.restPercentage / 100).round()),
+      setRestTime: true,
+      restTime: _restDurationFromPercentage(machine.restPercentage),
       scheduled: List.unmodifiable(initialScheduled),
       isLoading: true,
       clearError: true,
@@ -81,10 +82,16 @@ class MachineInactivitiesCubit extends Cubit<MachineInactivitiesState> {
       (_) => emit(state.copyWith(
         isSavingAutomatic: false,
         continueCapacity: continueCapacity,
+        setRestTime: true,
         restTime: restTime,
         successMessage: 'Inactividad automática actualizada.',
       )),
     );
+  }
+
+  Duration? _restDurationFromPercentage(double restPercentage) {
+    final minutes = (60 * restPercentage / 100).round();
+    return minutes > 0 ? Duration(minutes: minutes) : null;
   }
 
   Future<void> addScheduled({

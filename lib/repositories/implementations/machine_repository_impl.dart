@@ -120,7 +120,17 @@ class MachineRepositoryImpl implements MachineRepository {
   }
 
   @override
+  Future<Either<Failure, MachineEntity>> getMachineById(int id) async {
+    try {
+      final machineJson = await machineDao.getMachineById(id);
+      final machine = await jsonToEntity(machineJson);
+      return Right(machine);
+    } on Failure catch (failure) {
+      return Left(failure);
+    }
+  }
 
+  @override
   Future<Either<Failure, String>> getMachineTypeName(int machineTypeId) async {
     try {
       String name = await machineTypeDao.getMachineName(machineTypeId);
@@ -173,15 +183,6 @@ class MachineRepositoryImpl implements MachineRepository {
     return rows.map(MachineInactivityEntity.fromDatabaseMap).toList();
   }
 
-  String? _durationToSqlTime(Duration? duration) {
-    if (duration == null) return null;
-    final hours = duration.inHours.toString().padLeft(2, '0');
-    final minutes = (duration.inMinutes - (duration.inHours * 60))
-        .toString()
-        .padLeft(2, '0');
-    return '1970-01-01 $hours:$minutes:00';
-  }
-
   @override
   Future<Either<Failure, bool>> updateAutomaticInactivity({
     required int machineId,
@@ -189,10 +190,15 @@ class MachineRepositoryImpl implements MachineRepository {
     Duration? restTime,
   }) async {
     try {
-      final updated = await machineDao.updateMachine(machineId, {
+      final values = <String, dynamic>{
         'continue_capacity': continueCapacity,
-        'rest_time': _durationToSqlTime(restTime),
-      });
+      };
+      // MACHINES.rest_percentage: 100% = 60 minutes of rest (same as scheduling).
+      if (restTime != null) {
+        values['rest_percentage'] =
+            (restTime.inMinutes / 60.0) * 100.0;
+      }
+      final updated = await machineDao.updateMachine(machineId, values);
       return Right(updated);
     } on Failure catch (failure) {
       return Left(failure);

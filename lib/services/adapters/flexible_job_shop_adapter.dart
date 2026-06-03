@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/foundation.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -12,16 +13,21 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
-import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/services/scheduling/schedule_calendar_utils.dart';
+import 'package:production_planning/services/setup_time_service.dart';
+import 'package:production_planning/shared/utils/changeover_matrix_utils.dart';
+import 'package:production_planning/shared/utils/machine_downtime_utils.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
   FlexibleJobShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
+    required this.setupTimeService,
   });
 
   int toInt(dynamic value) {
@@ -108,25 +114,29 @@ class FlexibleJobShopAdapter {
     final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
     final Map<int, int> machineContinueCapacityMap = {};
     final Map<int, Duration?> machineRestTimeMap = {};
-    for (final machine in machines) {
-      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      // Calculate rest duration directly (if percentage != 100, scale it)
-      if (machine.restPercentage == 100 || machine.restPercentage <= 0) {
-        // Standard rest: 1 hour as base
-        machineRestTimeMap[machine.id!] = const Duration(hours: 1);
-      } else {
-        // Non-standard rest: scale 1 hour by machine percentage
-        final ratio = machine.restPercentage / 100.0;
-        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
-        machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
-      }
-    }
+    buildMachineDowntimeMaps(
+      machines,
+      inactivities: machineInactivitiesMap,
+      continueCapacity: machineContinueCapacityMap,
+      restTime: machineRestTimeMap,
+    );
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+
+    final sequenceIds = order.orderJobs!
+        .where((j) => j.sequence?.id != null)
+        .map((j) => j.sequence!.id!)
+        .toSet();
+    final changeoverMatrix = await loadMergedChangeoverMatrix(
+      setupTimeService,
+      machines,
+      sequenceIds,
+    );
+    final jobInterruptionPolicies =
+        buildJobInterruptionPolicies(order.orderJobs!);
 
     // Ejecutar el algoritmo Flexible Job Shop en un isolate
     final payload = <String, dynamic>{
@@ -175,6 +185,17 @@ class FlexibleJobShopAdapter {
       'machineRestTime': machineRestTimeMap.map((machineId, duration) => MapEntry(machineId, duration?.inMilliseconds)),
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
+      'changeoverMatrix': changeoverMatrix.map((machineId, prevMap) {
+        return MapEntry(machineId, prevMap.map((prevSeqId, currMap) {
+          return MapEntry(
+            prevSeqId?.toString() ?? 'null',
+            currMap.map((currSeqId, duration) =>
+                MapEntry(currSeqId, duration.inMinutes)),
+          );
+        }));
+      }),
+      'jobInterruptionPolicies':
+          serializeJobInterruptionPolicies(jobInterruptionPolicies),
     };
 
     List<Map<String, dynamic>> rawOutput;

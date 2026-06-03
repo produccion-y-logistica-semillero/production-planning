@@ -23,12 +23,19 @@ class MachineInactivitiesCubit extends Cubit<MachineInactivitiesState> {
         List<MachineInactivityEntity>.from(machine.scheduledInactivities)
           ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
+    var currentMachine = machine;
+    final machineResponse = await service.getMachineById(id);
+    machineResponse.fold((_) => null, (updatedMachine) {
+      currentMachine = updatedMachine;
+    });
+
     emit(state.copyWith(
       machineId: id,
-      machineName: machine.name,
-      continueCapacity: machine.continueCapacity,
+      machineName: currentMachine.name,
+      continueCapacity: currentMachine.continueCapacity,
       // Calculate rest duration from percentage (100% = 1 hour base)
-      restTime: Duration(minutes: (60 * machine.restPercentage / 100).round()),
+      restTime:
+          Duration(minutes: (60 * currentMachine.restPercentage / 100).round()),
       scheduled: List.unmodifiable(initialScheduled),
       isLoading: true,
       clearError: true,
@@ -46,6 +53,9 @@ class MachineInactivitiesCubit extends Cubit<MachineInactivitiesState> {
         emit(state.copyWith(
           isLoading: false,
           scheduled: List.unmodifiable(scheduled),
+          continueCapacity: currentMachine.continueCapacity,
+          restTime:
+              Duration(minutes: (60 * currentMachine.restPercentage / 100).round()),
         ));
       },
     );

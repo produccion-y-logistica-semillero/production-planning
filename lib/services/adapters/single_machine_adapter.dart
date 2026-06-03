@@ -8,69 +8,94 @@ import 'package:production_planning/services/algorithms/single_machine.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
+import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/shared/utils/changeover_matrix_utils.dart';
 
 import '../../entities/machine_entity.dart';
-
+import '../../entities/machine_inactivity_entity.dart';
+import '../../shared/utils/machine_downtime_utils.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class SingleMachineAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
   SingleMachineAdapter({
     required this.orderRepository,
     required this.machineRepository,
+    required this.setupTimeService,
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> singleMachineAdapter(
       int orderId, String rule) async {
-    //we get the current order
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
     if (order == null) return null;
 
-    //we retrieve the machine type id of the first task, which we know is the one for all tasks
     int machineTypeid = order.orderJobs![0].sequence!.tasks![0].machineTypeId;
     final responseMachine =
         await machineRepository.getAllMachinesFromType(machineTypeid);
     MachineEntity? machineEntity =
         responseMachine.fold((f) => null, (m) => m[0]);
-    if (machineEntity == null) return null;
+    if (machineEntity == null || machineEntity.id == null) return null;
 
-    //we get the machine type name
     final responseTypeMachine =
         await machineRepository.getMachineTypeName(machineTypeid);
     String machineTypeName =
         responseTypeMachine.fold((f) => "", (name) => name);
 
-    //we get the input for the single machine
-    // Expand jobs according to their `amount` (cantidad)
+    final sequenceIds = order.orderJobs!
+        .where((j) => j.sequence?.id != null)
+        .map((j) => j.sequence!.id!)
+        .toSet();
+    final changeoverMatrix = await loadMergedChangeoverMatrix(
+      setupTimeService,
+      [machineEntity],
+      sequenceIds,
+    );
+    final stateSetupMatrix =
+        buildMachineStateSetupMatrix([machineEntity], order.setupTimeMatrix);
+    final jobStates = buildJobMachineStates(order.orderJobs!, [machineEntity]);
+    final jobInterruptionPolicies =
+        buildJobInterruptionPolicies(order.orderJobs!);
+
+    final machineInactivitiesMap = <int, List<MachineInactivityEntity>>{};
+    final machineContinueCapacityMap = <int, int>{};
+    final machineRestTimeMap = <int, Duration?>{};
+    buildMachineDowntimeMaps(
+      [machineEntity],
+      inactivities: machineInactivitiesMap,
+      continueCapacity: machineContinueCapacityMap,
+      restTime: machineRestTimeMap,
+    );
+
     final List<SingleMachineInput> input = [];
     for (final job in order.orderJobs!) {
-      // Priority 1: Explicit per-job per-task per-machine time
       final taskId = job.sequence!.tasks![0].id!;
       final explicit = getExplicitProcessingDuration(job, taskId, machineEntity);
-      
+
       late final Duration duration;
       if (explicit != null) {
         duration = explicit;
       } else {
-        // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
-        if (machineEntity.processingPercentage == 100 || machineEntity.processingPercentage <= 0) {
-          // Standard machine: use processingUnits as-is
+        if (machineEntity.processingPercentage == 100 ||
+            machineEntity.processingPercentage <= 0) {
           duration = job.sequence!.tasks![0].processingUnits;
         } else {
-          // Non-standard machine: scale processingUnits by machine percentage
           final ratio = machineEntity.processingPercentage / 100.0;
-          final scaledMillis = (job.sequence!.tasks![0].processingUnits.inMilliseconds * ratio).round();
+          final scaledMillis =
+              (job.sequence!.tasks![0].processingUnits.inMilliseconds * ratio)
+                  .round();
           duration = Duration(milliseconds: scaledMillis);
         }
       }
-      
+
       for (var i = 0; i < job.amount; i++) {
         input.add(SingleMachineInput(
           job.jobId!,
+          job.sequence!.id!,
           duration,
           job.dueDate,
           job.priority,
@@ -79,14 +104,24 @@ class SingleMachineAdapter {
       }
     }
 
-    //we get the output
-        final output = SingleMachine(
-          0, order.regDate, Tuple2(START_SCHEDULE, END_SCHEDULE), input, rule.toUpperCase())
-        .output;
+    final output = SingleMachine(
+      machineEntity.id!,
+      order.regDate,
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
+      input,
+      rule.toUpperCase(),
+      changeoverMatrix: changeoverMatrix,
+      stateSetupMatrix: stateSetupMatrix,
+      jobStates: jobStates,
+      jobInterruptionPolicies: jobInterruptionPolicies,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity:
+          machineContinueCapacityMap[machineEntity.id!] ?? 0,
+      machineRestTime: machineRestTimeMap[machineEntity.id!],
+    ).output;
 
     final Map<int, int> jobCounter = {};
     final tasks = output.map((out) {
-      //we get the job sequence for this job
       final jobSequence = order.orderJobs!
           .where((job) => job.jobId == out.jobId)
           .first
@@ -95,16 +130,14 @@ class SingleMachineAdapter {
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1
-          ? jobName
-          : '$jobName (${current - 1})';
+      final displayName =
+          current == 1 ? jobName : '$jobName (${current - 1})';
       return PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
         displayName: displayName,
         taskId: jobSequence.tasks![0].id!,
-        numberProcess: 1, //to change later depending on amount of a sequence
-
+        numberProcess: 1,
         startDate: out.startDate,
         endDate: out.endDate,
         retarded: out.dueDate.isBefore(out.endDate),
@@ -113,7 +146,6 @@ class SingleMachineAdapter {
       );
     }).toList();
 
-    //since its single machine we know that there's only 1 planning machine
     final machinesResult = [
       PlanningMachineEntity(
         machineEntity.id!,

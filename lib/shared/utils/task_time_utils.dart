@@ -1,4 +1,5 @@
 import 'package:production_planning/entities/job_entity.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_times.dart';
 
@@ -91,6 +92,19 @@ Map<int, Map<int, String>> buildJobMachineStates(
     if (jobStates.isNotEmpty) {
       result[job.jobId!] = jobStates;
     }
+  }
+  return result;
+}
+
+/// Builds per-job interruption policies keyed by database job id.
+Map<int, JobInterruptionPolicy> buildJobInterruptionPolicies(
+  List<JobEntity> jobs,
+) {
+  final result = <int, JobInterruptionPolicy>{};
+  for (final job in jobs) {
+    if (job.jobId == null) continue;
+    result[job.jobId!] =
+        job.interruptionPolicy ?? JobInterruptionPolicy.legacyDefault;
   }
   return result;
 }

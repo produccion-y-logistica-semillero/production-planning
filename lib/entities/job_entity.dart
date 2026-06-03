@@ -1,6 +1,7 @@
 //Job entity is the entity for what would be sequence_x_order in the database,
 //here in application layer we will call it job
 
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 
 import 'package:production_planning/entities/machine_times.dart';
@@ -16,11 +17,15 @@ class JobEntity {
   final int priority;
 
   final Map<int, int>? preemptionMatrix; // Map<machineId, canPreempt (0 o 1)>
+  final JobInterruptionPolicy? interruptionPolicy;
   // Map<taskId, Map<machineId, MachineTimes>>: optional explicit processing/setup/rest times
   final Map<int, Map<int, MachineTimes>>? taskMachineTimes;
   final Map<int, String>? machineFinalStates;
 
   JobEntity(this.jobId, this.sequence, this.amount, this.jobName, this.dueDate, this.priority,
       this.availableDate,
-      {this.preemptionMatrix, this.taskMachineTimes, this.machineFinalStates});
+      {this.preemptionMatrix,
+      this.interruptionPolicy,
+      this.taskMachineTimes,
+      this.machineFinalStates});
 }

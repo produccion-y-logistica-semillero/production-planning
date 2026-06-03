@@ -1,5 +1,6 @@
 
 import 'package:production_planning/entities/job_entity.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/entities/machine_times.dart';
 
 class JobModel {
@@ -13,13 +14,18 @@ class JobModel {
   final String? jobState;
 
   final Map<int, int>? preemptionMatrix;
+  final JobInterruptionPolicy? interruptionPolicy;
   // Map<taskId, Map<machineId, Map<'processing'|'preparation'|'rest', minutes>>>
   final Map<int, Map<int, Map<String, int>>>? taskMachineTimesMinutes;
   final Map<int, String>? machineFinalStates;
 
   JobModel(this.jobId, this.sequenceId, this.amount, this.jobName, this.dueDate,
       this.priority, this.availableDate,
-      {this.preemptionMatrix, this.taskMachineTimesMinutes, this.jobState, this.machineFinalStates});
+      {this.preemptionMatrix,
+      this.interruptionPolicy,
+      this.taskMachineTimesMinutes,
+      this.jobState,
+      this.machineFinalStates});
 
   factory JobModel.fromJson(Map<String, dynamic> json) {
     return JobModel(
@@ -51,7 +57,10 @@ class JobModel {
     }
 
     return JobEntity(jobId, null, amount, jobName, dueDate, priority, availableDate,
-        preemptionMatrix: preemptionMatrix, taskMachineTimes: taskTimes, machineFinalStates: machineFinalStates);
+        preemptionMatrix: preemptionMatrix,
+        interruptionPolicy: interruptionPolicy,
+        taskMachineTimes: taskTimes,
+        machineFinalStates: machineFinalStates);
 
   }
 }

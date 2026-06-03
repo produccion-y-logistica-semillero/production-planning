@@ -195,6 +195,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
           int.parse(wid.quantityController!.text),
           wid.idController!.text.isNotEmpty ? wid.idController!.text : null,
           preemptionMatrix: wid.stateKey.currentState?.getPreemptionMatrix(),
+          interruptionPolicy: wid.getInterruptionPolicy(),
           taskMachineTimesMinutes: taskMachineTimes,
           machineFinalStates: wid.stateKey.currentState?.getMachineFinalStates(),
         );

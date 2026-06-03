@@ -1,9 +1,15 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/schedule_calendar_utils.dart';
+import 'package:production_planning/services/scheduling/setup_duration_utils.dart';
+import 'package:production_planning/services/scheduling/task_scheduling_utils.dart';
 import 'dart:math';
 
 class ParallelInput {
   final int jobId;
+  final int sequenceId;
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
@@ -11,6 +17,7 @@ class ParallelInput {
 
   ParallelInput(
     this.jobId,
+    this.sequenceId,
     this.dueDate,
     this.priority,
     this.availableDate,
@@ -39,6 +46,17 @@ class ParallelOutput {
 class ParallelMachine {
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule;
+  final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
+  final Map<int, Map<int, String>>? jobStates;
+  final Map<int, JobInterruptionPolicy> jobInterruptionPolicies;
+  final Map<int, List<MachineInactivityEntity>> machineInactivities;
+  final Map<int, int> machineContinueCapacity;
+  final Map<int, Duration?> machineRestTime;
+  final Map<int, int> machineProcessedCount = {};
+  final Map<int, int?> _machineLastJob = {};
+  final Map<int, int?> _machineLastSequence = {};
+  late final ScheduleCalendarUtils _calendar;
   List<ParallelInput> inputJobs = [];
   Map<int, List<Tuple2<DateTime, DateTime>>> machines = {};
   List<ParallelOutput> output = [];
@@ -48,8 +66,22 @@ class ParallelMachine {
     this.workingSchedule,
     this.inputJobs,
     this.machines,
-    String rule,
-  ) {
+    String rule, {
+    this.changeoverMatrix = const {},
+    this.stateSetupMatrix,
+    this.jobStates,
+    this.jobInterruptionPolicies = const {},
+    this.machineInactivities = const {},
+    this.machineContinueCapacity = const {},
+    this.machineRestTime = const {},
+  }) {
+    _calendar = ScheduleCalendarUtils(
+      workingSchedule: workingSchedule,
+      machineInactivities: machineInactivities,
+    );
+    for (final machineId in machines.keys) {
+      machineProcessedCount[machineId] = 0;
+    }
     final r = rule.toUpperCase();
     switch (r) {
       case "SPT":
@@ -284,40 +316,64 @@ class ParallelMachine {
     DateTime availableDate = job.availableDate;
 
     int bestMachineId = -1;
-    DateTime bestStartTime = DateTime.now();
-    DateTime bestEndTime = DateTime.now();
+    MachineTaskScheduleResult? bestPlacement;
     Duration bestDelay = const Duration(days: 99999);
 
+    final policy =
+        jobInterruptionPolicies[jobId] ?? JobInterruptionPolicy.legacyDefault;
+
     for (var entry in job.durationsInMachines.entries) {
-      int machineId = entry.key;
-      Duration processingTime = entry.value;
-      
-      DateTime machineStartTime =
-          availableDate.isAfter(machineAvailable[machineId]!)
-              ? availableDate
-              : machineAvailable[machineId]!;
+      final machineId = entry.key;
+      final processingTime = entry.value;
 
-      machineStartTime = _adjustForWorkingSchedule(machineStartTime);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-        machineStartTime,
-        processingTime,
+      final earliestStart = availableDate.isAfter(machineAvailable[machineId]!)
+          ? availableDate
+          : machineAvailable[machineId]!;
+
+      final setupDuration = resolveSetupDuration(
+        machineId: machineId,
+        currentSequenceId: job.sequenceId,
+        previousSequenceId: _machineLastSequence[machineId],
+        currentJobId: jobId,
+        previousJobId: _machineLastJob[machineId],
+        changeoverMatrix: changeoverMatrix,
+        stateSetupMatrix: stateSetupMatrix,
+        jobStates: jobStates,
       );
-      Duration delay =
-          endTime.isAfter(dueDate)
-              ? endTime.difference(dueDate)
-              : Duration.zero;
 
-      if (delay < bestDelay ||
-          (delay == bestDelay && endTime.isBefore(bestEndTime))) {
+      final result = scheduleMachineTask(
+        calendar: _calendar,
+        machineId: machineId,
+        earliestStart: earliestStart,
+        setupDuration: setupDuration,
+        processingDuration: processingTime,
+        policy: policy,
+        continueCapacity: machineContinueCapacity[machineId] ?? 0,
+        restTime: machineRestTime[machineId],
+        machineProcessedCount: machineProcessedCount[machineId] ?? 0,
+      );
+
+      final delay = result.taskEnd.isAfter(dueDate)
+          ? result.taskEnd.difference(dueDate)
+          : Duration.zero;
+
+      if (bestPlacement == null ||
+          delay < bestDelay ||
+          (delay == bestDelay &&
+              result.taskEnd.isBefore(bestPlacement!.taskEnd))) {
         bestMachineId = machineId;
-        bestStartTime = machineStartTime;
-        bestEndTime = endTime;
+        bestPlacement = result;
         bestDelay = delay;
       }
     }
 
-    if (bestMachineId != -1) {
-      machineAvailable[bestMachineId] = bestEndTime; // Actualiza disponibilidad
+    if (bestMachineId != -1 && bestPlacement != null) {
+      machineProcessedCount[bestMachineId] = bestPlacement.machineProcessedCount;
+      _machineLastJob[bestMachineId] = jobId;
+      _machineLastSequence[bestMachineId] = job.sequenceId;
+      final bestStartTime = bestPlacement.taskStart;
+      final bestEndTime = bestPlacement.taskEnd;
+      machineAvailable[bestMachineId] = bestPlacement.machineAvailable;
       machines[bestMachineId]?.add(Tuple2(bestStartTime, bestEndTime));
       output.add(
         ParallelOutput(

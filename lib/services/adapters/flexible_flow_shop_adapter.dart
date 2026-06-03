@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -9,16 +10,22 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
-import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/services/setup_time_service.dart';
+import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/shared/utils/changeover_matrix_utils.dart';
+import '../../entities/machine_inactivity_entity.dart';
+import '../../shared/utils/machine_downtime_utils.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
   FlexibleFlowShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
+    required this.setupTimeService,
   });
 
   int toInt(dynamic value) {
@@ -80,6 +87,7 @@ class FlexibleFlowShopAdapter {
       for (var i = 0; i < job.amount; i++) {
         inputJobs.add(FlexibleFlowInput(
           job.jobId!,
+          job.sequence!.id!,
           job.dueDate,
           job.priority,
           job.availableDate,
@@ -99,18 +107,149 @@ class FlexibleFlowShopAdapter {
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
 
-    // Ejecutar el algoritmo Flexible Flow Shop
+    final sequenceIds = order.orderJobs!
+        .where((j) => j.sequence?.id != null)
+        .map((j) => j.sequence!.id!)
+        .toSet();
+    final changeoverMatrix = await loadMergedChangeoverMatrix(
+      setupTimeService,
+      machines,
+      sequenceIds,
+    );
+    final jobInterruptionPolicies =
+        buildJobInterruptionPolicies(order.orderJobs!);
+    final machineInactivitiesMap = <int, List<MachineInactivityEntity>>{};
+    final machineContinueCapacityMap = <int, int>{};
+    final machineRestTimeMap = <int, Duration?>{};
+    buildMachineDowntimeMaps(
+      machines,
+      inactivities: machineInactivitiesMap,
+      continueCapacity: machineContinueCapacityMap,
+      restTime: machineRestTimeMap,
+    );
+
+    // Ejecutar el algoritmo Flexible Flow Shop en un isolate
+    final payload = {
+      'startDate': order.regDate.millisecondsSinceEpoch,
+      'workingStartHour': START_SCHEDULE.hour,
+      'workingStartMinute': START_SCHEDULE.minute,
+      'workingEndHour': END_SCHEDULE.hour,
+      'workingEndMinute': END_SCHEDULE.minute,
+      'rule': rule.toUpperCase(),
+      'inputJobs': inputJobs.map((job) => {
+            'jobId': job.jobId,
+            'sequenceId': job.sequenceId,
+            'dueDate': job.dueDate.millisecondsSinceEpoch,
+            'priority': job.priority,
+            'availableDate': job.availableDate.millisecondsSinceEpoch,
+            'taskSequence': job.taskSequence.map((task) => {
+                  'taskId': task.value1,
+                  'machineDurations': task.value2.map(
+                    (machineId, duration) => MapEntry(
+                      machineId.toString(),
+                      duration.inMilliseconds,
+                    ),
+                  ),
+                }).toList(),
+          }).toList(),
+      'machinesAvailability': machinesAvailability.map(
+        (machineId, date) => MapEntry(
+          machineId.toString(),
+          date.millisecondsSinceEpoch,
+        ),
+      ),
+      'stateSetupMatrix': stateSetupMatrix?.map(
+        (machineId, stateMap) => MapEntry(
+          machineId.toString(),
+          stateMap.map(
+            (fromState, targetMap) => MapEntry(
+              fromState,
+              targetMap.map(
+                (toState, minutes) => MapEntry(toState, minutes),
+              ),
+            ),
+          ),
+        ),
+      ),
+      'jobStates': jobStates.map(
+        (jobId, machineStates) => MapEntry(
+          jobId.toString(),
+          machineStates.map(
+            (machineId, state) => MapEntry(machineId.toString(), state),
+          ),
+        ),
+      ),
+      'changeoverMatrix': changeoverMatrix.map(
+        (machineId, prevMap) => MapEntry(
+          machineId.toString(),
+          prevMap.map(
+            (prevSequence, currMap) => MapEntry(
+              prevSequence?.toString() ?? 'null',
+              currMap.map(
+                (currSequence, duration) => MapEntry(
+                  currSequence.toString(),
+                  duration.inMinutes,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      'jobInterruptionPolicies': jobInterruptionPolicies.map(
+        (jobId, policy) => MapEntry(jobId.toString(), {
+          'allowRestInterrupt': policy.allowRestInterrupt,
+          'allowScheduledInterrupt': policy.allowScheduledInterrupt,
+          'allowWorkHoursInterrupt': policy.allowWorkHoursInterrupt,
+        }),
+      ),
+      'machineInactivities': machineInactivitiesMap.map(
+        (machineId, inactivities) => MapEntry(
+          machineId.toString(),
+          inactivities.map((activity) => {
+            'name': activity.name,
+            'weekdays': activity.weekdays.map((d) => d.index).toList(),
+            'startTimeMinutes': activity.startTime.inMinutes,
+            'durationMinutes': activity.duration.inMinutes,
+          }).toList(),
+        ),
+      ),
+      'machineContinueCapacity': machineContinueCapacityMap.map(
+        (machineId, capacity) => MapEntry(machineId.toString(), capacity),
+      ),
+      'machineRestTime': machineRestTimeMap.map(
+        (machineId, restTime) => MapEntry(
+          machineId.toString(),
+          restTime?.inMinutes,
+        ),
+      ),
+    };
+
     List<FlexibleFlowOutput> output;
     try {
-      output = FlexibleFlowShop(
-        order.regDate,
-        Tuple2(START_SCHEDULE, END_SCHEDULE),
-        inputJobs,
-        machinesAvailability,
-        rule.toUpperCase(),
-        stateSetupMatrix: stateSetupMatrix,
-        jobStates: jobStates,
-      ).output;
+      final rawOutput = await compute(flexibleFlowShopSchedule, payload);
+      output = rawOutput.map((jobMap) {
+        return FlexibleFlowOutput(
+          jobMap['jobId'] as int,
+          DateTime.fromMillisecondsSinceEpoch(jobMap['dueDate'] as int),
+          DateTime.fromMillisecondsSinceEpoch(jobMap['startDate'] as int),
+          DateTime.fromMillisecondsSinceEpoch(jobMap['endTime'] as int),
+          (jobMap['scheduling'] as Map<String, dynamic>).map(
+            (taskId, taskEntry) {
+              final entry = taskEntry as Map<String, dynamic>;
+              return MapEntry(
+                int.parse(taskId),
+                Tuple2(
+                  entry['machineId'] as int,
+                  Range(
+                    DateTime.fromMillisecondsSinceEpoch(entry['startDate'] as int),
+                    DateTime.fromMillisecondsSinceEpoch(entry['endDate'] as int),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      }).toList();
     } catch (error, stack) {
       print('FlexibleFlowShopAdapter.flexibleFlowShopAdapter error: ${error.toString()}');
       print(stack.toString());

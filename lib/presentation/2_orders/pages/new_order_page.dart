@@ -195,7 +195,12 @@ class NewOrderPage extends StatelessWidget {
         controllers[r] = {};
         for (final c in jobStates) {
           final val = matrix[r]?[c] ?? 0;
-          controllers[r]![c] = TextEditingController(text: val == 0 ? '' : val.toString());
+          // Diagonal (same state -> same state) must always be 0 and shown as such
+          if (r == c) {
+            controllers[r]![c] = TextEditingController(text: '0');
+          } else {
+            controllers[r]![c] = TextEditingController(text: val == 0 ? '' : val.toString());
+          }
         }
       }
     }
@@ -281,12 +286,13 @@ class NewOrderPage extends StatelessWidget {
                                 DataCell(Text(r, style: const TextStyle(fontWeight: FontWeight.bold))),
                                 ...jobStates.map((c) {
                                   return DataCell(
-                                    TextField(
-                                      controller: controllers[r]![c],
-                                      keyboardType: TextInputType.number,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  );
+                                      TextField(
+                                        controller: controllers[r]![c],
+                                        keyboardType: TextInputType.number,
+                                        textAlign: TextAlign.center,
+                                        enabled: r != c,
+                                      ),
+                                    );
                                 }),
                               ],
                             )).toList(),

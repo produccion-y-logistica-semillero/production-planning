@@ -89,6 +89,7 @@ class OrderRepositoryImpl implements OrderRepository {
               model.priority,
               model.availableDate,
               preemptionMatrix: model.preemptionMatrix,
+              interruptionPolicy: model.interruptionPolicy,
               taskMachineTimes: taskTimes,
               machineFinalStates: model.machineFinalStates);
 
@@ -215,6 +216,7 @@ class OrderRepositoryImpl implements OrderRepository {
             model.priority,
             model.availableDate,
             preemptionMatrix: model.preemptionMatrix,
+            interruptionPolicy: model.interruptionPolicy,
             taskMachineTimes: machineTimesMap,
             machineFinalStates: model.machineFinalStates);
 

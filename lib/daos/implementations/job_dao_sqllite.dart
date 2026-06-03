@@ -1,5 +1,6 @@
 import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/daos/interfaces/job_dao.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/repositories/models/job_model.dart';
 import 'package:production_planning/entities/job_entity.dart';
 import 'package:sqflite/sqflite.dart';
@@ -80,6 +81,18 @@ class JobDaoSQLlite implements JobDao {
         }
       }
 
+      JobInterruptionPolicy? interruptionPolicy;
+      final policyMaps = await db.query(
+        'job_interruption_policy',
+        where: 'job_id = ?',
+        whereArgs: [jobId],
+        limit: 1,
+      );
+      if (policyMaps.isNotEmpty) {
+        interruptionPolicy =
+            JobInterruptionPolicy.fromDatabaseMap(policyMaps.first);
+      }
+
       jobs.add(JobModel(
         jobId,
         map['sequence_id'] as int,
@@ -89,6 +102,7 @@ class JobDaoSQLlite implements JobDao {
         map['priority'] as int,
         DateTime.parse(map['available_date'] as String),
         preemptionMatrix: preemptionMatrix,
+        interruptionPolicy: interruptionPolicy,
         taskMachineTimesMinutes: taskMachineTimes,
         machineFinalStates: machineFinalStates,
       ));
@@ -124,6 +138,13 @@ class JobDaoSQLlite implements JobDao {
               'can_preempt': entry.value,
             });
           }
+        }
+
+        if (job.interruptionPolicy != null) {
+          await txn.insert(
+            'job_interruption_policy',
+            job.interruptionPolicy!.toDatabaseMap(jobId),
+          );
         }
         // Insertar tiempos por tarea/máquina si existen
         if (job.taskMachineTimes != null && job.taskMachineTimes!.isNotEmpty) {
@@ -181,6 +202,11 @@ class JobDaoSQLlite implements JobDao {
       for (var job in jobs) {
         await db.delete(
           'job_preemption',
+          where: 'job_id = ?',
+          whereArgs: [job['job_id']],
+        );
+        await db.delete(
+          'job_interruption_policy',
           where: 'job_id = ?',
           whereArgs: [job['job_id']],
         );

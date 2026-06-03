@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
@@ -80,6 +81,10 @@ class AddJobWidget extends StatefulWidget {
     return stateKey.currentState?._preemptionMatrix ?? {};
   }
 
+  JobInterruptionPolicy? getInterruptionPolicy() {
+    return stateKey.currentState?.getInterruptionPolicy();
+  }
+
   @override
   AddJobState createState() {
     return AddJobState();
@@ -100,6 +105,9 @@ class AddJobState extends State<AddJobWidget> {
   final Map<int, MachineStandardTimes> _stationTimes = {};
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
   final Map<int, int> _preemptionMatrix = {};
+  bool _allowRestInterrupt = false;
+  bool _allowScheduledInterrupt = true;
+  bool _allowWorkHoursInterrupt = true;
 
   final Map<int, String> _machineFinalStates = {};
   final List<String> _letters = [
@@ -109,6 +117,12 @@ class AddJobState extends State<AddJobWidget> {
   // ── public getters used by the matrix dialog ──────────────────────────────
 
   Map<int, int> getPreemptionMatrix() => _preemptionMatrix;
+
+  JobInterruptionPolicy getInterruptionPolicy() => JobInterruptionPolicy(
+        allowRestInterrupt: _allowRestInterrupt,
+        allowScheduledInterrupt: _allowScheduledInterrupt,
+        allowWorkHoursInterrupt: _allowWorkHoursInterrupt,
+      );
 
   Map<int, int> getSelectedMachines() {
     final map = <int, int>{};
@@ -282,6 +296,7 @@ class AddJobState extends State<AddJobWidget> {
                 'preparation': preparationMinutes,
                 'rest': restMinutes,
               };
+              _syncPreemptionMatrixForSelectedMachines();
             }
           }
         });
@@ -418,10 +433,76 @@ class AddJobState extends State<AddJobWidget> {
                 child: CircularProgressIndicator(),
               ),
             if (!_loadingStations &&
-                (_sequenceDetails?.tasks?.isNotEmpty ?? false))
+                (_sequenceDetails?.tasks?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: 12),
+              _buildInterruptionPolicySection(),
               ..._sequenceDetails!.tasks!.map(_buildStationRow),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInterruptionPolicySection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Interrupciones permitidas en este trabajo',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Si está marcado, el trabajo puede pausarse y reanudarse durante '
+            'ese tipo de inactividad.',
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Descanso obligatorio de la máquina'),
+            subtitle: const Text('Tras la capacidad continua configurada'),
+            value: _allowRestInterrupt,
+            onChanged: (v) => setState(() {
+              _allowRestInterrupt = v ?? false;
+              _syncPreemptionMatrixForSelectedMachines();
+            }),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Eventos recurrentes'),
+            subtitle: const Text('Inactividades programadas por máquina'),
+            value: _allowScheduledInterrupt,
+            onChanged: (v) => setState(() {
+              _allowScheduledInterrupt = v ?? false;
+              _syncPreemptionMatrixForSelectedMachines();
+            }),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Horario de trabajo'),
+            subtitle: const Text('Apertura y cierre de la tienda'),
+            value: _allowWorkHoursInterrupt,
+            onChanged: (v) => setState(() {
+              _allowWorkHoursInterrupt = v ?? false;
+              _syncPreemptionMatrixForSelectedMachines();
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -632,7 +713,20 @@ class AddJobState extends State<AddJobWidget> {
 
       bloc.updateStandardTimesForType(task.machineTypeId, updated);
       _syncStandardTimesToMachines(task.machineTypeId, updated);
+      _syncPreemptionMatrixForSelectedMachines();
     });
+  }
+
+  void _syncPreemptionMatrixForSelectedMachines() {
+    final canPreempt = _allowRestInterrupt ||
+        _allowScheduledInterrupt ||
+        _allowWorkHoursInterrupt;
+    _preemptionMatrix.clear();
+    for (final machine in _selectedMachines.values) {
+      if (machine?.id != null) {
+        _preemptionMatrix[machine!.id!] = canPreempt ? 1 : 0;
+      }
+    }
   }
 
   // ── station time dialog — SETUP TIME FIELD REMOVED ────────────────────────
@@ -841,40 +935,6 @@ class AddJobState extends State<AddJobWidget> {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
-  // ignore: unused_element
-  List<Widget> _buildPreemptionMatrixForTask(int machineTypeId) {
-    final machines = _machinesByType[machineTypeId] ?? [];
-    if (machines.isEmpty) return [];
-    return machines.map((machine) {
-      final currentValue = _preemptionMatrix[machine.id] ?? 0;
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4.0),
-        child: Row(
-          children: [
-            Expanded(
-                child:
-                    Text(machine.name, style: const TextStyle(fontSize: 14))),
-            ToggleButtons(
-              isSelected: [currentValue == 0, currentValue == 1],
-              onPressed: (index) =>
-                  setState(() => _preemptionMatrix[machine.id!] = index),
-              borderRadius: BorderRadius.circular(8),
-              constraints:
-                  const BoxConstraints(minWidth: 50, minHeight: 36),
-              children: const [
-                Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('0')),
-                Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('1')),
-              ],
-            ),
-          ],
-        ),
-      );
-    }).toList();
-  }
 }
 
 /// Formatter: digits only → auto-inserts colons as HH:MM:SS

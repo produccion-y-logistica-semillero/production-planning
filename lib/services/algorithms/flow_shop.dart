@@ -1,5 +1,10 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/schedule_calendar_utils.dart';
+import 'package:production_planning/services/scheduling/setup_duration_utils.dart';
+import 'package:production_planning/services/scheduling/task_scheduling_utils.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -55,6 +60,12 @@ class FlowShop {
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+  final Map<int, JobInterruptionPolicy> jobInterruptionPolicies;
+  final Map<int, List<MachineInactivityEntity>> machineInactivities;
+  final Map<int, int> machineContinueCapacity;
+  final Map<int, Duration?> machineRestTime;
+  final Map<int, int> machineProcessedCount = {};
+  late final ScheduleCalendarUtils _calendar;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
 
@@ -67,7 +78,18 @@ class FlowShop {
     Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
     this.stateSetupMatrix,
     this.jobStates,
+    this.jobInterruptionPolicies = const {},
+    this.machineInactivities = const {},
+    this.machineContinueCapacity = const {},
+    this.machineRestTime = const {},
   }) : changeoverMatrix = changeoverMatrix ?? {} {
+    _calendar = ScheduleCalendarUtils(
+      workingSchedule: workingSchedule,
+      machineInactivities: machineInactivities,
+    );
+    for (final machineId in machinesAvailability.keys) {
+      machineProcessedCount[machineId] = 0;
+    }
     _initializeMachineLastSequence();
     final r = rule.toUpperCase();
     switch (r) {
@@ -274,28 +296,45 @@ class FlowShop {
       Duration duration = job.taskTimesInMachines[taskId]!;
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
-      startTime = _adjustForWorkingSchedule(startTime);
+      final earliestStart =
+          jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
 
-      final int? previousSequence = _machineLastSequence.putIfAbsent(machineId, () => null);
+      final int? previousSequence =
+          _machineLastSequence.putIfAbsent(machineId, () => null);
       final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(
-        machineId,
-        job.sequenceId,
-        previousSequence,
+      final setupDuration = resolveSetupDuration(
+        machineId: machineId,
+        currentSequenceId: job.sequenceId,
+        previousSequenceId: previousSequence,
         currentJobId: job.jobId,
         previousJobId: previousJob,
+        changeoverMatrix: changeoverMatrix,
+        stateSetupMatrix: stateSetupMatrix,
+        jobStates: jobStates,
       );
-      final Duration totalDuration = duration + setupDuration;
 
-      DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
-      actualStartTime ??= startTime;
+      final policy = jobInterruptionPolicies[job.jobId] ??
+          JobInterruptionPolicy.legacyDefault;
+      final result = scheduleMachineTask(
+        calendar: _calendar,
+        machineId: machineId,
+        earliestStart: earliestStart,
+        setupDuration: setupDuration,
+        processingDuration: duration,
+        policy: policy,
+        continueCapacity: machineContinueCapacity[machineId] ?? 0,
+        restTime: machineRestTime[machineId],
+        machineProcessedCount: machineProcessedCount[machineId] ?? 0,
+      );
+      machineProcessedCount[machineId] = result.machineProcessedCount;
 
-      scheduling[machineId] = Tuple2(taskId, Range(startTime, endTime));
-      machinesAvailability[machineId] = endTime;
+      actualStartTime ??= result.taskStart;
+      scheduling[machineId] =
+          Tuple2(taskId, Range(result.taskStart, result.taskEnd));
+      machinesAvailability[machineId] = result.machineAvailable;
       _machineLastSequence[machineId] = job.sequenceId;
       _machineLastJob[machineId] = job.jobId;
-      jobStartTime = endTime;
+      jobStartTime = result.machineAvailable;
     }
 
     output.add(
@@ -727,4 +766,191 @@ class FlowShop {
     individual[j] = temp;
     return individual;
   }
+}
+
+List<Map<String, dynamic>> flowShopSchedule(Map<String, dynamic> payload) {
+  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+  final workingSchedule = Tuple2(
+    TimeOfDay(
+      hour: payload['workingStartHour'] as int,
+      minute: payload['workingStartMinute'] as int,
+    ),
+    TimeOfDay(
+      hour: payload['workingEndHour'] as int,
+      minute: payload['workingEndMinute'] as int,
+    ),
+  );
+
+  int parseIntKey(dynamic key) {
+    if (key is int) return key;
+    return int.tryParse(key.toString()) ?? 0;
+  }
+
+  final inputJobs = <FlowShopInput>[];
+  for (final rawJob in (payload['inputJobs'] as List).cast<Map<String, dynamic>>()) {
+    final taskSequence = (rawJob['taskSequence'] as List)
+        .cast<Map<String, dynamic>>()
+        .map((task) => Tuple2(task['taskId'] as int, task['machineId'] as int))
+        .toList();
+
+    final taskTimes = <int, Duration>{};
+    (rawJob['taskTimes'] as Map<String, dynamic>)
+        .forEach((taskId, durationMs) {
+      taskTimes[int.parse(taskId)] = Duration(milliseconds: durationMs as int);
+    });
+
+    inputJobs.add(FlowShopInput(
+      rawJob['jobId'] as int,
+      rawJob['sequenceId'] as int,
+      DateTime.fromMillisecondsSinceEpoch(rawJob['dueDate'] as int),
+      rawJob['priority'] as int,
+      DateTime.fromMillisecondsSinceEpoch(rawJob['availableDate'] as int),
+      taskSequence,
+      taskTimes,
+    ));
+  }
+
+  final machinesAvailability = <int, DateTime>{};
+  (payload['machinesAvailability'] as Map<String, dynamic>)
+      .forEach((machineId, dateMs) {
+    machinesAvailability[parseIntKey(machineId)] =
+        DateTime.fromMillisecondsSinceEpoch(dateMs as int);
+  });
+
+  final changeoverMatrix = <int, Map<int?, Map<int, Duration>>>{};
+  (payload['changeoverMatrix'] as Map<String, dynamic>)
+      .forEach((machineId, prevMap) {
+    final machineKey = parseIntKey(machineId);
+    final convertedPrevMap = <int?, Map<int, Duration>>{};
+    (prevMap as Map<String, dynamic>).forEach((prevSequence, currMap) {
+      final previousKey = prevSequence == 'null'
+          ? null
+          : int.tryParse(prevSequence.toString());
+      final convertedCurrMap = <int, Duration>{};
+      (currMap as Map<String, dynamic>).forEach((currSequence, minutes) {
+        convertedCurrMap[int.parse(currSequence)] =
+            Duration(minutes: minutes as int);
+      });
+      convertedPrevMap[previousKey] = convertedCurrMap;
+    });
+    changeoverMatrix[machineKey] = convertedPrevMap;
+  });
+
+  final stateSetupMatrix = payload['stateSetupMatrix'] == null
+      ? null
+      : (payload['stateSetupMatrix'] as Map<String, dynamic>).map(
+          (machineId, stateMap) => MapEntry(
+            parseIntKey(machineId),
+            (stateMap as Map<String, dynamic>).map(
+              (fromState, targetMap) => MapEntry(
+                fromState as String,
+                (targetMap as Map<String, dynamic>).map(
+                  (toState, minutes) => MapEntry(
+                    toState as String,
+                    minutes as int,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+  final jobStates = payload['jobStates'] == null
+      ? null
+      : (payload['jobStates'] as Map<String, dynamic>).map(
+          (jobId, machineStates) => MapEntry(
+            parseIntKey(jobId),
+            (machineStates as Map<String, dynamic>).map(
+              (machineId, state) => MapEntry(
+                parseIntKey(machineId),
+                state as String,
+              ),
+            ),
+          ),
+        );
+
+  final jobInterruptionPolicies = <int, JobInterruptionPolicy>{};
+  if (payload['jobInterruptionPolicies'] != null) {
+    (payload['jobInterruptionPolicies'] as Map<String, dynamic>)
+        .forEach((jobId, policyMap) {
+      final parsedJobId = parseIntKey(jobId);
+      final policy = policyMap as Map<String, dynamic>;
+      jobInterruptionPolicies[parsedJobId] = JobInterruptionPolicy(
+        allowRestInterrupt: policy['allowRestInterrupt'] as bool? ?? false,
+        allowScheduledInterrupt:
+            policy['allowScheduledInterrupt'] as bool? ?? true,
+        allowWorkHoursInterrupt:
+            policy['allowWorkHoursInterrupt'] as bool? ?? true,
+      );
+    });
+  }
+
+  final machineInactivities = <int, List<MachineInactivityEntity>>{};
+  (payload['machineInactivities'] as Map<String, dynamic>)
+      .forEach((machineId, inactivities) {
+    final parsedMachineId = parseIntKey(machineId);
+    final list = <MachineInactivityEntity>[];
+    for (final rawActivity in (inactivities as List)
+        .cast<Map<String, dynamic>>()) {
+      list.add(MachineInactivityEntity(
+        machineId: parsedMachineId,
+        name: rawActivity['name'] as String,
+        weekdays: (rawActivity['weekdays'] as List)
+            .cast<int>()
+            .map((index) => Weekday.values[index])
+            .toSet(),
+        startTime: Duration(minutes: rawActivity['startTimeMinutes'] as int),
+        duration: Duration(minutes: rawActivity['durationMinutes'] as int),
+      ));
+    }
+    machineInactivities[parsedMachineId] = list;
+  });
+
+  final machineContinueCapacity = <int, int>{};
+  (payload['machineContinueCapacity'] as Map<String, dynamic>)
+      .forEach((machineId, capacity) {
+    machineContinueCapacity[parseIntKey(machineId)] = capacity as int;
+  });
+
+  final machineRestTime = <int, Duration?>{};
+  (payload['machineRestTime'] as Map<String, dynamic>)
+      .forEach((machineId, restMinutes) {
+    machineRestTime[parseIntKey(machineId)] = restMinutes == null
+        ? null
+        : Duration(minutes: restMinutes as int);
+  });
+
+  final output = FlowShop(
+    startDate,
+    workingSchedule,
+    inputJobs,
+    machinesAvailability,
+    payload['rule'] as String,
+    changeoverMatrix: changeoverMatrix,
+    stateSetupMatrix: stateSetupMatrix,
+    jobStates: jobStates,
+    jobInterruptionPolicies: jobInterruptionPolicies,
+    machineInactivities: machineInactivities,
+    machineContinueCapacity: machineContinueCapacity,
+    machineRestTime: machineRestTime,
+  ).output;
+
+  return output.map((job) {
+    return {
+      'jobId': job.jobId,
+      'startDate': job.startDate.millisecondsSinceEpoch,
+      'dueDate': job.dueDate.millisecondsSinceEpoch,
+      'endTime': job.endTime.millisecondsSinceEpoch,
+      'machinesScheduling': job.machinesScheduling.map(
+        (machineId, scheduling) => MapEntry(
+          machineId.toString(),
+          {
+            'taskId': scheduling.value1,
+            'startDate': scheduling.value2.startDate.millisecondsSinceEpoch,
+            'endDate': scheduling.value2.endDate.millisecondsSinceEpoch,
+          },
+        ),
+      ),
+    };
+  }).toList();
 }

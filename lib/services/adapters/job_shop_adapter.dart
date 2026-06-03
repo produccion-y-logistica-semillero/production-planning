@@ -10,14 +10,22 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
+import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/shared/utils/changeover_matrix_utils.dart';
+import 'package:production_planning/shared/utils/machine_downtime_utils.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class JobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
-  JobShopAdapter({required this.orderRepository, required this.machineRepository});
+  JobShopAdapter({
+    required this.orderRepository,
+    required this.machineRepository,
+    required this.setupTimeService,
+  });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> jobShopAdapter(
       int orderId, String rule) async {
@@ -90,22 +98,29 @@ class JobShopAdapter {
     final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
     final Map<int, int> machineContinueCapacityMap = {};
     final Map<int, Duration?> machineRestTimeMap = {};
-    for (final machine in machines) {
-      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      if (machine.restPercentage == 100 || machine.restPercentage <= 0) {
-        machineRestTimeMap[machine.id!] = const Duration(hours: 1);
-      } else {
-        final ratio = machine.restPercentage / 100.0;
-        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
-        machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
-      }
-    }
+    buildMachineDowntimeMaps(
+      machines,
+      inactivities: machineInactivitiesMap,
+      continueCapacity: machineContinueCapacityMap,
+      restTime: machineRestTimeMap,
+    );
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+
+    final sequenceIds = order.orderJobs!
+        .where((j) => j.sequence?.id != null)
+        .map((j) => j.sequence!.id!)
+        .toSet();
+    final changeoverMatrix = await loadMergedChangeoverMatrix(
+      setupTimeService,
+      machines,
+      sequenceIds,
+    );
+    final jobInterruptionPolicies =
+        buildJobInterruptionPolicies(order.orderJobs!);
 
     // Run Flexible Job Shop algorithm (highly optimized Non-delay & DAG-enabled)
     List<FlexibleJobOutput> output;
@@ -119,8 +134,10 @@ class JobShopAdapter {
         machineInactivities: machineInactivitiesMap,
         machineContinueCapacity: machineContinueCapacityMap,
         machineRestTime: machineRestTimeMap,
+        changeoverMatrix: changeoverMatrix,
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
+        jobInterruptionPolicies: jobInterruptionPolicies,
       ).output;
     } catch (error, stack) {
       print('JobShopAdapter.jobShopAdapter error: ${error.toString()}');

@@ -1,6 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/job_interruption_policy.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/schedule_calendar_utils.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'dart:math';
@@ -52,6 +54,8 @@ class FlexibleJobShop {
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+  final Map<int, JobInterruptionPolicy> jobInterruptionPolicies;
+  late final ScheduleCalendarUtils _calendar;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
@@ -69,7 +73,12 @@ class FlexibleJobShop {
     this.changeoverMatrix = const {},
     this.stateSetupMatrix,
     this.jobStates,
+    this.jobInterruptionPolicies = const {},
   }) {
+    _calendar = ScheduleCalendarUtils(
+      workingSchedule: workingSchedule,
+      machineInactivities: machineInactivities,
+    );
     // Inicializar contador de procesamiento por máquina
     for (final machineId in machinesAvailability.keys) {
       machineProcessedCount[machineId] = 0;
@@ -482,7 +491,11 @@ class FlexibleJobShop {
             final earliestStart = machineAvailable.isAfter(jobReadyTime)
                 ? machineAvailable
                 : jobReadyTime;
-            final adjustedStart = _adjustForWorkingSchedule(earliestStart);
+            final policy = _policyForJob(job.dbJobId);
+            final adjustedStart = _calendar.adjustForWorkingSchedule(
+              earliestStart,
+              allowWorkHoursInterrupt: policy.allowWorkHoursInterrupt,
+            );
 
             candidates.add((
               job: job,
@@ -515,9 +528,14 @@ class FlexibleJobShop {
           selected.machineId, selected.job.jobId, previousJob);
       final Duration totalDuration = selected.duration + setupDuration;
 
+      final policy = _policyForJob(selected.job.dbJobId);
       final end = start.add(totalDuration);
-      final adjustedEnd =
-          _adjustEndTimeWithInactivities(selected.machineId, start, end);
+      final adjustedEnd = _calendar.adjustEndTimeWithInactivities(
+        selected.machineId,
+        start,
+        end,
+        policy,
+      );
 
       // Aplicar descanso por continueCapacity
       DateTime finalEnd = adjustedEnd;
@@ -529,8 +547,9 @@ class FlexibleJobShop {
             (machineProcessedCount[selected.machineId] ?? 0) + 1;
 
         if (machineProcessedCount[selected.machineId]! >= capacity) {
-          // Aplicar descanso
-          finalEnd = adjustedEnd.add(restTime);
+          if (policy.allowRestInterrupt) {
+            finalEnd = adjustedEnd.add(restTime);
+          }
           machineProcessedCount[selected.machineId] = 0;
         }
       }
@@ -568,130 +587,8 @@ class FlexibleJobShop {
   }
 
 
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday; // 1=Monday, 7=Sunday
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      // Convertir Weekday enum a int (Weekday.monday.index = 0, pero DateTime usa 1=Monday)
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          startHour,
-          startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    while (remaining > Duration.zero) {
-      current = _adjustForWorkingSchedule(current);
-
-      // Obtener inactividades del día actual
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-
-      final dayEnd = DateTime(
-        current.year,
-        current.month,
-        current.day,
-        workingSchedule.value2.hour,
-        workingSchedule.value2.minute,
-      );
-
-      // Verificar si hay una inactividad que intersecta con el tiempo disponible
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          // Hay una inactividad en el camino
-          if (nextAvailable.isBefore(inactivity.start)) {
-            // Podemos trabajar hasta el inicio de la inactividad
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              // La tarea termina antes de la inactividad
-              return nextAvailable.add(remaining);
-            } else {
-              // La tarea se interrumpe por la inactividad
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            // Estamos dentro o después de la inactividad
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      // Calcular tiempo disponible restante en el día (después de inactividades)
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return current;
-  }
-
-  DateTime _adjustForWorkingSchedule(DateTime start) {
-    TimeOfDay workingStart = workingSchedule.value1;
-    TimeOfDay workingEnd = workingSchedule.value2;
-
-    if (start.hour < workingStart.hour ||
-        (start.hour == workingStart.hour &&
-            start.minute < workingStart.minute)) {
-      return DateTime(start.year, start.month, start.day, workingStart.hour,
-          workingStart.minute);
-    } else if (start.hour > workingEnd.hour ||
-        (start.hour == workingEnd.hour && start.minute > workingEnd.minute)) {
-      return DateTime(start.year, start.month, start.day + 1, workingStart.hour,
-          workingStart.minute);
-    }
-    return start;
-  }
-
-  DateTime _adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
-    TimeOfDay workingEnd = workingSchedule.value2;
-    DateTime endOfDay = DateTime(start.year, start.month, start.day, workingEnd.hour, workingEnd.minute);
-
-    if (end.isAfter(endOfDay)) {
-      Duration remainingTime = end.difference(endOfDay);
-      return DateTime(start.year, start.month, start.day + 1, workingSchedule.value1.hour, workingSchedule.value1.minute)
-          .add(remainingTime);
-    }
-    return end;
-  }
-
+  JobInterruptionPolicy _policyForJob(int dbJobId) =>
+      jobInterruptionPolicies[dbJobId] ?? JobInterruptionPolicy.legacyDefault;
 
   int calcularCmax(List<FlexibleJobOutput> output) {
     if (output.isEmpty) return 0;
@@ -800,6 +697,29 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
           ),
         );
 
+  final changeoverMatrix = <int, Map<int?, Map<int, Duration>>>{};
+  final rawChangeover = payload['changeoverMatrix'];
+  if (rawChangeover != null) {
+    for (final machineEntry in (rawChangeover as Map<dynamic, dynamic>).entries) {
+      final machineId = machineEntry.key as int;
+      final inner = <int?, Map<int, Duration>>{};
+      for (final prevEntry in (machineEntry.value as Map<dynamic, dynamic>).entries) {
+        final prevKey = prevEntry.key as String;
+        final prevSeqId = prevKey == 'null' ? null : int.parse(prevKey);
+        final currMap = (prevEntry.value as Map<dynamic, dynamic>).map(
+          (currSeqId, minutes) =>
+              MapEntry(currSeqId as int, Duration(minutes: minutes as int)),
+        );
+        inner[prevSeqId] = currMap;
+      }
+      changeoverMatrix[machineId] = inner;
+    }
+  }
+
+  final jobInterruptionPolicies = parseJobInterruptionPolicies(
+    payload['jobInterruptionPolicies'],
+  );
+
   final output = FlexibleJobShop(
     startDate,
     workingSchedule,
@@ -809,8 +729,10 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
     machineInactivities: machineInactivities,
     machineContinueCapacity: machineContinueCapacity,
     machineRestTime: machineRestTime,
+    changeoverMatrix: changeoverMatrix,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    jobInterruptionPolicies: jobInterruptionPolicies,
   ).output;
 
   return output.map((out) {

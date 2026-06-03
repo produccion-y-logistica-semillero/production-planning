@@ -37,7 +37,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -190,6 +190,16 @@ class SQLLiteDatabaseProvider {
               FOREIGN KEY (job_id) REFERENCES jobs(job_id),
               FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
               UNIQUE(job_id, machine_id)
+          );
+        ''');
+
+        batch.execute('''
+          CREATE TABLE job_interruption_policy (
+              job_id INTEGER PRIMARY KEY,
+              allow_rest INTEGER NOT NULL DEFAULT 0,
+              allow_scheduled INTEGER NOT NULL DEFAULT 1,
+              allow_work_hours INTEGER NOT NULL DEFAULT 1,
+              FOREIGN KEY (job_id) REFERENCES jobs(job_id)
           );
         ''');
 
@@ -806,6 +816,17 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 12);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 13);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
+          ''');
+        }
+        if (oldVersion < 11) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS job_interruption_policy (
+                job_id INTEGER PRIMARY KEY,
+                allow_rest INTEGER NOT NULL DEFAULT 0,
+                allow_scheduled INTEGER NOT NULL DEFAULT 1,
+                allow_work_hours INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+            );
           ''');
         }
       },

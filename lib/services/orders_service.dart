@@ -13,7 +13,7 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/flexible_flow_shop_adapter.dart';
 import 'package:production_planning/services/adapters/flexible_job_shop_adapter.dart';
 import 'package:production_planning/services/adapters/job_shop_adapter.dart';
-import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
+import 'package:production_planning/services/adapters/flow_shop_adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
@@ -54,6 +54,7 @@ class OrdersService {
         jobModel.priority,
         jobModel.availableDate,
         preemptionMatrix: jobModel.preemptionMatrix,
+        interruptionPolicy: jobModel.interruptionPolicy,
         taskMachineTimes: taskMachineTimes,
         machineFinalStates: jobModel.machineFinalStates,
       );
@@ -568,24 +569,34 @@ class OrdersService {
       scheduleOrder(Tuple3<int, String, String> sch) async {
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
-              orderRepository: orderRepo, 
-              machineRepository: machineRepo)
+              orderRepository: orderRepo,
+              machineRepository: machineRepo,
+              setupTimeService: setupTimeService)
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo,
+              setupTimeService: setupTimeService)
           .parallelMachineAdapter(sch.value1, sch.value2)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
-              machineRepository: machineRepo, 
-              orderRepository: orderRepo)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo,
+              setupTimeService: setupTimeService)
           .flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo,
+              setupTimeService: setupTimeService)
           .flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => await FlexibleJobShopAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo,
+              setupTimeService: setupTimeService)
           .flexibleJobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
           'JOB SHOP' => await JobShopAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo,
+              setupTimeService: setupTimeService)
             .jobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo,

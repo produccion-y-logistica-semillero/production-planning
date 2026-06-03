@@ -98,12 +98,23 @@ class MachinesService {
     required int machineId,
     required int continueCapacity,
     Duration? restTime,
-  }) {
-    return repository.updateAutomaticInactivity(
+  }) async {
+    final response = await repository.updateAutomaticInactivity(
       machineId: machineId,
       continueCapacity: continueCapacity,
       restTime: restTime,
     );
+
+    return response.map((updated) {
+      if (updated) {
+        _standardTimesCache.clear();
+      }
+      return updated;
+    });
+  }
+
+  Future<Either<Failure, MachineEntity>> getMachineById(int id) {
+    return repository.getMachineById(id);
   }
 
   Future<Either<Failure, List<MachineInactivityEntity>>> getMachineInactivities(

@@ -14,6 +14,9 @@ import 'package:production_planning/services/algorithms/open_shop.dart';
 import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/services/scheduling/schedule_calendar_utils.dart';
+import 'package:production_planning/shared/utils/changeover_matrix_utils.dart';
+import 'package:production_planning/shared/utils/machine_downtime_utils.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class OpenShopAdapter {
@@ -106,26 +109,29 @@ class OpenShopAdapter {
     final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
     final Map<int, int> machineContinueCapacityMap = {};
     final Map<int, Duration?> machineRestTimeMap = {};
-    for (final machine in machines) {
-      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      // Calculate rest duration from percentage (100% = 1 hour base)
-      machineRestTimeMap[machine.id!] =
-          Duration(minutes: (60 * machine.restPercentage / 100).round());
-    }
+    buildMachineDowntimeMaps(
+      machines,
+      inactivities: machineInactivitiesMap,
+      continueCapacity: machineContinueCapacityMap,
+      restTime: machineRestTimeMap,
+    );
 
-    // Obtener la matriz de changeover
-    final changeoverMatrixResult =
-        await setupTimeService.buildChangeoverMatrix();
-    final changeoverMatrix = changeoverMatrixResult.fold(
-      (_) => const <int, Map<int?, Map<int, Duration>>>{},
-      (matrix) => matrix,
+    final sequenceIds = order.orderJobs!
+        .where((j) => j.sequence?.id != null)
+        .map((j) => j.sequence!.id!)
+        .toSet();
+    final changeoverMatrix = await loadMergedChangeoverMatrix(
+      setupTimeService,
+      machines,
+      sequenceIds,
     );
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
       buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
       buildJobMachineStates(order.orderJobs!, machines);
+    final jobInterruptionPolicies =
+        buildJobInterruptionPolicies(order.orderJobs!);
 
     // Ejecutar el algoritmo Open Shop en un isolate y transformar la salida en PlanningMachineEntity
     final payload = <String, dynamic>{
@@ -179,6 +185,8 @@ class OpenShopAdapter {
       }),
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
+      'jobInterruptionPolicies':
+          serializeJobInterruptionPolicies(jobInterruptionPolicies),
     };
 
     List<Map<String, dynamic>> rawOutput;

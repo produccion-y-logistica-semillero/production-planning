@@ -76,6 +76,25 @@ class MachineDaoSqllite implements MachineDao{
   }
 
   @override
+  Future<Map<String, dynamic>> getMachineById(int id) async {
+    try {
+      final result = await db.query(
+        'MACHINES',
+        where: 'machine_id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (result.isEmpty) {
+        throw LocalStorageFailure();
+      }
+      return result.first;
+    } catch (error) {
+      print('Error fetching machine by id $id: ${error.toString()}');
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
   Future<bool> updateMachine(int machineId, Map<String, dynamic> values) async {
     try {
       final updated = await db.update(

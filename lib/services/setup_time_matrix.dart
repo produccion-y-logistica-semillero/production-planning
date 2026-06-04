@@ -24,7 +24,7 @@
 // This is precisely what the project leader's image flags:
 //   "Tiempos de alistamiento según job y máquina dependientes de la secuencia"
 // =============================================================================
-
+//
 /// One (fromState → toState) cell together with its setup cost in minutes.
 class SetupTimeMatrixEntry {
   final String fromState;

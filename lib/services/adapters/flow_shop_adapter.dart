@@ -195,7 +195,8 @@ class FlowShopAdapter {
     // ── 8. Metrics ────────────────────────────────────────────────────────
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      return Tuple4(job.availableDate, out.endTime, out.dueDate, job.priority);
+      return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
+          job.priority);
     }).toList();
 
     return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));

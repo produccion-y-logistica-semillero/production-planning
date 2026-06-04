@@ -165,7 +165,8 @@ class ParallelMachineAdapter {
       machinesResult,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-        return Tuple4(job.availableDate, out.endDate, out.dueDate, job.priority);
+        return Tuple5(out.jobId, job.availableDate, out.endDate, out.dueDate,
+            job.priority);
       }).toList(),
     );
 

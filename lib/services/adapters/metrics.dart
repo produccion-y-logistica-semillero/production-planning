@@ -5,35 +5,45 @@ import 'package:production_planning/entities/planning_task_entity.dart';
 
 
 Metrics getMetricts(List<PlanningMachineEntity> machines,
-    List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates) {
+    List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates) {
 
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
   }
 
-  // IDLE METRIC
-  Duration totalIdle = Duration.zero;
+  final Map<int, Duration> processingTimeByJob = {};
+  final Map<int, DateTime> completionByJob = {};
+  Duration totalBusyTime = Duration.zero;
+  DateTime? earliestTaskStart;
+  DateTime? latestTaskEnd;
+
   for (final machine in machines) {
-    DateTime? previousEnd;
     for (final task in machine.tasks) {
-      if (previousEnd == null) {
-        previousEnd = task.endDate;
-      } else {
-        final currentIdle = task.startDate.difference(previousEnd);
-        totalIdle += currentIdle;
-        previousEnd = task.endDate;
+      final taskDuration = task.endDate.difference(task.startDate);
+      totalBusyTime += taskDuration;
+
+      final jobId = task.jobId;
+      processingTimeByJob[jobId] =
+          (processingTimeByJob[jobId] ?? Duration.zero) + taskDuration;
+
+      final jobEnd = completionByJob[jobId];
+      if (jobEnd == null || task.endDate.isAfter(jobEnd)) {
+        completionByJob[jobId] = task.endDate;
       }
+
+      earliestTaskStart = earliestTaskStart == null || task.startDate.isBefore(earliestTaskStart)
+          ? task.startDate
+          : earliestTaskStart;
+      latestTaskEnd = latestTaskEnd == null || task.endDate.isAfter(latestTaskEnd)
+          ? task.endDate
+          : latestTaskEnd;
     }
   }
 
-  final Duration idle = machines.isEmpty
-      ? Duration.zero
-      : Duration(minutes: totalIdle.inMinutes ~/ machines.length);
-
-  // Si no hay trabajos, retornamos métricas vacías seguras
-  if (jobsDates.isEmpty) {
+  final int jobCount = jobsDates.length;
+  if (jobCount == 0) {
     return Metrics(
-      idle: idle,
+      idle: Duration.zero,
       totalJobs: 0,
       maxDelay: Duration.zero,
       avarageProcessingTime: Duration.zero,
@@ -49,80 +59,79 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     );
   }
 
-  // average processing time
-  final totalProcessingTime = jobsDates
-      .map((tuple) => tuple.value2.difference(tuple.value1))
-      .fold(Duration.zero, (a, b) => a + b);
-  final averageProcessingTime =
-      Duration(minutes: totalProcessingTime.inMinutes ~/ jobsDates.length);
+  final Duration makespan = (earliestTaskStart != null && latestTaskEnd != null)
+      ? latestTaskEnd.difference(earliestTaskStart)
+      : Duration.zero;
 
-  // average tardiness
-  final totalTardiness = jobsDates
-      .map((dates) => dates.value2.isAfter(dates.value3)
-          ? dates.value2.difference(dates.value3)
-          : Duration.zero)
-      .fold(Duration.zero, (a, b) => a + b);
-  final averageTardiness =
-      Duration(minutes: totalTardiness.inMinutes ~/ jobsDates.length);
+  final Duration totalMachineHorizon = Duration(
+    microseconds: makespan.inMicroseconds * machines.length,
+  );
+  final Duration idle = totalMachineHorizon - totalBusyTime;
 
-  // max tardiness
-  final maxTardiness = jobsDates
-      .map((dates) => dates.value2.isAfter(dates.value3)
-          ? dates.value2.difference(dates.value3)
-          : Duration.zero)
-      .fold(Duration.zero, (a, b) => a.inMinutes > b.inMinutes ? a : b);
+  Duration totalProcessingTime = Duration.zero;
+  Duration totalFlowTime = Duration.zero;
+  Duration totalTardiness = Duration.zero;
+  Duration totalLateness = Duration.zero;
+  Duration maxTardiness = Duration.zero;
+  Duration maxLateness = Duration.zero;
+  int delayedJobs = 0;
+  int totalWeightedTardinessMicros = 0;
 
-  // average lateness (can be negative)
-  final totalLatenessTime = jobsDates
-      .map((dates) => dates.value2.difference(dates.value3))
-      .fold(Duration.zero, (a, b) => a + b);
-  final averageLateness =
-      Duration(minutes: totalLatenessTime.inMinutes ~/ jobsDates.length);
+  for (final tuple in jobsDates) {
+    final jobId = tuple.value1;
+    final availableDate = tuple.value2;
+    final dueDate = tuple.value4;
+    final priority = tuple.value5;
+    final completionDate = completionByJob[jobId] ?? availableDate;
 
-  // max lateness
-  final maxLateness = jobsDates
-      .map((dates) => dates.value2.difference(dates.value3))
-      .fold(Duration.zero, (a, b) => a.inMinutes > b.inMinutes ? a : b);
+    final processingTime = processingTimeByJob[jobId] ?? Duration.zero;
+    totalProcessingTime += processingTime;
 
-  // late jobs
-  final delayedJobs =
-      jobsDates.where((dates) => dates.value2.isAfter(dates.value3)).length;
+    final flowTime = completionDate.difference(availableDate);
+    totalFlowTime += flowTime;
 
-  // total weighted tardiness: sum of max(delay,0) * priority
-  int totalWeightedTardinessMinutes = 0;
-  for (final dates in jobsDates) {
-    final delay = dates.value2.isAfter(dates.value3)
-        ? dates.value2.difference(dates.value3)
-        : Duration.zero;
-    final priority = dates.value4;
-    totalWeightedTardinessMinutes += delay.inMinutes * priority;
+    final lateness = completionDate.difference(dueDate);
+    totalLateness += lateness;
+
+    final tardiness = lateness.isNegative ? Duration.zero : lateness;
+    totalTardiness += tardiness;
+    if (tardiness > maxTardiness) {
+      maxTardiness = tardiness;
+    }
+    if (lateness > maxLateness) {
+      maxLateness = lateness;
+    }
+    if (!tardiness.isNegative && tardiness > Duration.zero) {
+      delayedJobs += 1;
+    }
+
+    totalWeightedTardinessMicros += priority * tardiness.inMicroseconds;
   }
-  final totalWeightedTardiness =
-      Duration(minutes: totalWeightedTardinessMinutes);
 
-  // makespan: difference between earliest release and latest delivery
-  DateTime earliestRelease =
-      jobsDates.map((t) => t.value1).reduce((a, b) => a.isBefore(b) ? a : b);
-  DateTime latestEnd =
-      jobsDates.map((t) => t.value2).reduce((a, b) => a.isAfter(b) ? a : b);
-  final makespan = latestEnd.difference(earliestRelease);
-
-  // total flow: sum of (end - start) per job
-  final totalFlow = totalProcessingTime;
+  final Duration averageProcessingTime = Duration(
+    microseconds: totalProcessingTime.inMicroseconds ~/ jobCount,
+  );
+  final Duration averageTardiness = Duration(
+    microseconds: totalTardiness.inMicroseconds ~/ jobCount,
+  );
+  final Duration averageLateness = Duration(
+    microseconds: totalLateness.inMicroseconds ~/ jobCount,
+  );
 
   return Metrics(
-    idle: idle,
-    totalJobs: jobsDates.length,
+    idle: idle.isNegative ? Duration.zero : idle,
+    totalJobs: jobCount,
     maxDelay: maxTardiness,
     avarageProcessingTime: averageProcessingTime,
     avarageDelayTime: averageTardiness,
     avarageLatenessTime: averageLateness,
     delayedJobs: delayedJobs,
     makespan: makespan,
-    totalFlow: totalFlow,
+    totalFlow: totalFlowTime,
     totalTardiness: totalTardiness,
     maxTardiness: maxTardiness,
-    totalWeightedTardiness: totalWeightedTardiness,
+    totalWeightedTardiness:
+        Duration(microseconds: totalWeightedTardinessMicros),
     maxLateness: maxLateness,
   );
 }

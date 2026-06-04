@@ -196,11 +196,11 @@ class JobShopAdapter {
     }
 
     // Calculate metrics
-    final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
+    final List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-      jobsDates.add(Tuple4(
-          job.availableDate, out.endTime, out.dueDate, job.priority));
+      jobsDates.add(Tuple5(out.dbJobId, out.startDate, out.endTime, out.dueDate,
+          job.priority));
     }
 
     final metrics = getMetricts(planningMachines, jobsDates);

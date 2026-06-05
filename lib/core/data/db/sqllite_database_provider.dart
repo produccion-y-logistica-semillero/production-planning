@@ -502,116 +502,902 @@ class SQLLiteDatabaseProvider {
         // 8: Flexible Open Shop
         [1, 2, 3, 4, 5, 11, 12, 13, 24].forEach((r) => addRule(8, r));
 
-        // Orders
-        batch.insert('orders', {'reg_date': '2024-09-08'});
-        batch.insert('orders', {'reg_date': '2024-09-07'});
-        batch.insert('orders', {'reg_date': '2024-09-06'});
+        //----------
+        // ============================================================
+        // CONTEXTO: PANADERÍA Y PASTELERÍA "DELICIAS DEL DÍA"
+        // ============================================================
+        // Estaciones de trabajo = MACHINE_TYPES
+        // Máquinas específicas = MACHINES
+        // Recetas/Procesos = SEQUENCES
+        // Tareas por receta = TASKS
+        // Órdenes de clientes = ORDERS
+        // Programas de producción = JOBS
+        // ============================================================
 
-        // Jobs
-        batch.insert('jobs', {
-          'sequence_id': 1,
-          'order_id': 1,
-          'amount': 100,
-          'due_date': '2024-09-10',
-          'priority': 1,
-          'available_date': '2024-09-10',
-        });
-        batch.insert('jobs', {
-          'sequence_id': 2,
-          'order_id': 2,
-          'amount': 200,
-          'due_date': '2024-09-11',
-          'priority': 2,
-          'available_date': '2024-09-10',
-        });
-        batch.insert('jobs', {
-          'sequence_id': 3,
-          'order_id': 3,
-          'amount': 150,
-          'due_date': '2024-09-12',
-          'priority': 3,
-          'available_date': '2024-09-10',
-        });
-
-        // Custom Orders (The ones that were huge blocks)
-
-        // Machine Type 4
+        // --- ESTACIONES DE TRABAJO (Machine Types) ---
+        // IDs explícitos: las estaciones base (Type A/B/C) ocupan 1-3,
+        // por lo que la panadería arranca en 4. NO depender del autoincrement.
         batch.insert('machine_types', {
-          'name': 'Maquina coser',
-          'description': 'Maquina para coser prendas de vestir',
-        }); // ID 4 implicit if autoinc works seq
-
-        // Machine 4
-        batch.insert('machines', {
           'machine_type_id': 4,
-          'machine_name': 'Maquina de coser pro',
+          'name': 'Mezclado y Amasado',
+          'description': 'Estación de preparación de masas y mezclas base',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 5,
+          'name': 'Formado y Moldeado',
+          'description': 'Estación de conformado de piezas y divisiones',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 6,
+          'name': 'Horneado',
+          'description': 'Estación de cocción en hornos industriales',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 7,
+          'name': 'Decorado y Acabado',
+          'description': 'Estación de baños, glaseados y montaje de pasteles',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 8,
+          'name': 'Enfriado y Empaque',
+          'description': 'Estación de enfriamiento en bandas y empaque final',
+        });
+
+        // --- MÁQUINAS (Estaciones de trabajo específicas) ---
+        // IDs explícitos (4-13) y machine_type_id corregido (4-8).
+        batch.insert('machines', {
+          'machine_id': 4,
+          'machine_type_id': 4,
+          'machine_name': 'Amasadora Industrial 50L',
           'status_id': 1,
           'processing_percentage': 100.0,
           'preparation_percentage': 100.0,
           'rest_percentage': 100.0,
-          'continue_capacity': 1,
-          'availability_time': '2024-09-08 01:00:00',
+          'continue_capacity': 8,
+          'availability_time': '2024-10-14 04:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 5,
+          'machine_type_id': 4,
+          'machine_name': 'Amasadora Rápida 20L',
+          'status_id': 1,
+          'processing_percentage': 95.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 5,
+          'availability_time': '2024-10-14 05:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 6,
+          'machine_type_id': 5,
+          'machine_name': 'Moldeadora de Barras',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 4,
+          'availability_time': '2024-10-14 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 7,
+          'machine_type_id': 5,
+          'machine_name': 'Divisora de Masa Redonda',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 6,
+          'availability_time': '2024-10-14 06:30:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 8,
+          'machine_type_id': 6,
+          'machine_name': 'Horno de Carro 4 Niveles',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 90.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-14 05:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 9,
+          'machine_type_id': 6,
+          'machine_name': 'Horno de Convección Compacto',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 4,
+          'availability_time': '2024-10-14 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 10,
+          'machine_type_id': 7,
+          'machine_name': 'Mesa de Decorado Refrigerada',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 3,
+          'availability_time': '2024-10-14 07:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 11,
+          'machine_type_id': 7,
+          'machine_name': 'Máquina de Glaseado Automático',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 2,
+          'availability_time': '2024-10-14 08:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 12,
+          'machine_type_id': 8,
+          'machine_name': 'Banda de Enfriamiento 5m',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 12,
+          'availability_time': '2024-10-14 05:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 13,
+          'machine_type_id': 8,
+          'machine_name': 'Empacadora al Vacío con Etiquetado',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 6,
+          'availability_time': '2024-10-14 08:00:00',
         });
 
-        // Sequences 4, 5
-        batch.insert('sequences', {'name': 'Coser pantalon'});
-        batch.insert('sequences', {'name': 'Coser camiseta'});
+        // --- SECUENCIAS (Recetas / Programas de producción) ---
+        // IDs explícitos: las base (Alpha/Beta/Gamma) ocupan 1-3 → arrancamos en 4.
+        batch.insert(
+            'sequences', {'sequence_id': 4, 'name': 'Pan Artesanal de Molde'});
+        batch.insert('sequences',
+            {'sequence_id': 5, 'name': 'Croissants de Mantequilla'});
+        batch.insert('sequences',
+            {'sequence_id': 6, 'name': 'Pastel de Chocolate Familiar'});
+        batch.insert(
+            'sequences', {'sequence_id': 7, 'name': 'Galletas de Avena y Miel'});
 
-        // Tasks
+        // --- TAREAS por Secuencia ---
+        // sequence_id y machine_type_id corregidos para coincidir con los
+        // IDs explícitos asignados arriba (secuencias 4-7, tipos 4-8).
+        // Secuencia 4: Pan Artesanal de Molde
         batch.insert('tasks', {
-          'n_proc_units': '2024-09-08 04:30:00',
-          'description': 'Coser pantalon',
+          'n_proc_units': '2024-10-14 04:30:00',
+          'description': 'Mezclado de harina, agua, levadura y sal',
           'sequence_id': 4,
           'machine_type_id': 4,
           'allow_preemption': 0,
         });
         batch.insert('tasks', {
-          'n_proc_units': '2024-09-08 06:30:00',
-          'description': 'Coser camiseta',
+          'n_proc_units': '2024-10-14 05:00:00',
+          'description': 'Amasado desarrollo de gluten',
+          'sequence_id': 4,
+          'machine_type_id': 4,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 06:00:00',
+          'description': 'Formado de barras para molde',
+          'sequence_id': 4,
+          'machine_type_id': 5,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 07:30:00',
+          'description': 'Horneado lento 45 min',
+          'sequence_id': 4,
+          'machine_type_id': 6,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 08:30:00',
+          'description': 'Enfriado y empaque en bolsas kraft',
+          'sequence_id': 4,
+          'machine_type_id': 8,
+          'allow_preemption': 0,
+        });
+
+        // Secuencia 5: Croissants de Mantequilla
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 04:00:00',
+          'description': 'Mezclado de masa base croissant',
           'sequence_id': 5,
           'machine_type_id': 4,
           'allow_preemption': 0,
         });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 05:30:00',
+          'description': 'Laminado y formado de capas',
+          'sequence_id': 5,
+          'machine_type_id': 5,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 07:00:00',
+          'description': 'Horneado dorado 35 min',
+          'sequence_id': 5,
+          'machine_type_id': 6,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 08:00:00',
+          'description': 'Barnizado de almíbar de naranja',
+          'sequence_id': 5,
+          'machine_type_id': 7,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 08:30:00',
+          'description': 'Enfriado y empaque en cajas',
+          'sequence_id': 5,
+          'machine_type_id': 8,
+          'allow_preemption': 0,
+        });
 
-        // Order 4
-        batch.insert('orders', {'reg_date': '2024-10-08'});
+        // Secuencia 6: Pastel de Chocolate Familiar
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 06:00:00',
+          'description': 'Preparación de bizcocho de chocolate',
+          'sequence_id': 6,
+          'machine_type_id': 4,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 07:00:00',
+          'description': 'Horneado de bizcocho 50 min',
+          'sequence_id': 6,
+          'machine_type_id': 6,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 08:30:00',
+          'description': 'Decorado con ganache y frutas',
+          'sequence_id': 6,
+          'machine_type_id': 7,
+          'allow_preemption': 1,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 09:30:00',
+          'description': 'Refrigeración y empaque especial',
+          'sequence_id': 6,
+          'machine_type_id': 8,
+          'allow_preemption': 0,
+        });
 
-        // Jobs for Order 4
+        // Secuencia 7: Galletas de Avena y Miel
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 05:00:00',
+          'description': 'Mezclado de avena, miel y manteca',
+          'sequence_id': 7,
+          'machine_type_id': 4,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 06:00:00',
+          'description': 'Formado y estampado de galletas',
+          'sequence_id': 7,
+          'machine_type_id': 5,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 07:00:00',
+          'description': 'Horneado crujiente 25 min',
+          'sequence_id': 7,
+          'machine_type_id': 6,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'n_proc_units': '2024-10-14 08:00:00',
+          'description': 'Enfriado y empaque en frascos',
+          'sequence_id': 7,
+          'machine_type_id': 8,
+          'allow_preemption': 0,
+        });
+
+        // --- ÓRDENES DE CLIENTES ---
+        // IDs explícitos 1-3 (no había órdenes previas).
+        batch.insert('orders', {'order_id': 1, 'reg_date': '2024-10-14'});
+        batch.insert('orders', {'order_id': 2, 'reg_date': '2024-10-15'});
+        batch.insert('orders', {'order_id': 3, 'reg_date': '2024-10-16'});
+
+        // --- PROGRAMAS DE PRODUCCIÓN (Jobs) ---
+        // job_id explícito 1-5; sequence_id (4-7) y order_id (1-3) corregidos.
+        batch.insert('jobs', {
+          'job_id': 1,
+          'sequence_id': 4,
+          'order_id': 1,
+          'amount': 50,
+          'job_name': 'Lote Pan Integral Supermercado',
+          'due_date': '2024-10-18',
+          'priority': 2,
+          'available_date': '2024-10-14 04:00:00',
+        });
+        batch.insert('jobs', {
+          'job_id': 2,
+          'sequence_id': 5,
+          'order_id': 1,
+          'amount': 30,
+          'job_name': 'Lote Croissants Vitrina',
+          'due_date': '2024-10-18',
+          'priority': 3,
+          'available_date': '2024-10-14 04:00:00',
+        });
+        batch.insert('jobs', {
+          'job_id': 3,
+          'sequence_id': 6,
+          'order_id': 2,
+          'amount': 5,
+          'job_name': 'Pastel Cumpleaños El Rincón',
+          'due_date': '2024-10-17',
+          'priority': 1,
+          'available_date': '2024-10-15 06:00:00',
+        });
         batch.insert('jobs', {
           'job_id': 4,
-          'sequence_id': 4,
-          'order_id': 4,
-          'amount': 3,
-          'due_date': '2024-10-14',
-          'priority': 1,
-          'available_date': '2024-10-10 14:30',
+          'sequence_id': 7,
+          'order_id': 2,
+          'amount': 120,
+          'job_name': 'Galletas Avena Pedido Mayorista',
+          'due_date': '2024-10-19',
+          'priority': 2,
+          'available_date': '2024-10-15 05:00:00',
         });
         batch.insert('jobs', {
           'job_id': 5,
-          'sequence_id': 5,
-          'order_id': 4,
-          'amount': 2,
-          'due_date': '2024-10-18',
+          'sequence_id': 4,
+          'order_id': 3,
+          'amount': 25,
+          'job_name': 'Pan Artesanal Evento Corporativo',
+          'due_date': '2024-10-20',
           'priority': 1,
-          'available_date': '2024-10-10 17:30',
+          'available_date': '2024-10-16 06:00:00',
         });
+
+        // --- SETUP TIMES (Tiempos de preparación entre recetas) ---
+        // Limpieza de amasadora (machine 4) al cambiar de pan (4) a croissant (5)
+        batch.insert('setup_times', {
+          'machine_id': 4,
+          'from_sequence_id': 4,
+          'to_sequence_id': 5,
+          'setup_duration_minutes': 15,
+        });
+        // Ajuste de temperatura en horno de carro (machine 8): pan (4) -> pastel (6)
+        batch.insert('setup_times', {
+          'machine_id': 8,
+          'from_sequence_id': 4,
+          'to_sequence_id': 6,
+          'setup_duration_minutes': 20,
+        });
+        // Cambio de molde en formadora (machine 6): croissant (5) -> galleta (7)
+        batch.insert('setup_times', {
+          'machine_id': 6,
+          'from_sequence_id': 5,
+          'to_sequence_id': 7,
+          'setup_duration_minutes': 10,
+        });
+
+        // --- INACTIVIDADES PROGRAMADAS (Mantenimiento) ---
+        // Horno de Carro: mantenimiento profundo todos los lunes
+        batch.insert('machine_inactivities', {
+          'machine_id': 8,
+          'name': 'Mantenimiento Horno Carro',
+          'start_time': '06:00',
+          'duration_minutes': 120,
+          'monday': 1,
+          'tuesday': 0,
+          'wednesday': 0,
+          'thursday': 0,
+          'friday': 0,
+          'saturday': 0,
+          'sunday': 0,
+        });
+        // Amasadora 50L: mantenimiento preventivo viernes
+        batch.insert('machine_inactivities', {
+          'machine_id': 4,
+          'name': 'Limpieza Preventiva Amasadora',
+          'start_time': '14:00',
+          'duration_minutes': 60,
+          'monday': 0,
+          'tuesday': 0,
+          'wednesday': 0,
+          'thursday': 0,
+          'friday': 1,
+          'saturday': 0,
+          'sunday': 0,
+        });
+
+        // --- PREEMPCIÓN DE TRABAJOS ---
+        // El pastel decorado (job 3) SÍ puede interrumpirse; mesa de decorado = machine 10
+        batch.insert('job_preemption', {
+          'job_id': 3,
+          'machine_id': 10,
+          'can_preempt': 1,
+        });
+        // El pan artesanal (job 1) NO puede interrumpirse en el horno; horno carro = machine 8
+        batch.insert('job_preemption', {
+          'job_id': 1,
+          'machine_id': 8,
+          'can_preempt': 0,
+        });
+
+        //----------
+        // ============================================================
+        // SEGUNDA EMPRESA: MANUFACTURA TEXTIL "TELASINDUSTRIAL"
+        // ============================================================
+        // Tipos de máquinas: 9-17
+        // Máquinas: 14-26
+        // Secuencias: 8-12
+        // Tareas: 22-32
+        // Órdenes: 4-7
+        // Trabajos: 6-13
+        // ============================================================
+
+        // --- MACHINE TYPES (Textiles) ---
+        batch.insert('machine_types', {
+          'machine_type_id': 9,
+          'name': 'Planchado',
+          'description': 'Máquina de planchado industrial para telas',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 10,
+          'name': 'Corte',
+          'description': 'Máquina de corte automático',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 11,
+          'name': 'Teñido',
+          'description': 'Máquina de teñido por lotes',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 12,
+          'name': 'Lavado',
+          'description': 'Máquina lavadora industrial',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 13,
+          'name': 'Secado',
+          'description': 'Secadora industrial de tambor',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 14,
+          'name': 'Confección',
+          'description': 'Estación de costura y confección',
+        });
+        // Machine types para Flow Shop (1 máquina cada uno)
+        batch.insert('machine_types', {
+          'machine_type_id': 15,
+          'name': 'Tintorería Clásica',
+          'description': 'Máquina de tintura tradicional con 1 unidad',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 16,
+          'name': 'Enjuague Industrial',
+          'description': 'Máquina de enjuague automático con 1 unidad',
+        });
+        batch.insert('machine_types', {
+          'machine_type_id': 17,
+          'name': 'Prensado al Vapor',
+          'description': 'Prensa industrial de vapor con 1 unidad',
+        });
+
+        // --- MACHINES (Textiles) ---
+        // Single Machine: 1 planchadora
+        batch.insert('machines', {
+          'machine_id': 14,
+          'machine_type_id': 9,
+          'machine_name': 'Planchadora Industrial XL',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 5,
+          'availability_time': '2024-10-20 06:00:00',
+        });
+
+        // Parallel Machines: 2 cortadoras
+        batch.insert('machines', {
+          'machine_id': 15,
+          'machine_type_id': 10,
+          'machine_name': 'Cortadora Automática 1',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 8,
+          'availability_time': '2024-10-20 07:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 16,
+          'machine_type_id': 10,
+          'machine_name': 'Cortadora Automática 2',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 8,
+          'availability_time': '2024-10-20 07:30:00',
+        });
+
+        // Flow Shop: 1 máquina por etapa (Teñido, Lavado, Secado)
+        batch.insert('machines', {
+          'machine_id': 17,
+          'machine_type_id': 11,
+          'machine_name': 'Teñidor Industrial 1',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-20 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 18,
+          'machine_type_id': 12,
+          'machine_name': 'Lavadora Industrial 1',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-20 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 19,
+          'machine_type_id': 13,
+          'machine_name': 'Secadora Industrial 1',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 12,
+          'availability_time': '2024-10-20 06:00:00',
+        });
+
+        // Flexible Flow Shop: 2 máquinas por etapa (Corte, Confección, Control=Secado)
+        batch.insert('machines', {
+          'machine_id': 20,
+          'machine_type_id': 14,
+          'machine_name': 'Estación Costura 1',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 6,
+          'availability_time': '2024-10-20 08:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 21,
+          'machine_type_id': 14,
+          'machine_name': 'Estación Costura 2',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 6,
+          'availability_time': '2024-10-20 08:30:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 22,
+          'machine_type_id': 11,
+          'machine_name': 'Teñidor Industrial 2',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-20 06:30:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 23,
+          'machine_type_id': 12,
+          'machine_name': 'Lavadora Industrial 2',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-20 06:30:00',
+        });
+
+        // Flow Shop: 1 máquina por etapa (Tintorería, Enjuague, Prensado)
+        batch.insert('machines', {
+          'machine_id': 24,
+          'machine_type_id': 15,
+          'machine_name': 'Tintorería Clásica Principal',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 8,
+          'availability_time': '2024-10-22 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 25,
+          'machine_type_id': 16,
+          'machine_name': 'Enjuague Principal',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 8,
+          'availability_time': '2024-10-22 06:00:00',
+        });
+        batch.insert('machines', {
+          'machine_id': 26,
+          'machine_type_id': 17,
+          'machine_name': 'Prensa de Vapor Principal',
+          'status_id': 1,
+          'processing_percentage': 100.0,
+          'preparation_percentage': 100.0,
+          'rest_percentage': 100.0,
+          'continue_capacity': 10,
+          'availability_time': '2024-10-22 06:00:00',
+        });
+
+        // --- SEQUENCES (Textiles) ---
+        // Seq 8: Single Machine (solo planchado)
+        batch.insert('sequences',
+            {'sequence_id': 8, 'name': 'Planchado Simple Camisetas'});
+
+        // Seq 9: Parallel Machines (solo corte)
+        batch.insert('sequences',
+            {'sequence_id': 9, 'name': 'Corte de Telas Estándar'});
+
+        // Seq 10: Flow Shop (Teñido → Lavado → Secado con precedencias)
+        batch.insert('sequences',
+            {'sequence_id': 10, 'name': 'Ciclo Teñido Completo'});
+
+        // Seq 11: Flexible Flow Shop (Confección con precedencias)
+        batch.insert('sequences',
+            {'sequence_id': 11, 'name': 'Confección Camisas Premium'});
+
+        // Seq 12: Flow Shop (Tintorería → Enjuague → Prensado con precedencias)
+        batch.insert('sequences',
+            {'sequence_id': 12, 'name': 'Ciclo Tintura-Enjuague-Prensado'});
+
+        // --- TASKS (Textiles) ---
+        // Seq 8: Single Machine - 1 tarea (planchado)
+        batch.insert('tasks', {
+          'task_id': 22,
+          'n_proc_units': '1970-01-01 00:30:00',
+          'description': 'Planchado de camisetas',
+          'sequence_id': 8,
+          'machine_type_id': 9,
+          'allow_preemption': 0,
+        });
+
+        // Seq 9: Parallel Machines - 1 tarea (corte)
+        batch.insert('tasks', {
+          'task_id': 23,
+          'n_proc_units': '1970-01-01 00:45:00',
+          'description': 'Corte automático de telas',
+          'sequence_id': 9,
+          'machine_type_id': 10,
+          'allow_preemption': 0,
+        });
+
+        // Seq 10: Flow Shop - 3 tareas con precedencias
+        batch.insert('tasks', {
+          'task_id': 24,
+          'n_proc_units': '1970-01-01 01:00:00',
+          'description': 'Teñido de telas',
+          'sequence_id': 10,
+          'machine_type_id': 11,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 25,
+          'n_proc_units': '1970-01-01 00:45:00',
+          'description': 'Lavado de telas teñidas',
+          'sequence_id': 10,
+          'machine_type_id': 12,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 26,
+          'n_proc_units': '1970-01-01 01:15:00',
+          'description': 'Secado en tambor industrial',
+          'sequence_id': 10,
+          'machine_type_id': 13,
+          'allow_preemption': 0,
+        });
+
+        // Seq 11: Flexible Flow Shop - 3 tareas con precedencias
+        batch.insert('tasks', {
+          'task_id': 27,
+          'n_proc_units': '1970-01-01 00:50:00',
+          'description': 'Corte de piezas premium',
+          'sequence_id': 11,
+          'machine_type_id': 10,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 28,
+          'n_proc_units': '1970-01-01 02:00:00',
+          'description': 'Confección de camisas',
+          'sequence_id': 11,
+          'machine_type_id': 14,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 29,
+          'n_proc_units': '1970-01-01 00:30:00',
+          'description': 'Control de calidad y planchado final',
+          'sequence_id': 11,
+          'machine_type_id': 9,
+          'allow_preemption': 0,
+        });
+
+        // Seq 12: Flow Shop - 3 tareas con precedencias (1 máquina cada tipo)
+        batch.insert('tasks', {
+          'task_id': 30,
+          'n_proc_units': '1970-01-01 01:00:00',
+          'description': 'Tintura de lote',
+          'sequence_id': 12,
+          'machine_type_id': 15,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 31,
+          'n_proc_units': '1970-01-01 00:30:00',
+          'description': 'Enjuague tras tintura',
+          'sequence_id': 12,
+          'machine_type_id': 16,
+          'allow_preemption': 0,
+        });
+        batch.insert('tasks', {
+          'task_id': 32,
+          'n_proc_units': '1970-01-01 00:45:00',
+          'description': 'Prensado al vapor',
+          'sequence_id': 12,
+          'machine_type_id': 17,
+          'allow_preemption': 0,
+        });
+
+        // --- TASK DEPENDENCIES (Textiles) ---
+        // Flow Shop (Seq 10): Teñido → Lavado → Secado
+        batch.insert('TaskDependency', {
+          'predecessor_id': 24,
+          'successor_id': 25,
+          'sequence_id': 10,
+        });
+        batch.insert('TaskDependency', {
+          'predecessor_id': 25,
+          'successor_id': 26,
+          'sequence_id': 10,
+        });
+
+        // Flexible Flow Shop (Seq 11): Corte → Confección → Control
+        batch.insert('TaskDependency', {
+          'predecessor_id': 27,
+          'successor_id': 28,
+          'sequence_id': 11,
+        });
+        batch.insert('TaskDependency', {
+          'predecessor_id': 28,
+          'successor_id': 29,
+          'sequence_id': 11,
+        });
+
+        // Flow Shop (Seq 12): Tintura → Enjuague → Prensado
+        batch.insert('TaskDependency', {
+          'predecessor_id': 30,
+          'successor_id': 31,
+          'sequence_id': 12,
+        });
+        batch.insert('TaskDependency', {
+          'predecessor_id': 31,
+          'successor_id': 32,
+          'sequence_id': 12,
+        });
+
+        // --- ORDERS (Textiles) ---
+        // Order 4: SINGLE MACHINE
+        batch.insert('orders', {'order_id': 4, 'reg_date': '2024-10-20'});
+        // Order 5: PARALLEL MACHINES
+        batch.insert('orders', {'order_id': 5, 'reg_date': '2024-10-21'});
+        // Order 6: FLOW SHOP
+        batch.insert('orders', {'order_id': 6, 'reg_date': '2024-10-22'});
+        // Order 7: FLEXIBLE FLOW SHOP
+        batch.insert('orders', {'order_id': 7, 'reg_date': '2024-10-23'});
+
+        // --- JOBS (Textiles) ---
+        // Order 4: SINGLE MACHINE (2 jobs de seq 8)
         batch.insert('jobs', {
           'job_id': 6,
-          'sequence_id': 4,
+          'sequence_id': 8,
           'order_id': 4,
-          'amount': 5,
-          'due_date': '2024-10-17',
-          'priority': 1,
-          'available_date': '2024-10-10 14:30',
+          'amount': 100,
+          'job_name': 'Camisetas Blancas Lote A',
+          'due_date': '2024-10-25',
+          'priority': 2,
+          'available_date': '2024-10-20 06:00:00',
         });
         batch.insert('jobs', {
           'job_id': 7,
-          'sequence_id': 5,
+          'sequence_id': 8,
           'order_id': 4,
-          'amount': 7,
-          'due_date': '2024-10-21',
+          'amount': 80,
+          'job_name': 'Camisetas Negras Lote B',
+          'due_date': '2024-10-25',
+          'priority': 2,
+          'available_date': '2024-10-20 06:30:00',
+        });
+
+        // Order 5: PARALLEL MACHINES (2 jobs de seq 9)
+        batch.insert('jobs', {
+          'job_id': 8,
+          'sequence_id': 9,
+          'order_id': 5,
+          'amount': 60,
+          'job_name': 'Corte Mezclilla Lote A',
+          'due_date': '2024-10-24',
           'priority': 1,
-          'available_date': '2024-10-10 22:30',
+          'available_date': '2024-10-20 07:00:00',
+        });
+        batch.insert('jobs', {
+          'job_id': 9,
+          'sequence_id': 9,
+          'order_id': 5,
+          'amount': 50,
+          'job_name': 'Corte Algodón Lote B',
+          'due_date': '2024-10-24',
+          'priority': 1,
+          'available_date': '2024-10-20 07:30:00',
+        });
+
+        // Order 6: FLOW SHOP (2 jobs de seq 12)
+        batch.insert('jobs', {
+          'job_id': 10,
+          'sequence_id': 12,
+          'order_id': 6,
+          'amount': 75,
+          'job_name': 'Tintura Azul Marino',
+          'due_date': '2024-10-26',
+          'priority': 1,
+          'available_date': '2024-10-22 06:00:00',
+        });
+        batch.insert('jobs', {
+          'job_id': 11,
+          'sequence_id': 12,
+          'order_id': 6,
+          'amount': 60,
+          'job_name': 'Tintura Rojo Intenso',
+          'due_date': '2024-10-26',
+          'priority': 1,
+          'available_date': '2024-10-22 06:30:00',
+        });
+
+        // Order 7: FLEXIBLE FLOW SHOP (2 jobs de seq 11)
+        batch.insert('jobs', {
+          'job_id': 12,
+          'sequence_id': 11,
+          'order_id': 7,
+          'amount': 40,
+          'job_name': 'Camisas Blancas Premium',
+          'due_date': '2024-10-27',
+          'priority': 1,
+          'available_date': '2024-10-23 08:00:00',
+        });
+        batch.insert('jobs', {
+          'job_id': 13,
+          'sequence_id': 11,
+          'order_id': 7,
+          'amount': 35,
+          'job_name': 'Camisas Azules Premium',
+          'due_date': '2024-10-27',
+          'priority': 1,
+          'available_date': '2024-10-23 08:30:00',
         });
 
         await batch.commit(noResult: true);
@@ -743,7 +1529,7 @@ class SQLLiteDatabaseProvider {
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
-        ''' );
+        ''');
           // Migrar datos existentes con porcentaje 100%
           await db.execute('''
           INSERT INTO MACHINES_NEW (machine_id, machine_name, machine_type_id, status_id, 
@@ -783,11 +1569,13 @@ class SQLLiteDatabaseProvider {
           );
         }
         if (oldVersion < 9) {
-          await db.execute('ALTER TABLE jobs ADD COLUMN job_name VARCHAR(100);');
+          await db
+              .execute('ALTER TABLE jobs ADD COLUMN job_name VARCHAR(100);');
 
           // Ensure legacy order_setup_matrix tables are upgraded to include machine_name.
           try {
-            await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
+            await db.execute(
+                'ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
           } catch (_) {
             // Ignore if the column already exists or the table does not exist yet.
           }
@@ -810,7 +1598,7 @@ class SQLLiteDatabaseProvider {
         }
       },
     );
-    
+
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS job_machine_states (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -820,7 +1608,7 @@ class SQLLiteDatabaseProvider {
           FOREIGN KEY (job_id) REFERENCES jobs(job_id)
       );
     ''');
-    
+
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS order_setup_matrix (
           machine_name TEXT NOT NULL,
@@ -845,20 +1633,25 @@ class SQLLiteDatabaseProvider {
     }
 
     if (!columns.contains('machine_name')) {
-      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
+      await db.execute(
+          'ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
     }
     if (!columns.contains('from_state')) {
-      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN from_state TEXT NOT NULL DEFAULT "";');
+      await db.execute(
+          'ALTER TABLE order_setup_matrix ADD COLUMN from_state TEXT NOT NULL DEFAULT "";');
     }
     if (!columns.contains('to_state')) {
-      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN to_state TEXT NOT NULL DEFAULT "";');
+      await db.execute(
+          'ALTER TABLE order_setup_matrix ADD COLUMN to_state TEXT NOT NULL DEFAULT "";');
     }
     if (!columns.contains('duration_minutes')) {
-      await db.execute('ALTER TABLE order_setup_matrix ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 0;');
+      await db.execute(
+          'ALTER TABLE order_setup_matrix ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 0;');
     }
   }
 
-  static Future<List<String>> _getTableColumns(Database db, String table) async {
+  static Future<List<String>> _getTableColumns(
+      Database db, String table) async {
     final info = await db.rawQuery('PRAGMA table_info($table);');
     return info.map((row) => row['name'] as String).toList();
   }

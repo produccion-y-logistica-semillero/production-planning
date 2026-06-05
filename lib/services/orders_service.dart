@@ -26,8 +26,8 @@ class OrdersService {
 
   OrdersService(this.orderRepo, this.machineRepo, this.setupTimeService);
 
-  Future<Either<Failure, bool>> addOrder(
-      List<NewOrderRequestModel> model, {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+  Future<Either<Failure, bool>> addOrder(List<NewOrderRequestModel> model,
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
     final List<JobEntity> jobs = model.map((jobModel) {
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
       if (jobModel.taskMachineTimesMinutes != null) {
@@ -64,7 +64,8 @@ class OrdersService {
           'OrdersService.addOrder: sequence=${m.sequenceId} taskMachineTimesMinutes=${m.taskMachineTimesMinutes}');
     }
 
-    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs, setupTimeMatrix: setupTimeMatrix);
+    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs,
+        setupTimeMatrix: setupTimeMatrix);
     try {
       return await orderRepo.createOrder(newOrder);
     } catch (error, stack) {
@@ -134,11 +135,15 @@ class OrdersService {
       print("La orden no tiene trabajos asociados");
       return Left(LocalStorageFailure());
     }
-    if (order.orderJobs!.any((job) =>
+    final emptyJob = order.orderJobs!.where((job) =>
         job.sequence == null ||
         job.sequence!.tasks == null ||
-        job.sequence!.tasks!.isEmpty)) {
-      print("Al menos un trabajo no tiene tareas asociadas");
+        job.sequence!.tasks!.isEmpty);
+    if (emptyJob.isNotEmpty) {
+      for (final job in emptyJob) {
+        print("El job ${job.jobId} (secuencia ${job.sequence?.id}) no tiene "
+            "tareas asociadas: la secuencia está vacía o no existe en la BD.");
+      }
       return Left(LocalStorageFailure());
     }
 
@@ -568,30 +573,34 @@ class OrdersService {
       scheduleOrder(Tuple3<int, String, String> sch) async {
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
-              orderRepository: orderRepo, 
-              machineRepository: machineRepo)
+              orderRepository: orderRepo, machineRepository: machineRepo)
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .parallelMachineAdapter(sch.value1, sch.value2)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
-              machineRepository: machineRepo, 
-              orderRepository: orderRepo)
+              machineRepository: machineRepo, orderRepository: orderRepo)
           .flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => await FlexibleJobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleJobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
-          'JOB SHOP' => await JobShopAdapter(
+          .flexibleJobShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
+      'JOB SHOP' => await JobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-            .jobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+          .jobShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo,
               orderRepository: orderRepo,
               setupTimeService: setupTimeService)
-          .openShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+          .openShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
       String() => Left(EnviromentNotCorrectFailure()),
     };
   }

@@ -126,13 +126,13 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Tiempo de procesamiento continuo',
+          'Tiempo máximo de procesamiento continuo',
           style: theme.textTheme.titleMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cada cuántos procesos la máquina debe tomar un descanso y la duración en minutos de esa pausa.',
+          'Define el tiempo máximo de procesamiento continuo que la máquina puede realizar antes de tomar un descanso y la duración en minutos de esa pausa.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
@@ -143,7 +143,7 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                 controller: _continueCapacityController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Procesamientos continuos',
+                  labelText: 'Tiempo máximo de procesamiento continuo',
                   hintText: 'Ej. 4',
                 ),
               ),
@@ -173,7 +173,7 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save),
-            label: const Text('Guardar tiempo de procesamiento continuo'),
+            label: const Text('Guardar tiempo máximo de procesamiento continuo'),
           ),
         ),
       ],
@@ -324,7 +324,7 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     final continueCapacity =
         int.tryParse(_continueCapacityController.text.trim());
     if (continueCapacity == null || continueCapacity <= 0) {
-      _showSnack('Ingresa un número válido de procesamientos continuos.',
+      _showSnack('Ingresa un número válido para el tiempo máximo de procesamiento continuo.',
           isError: true);
       return;
     }

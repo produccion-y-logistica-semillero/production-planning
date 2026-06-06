@@ -151,12 +151,12 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         const Divider(),
         const SizedBox(height: 16),
         Text(
-          'Tiempo de procesamiento continuo',
+          'Tiempo máximo de procesamiento continuo',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cada cuántos procesos la máquina debe tomar un descanso y la duración en minutos de esa pausa.',
+          'Define el tiempo máximo de procesamiento continuo que la máquina puede realizar antes de tomar un descanso y la duración en minutos de esa pausa.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
@@ -167,7 +167,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 controller: widget.continueController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Procesamientos continuos',
+                  labelText: 'Tiempo máximo de procesamiento continuo',
                   hintText: 'Ej. 4',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -195,10 +195,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
           child: ElevatedButton.icon(
             onPressed: () {
               FocusScope.of(context).unfocus();
-              _showSnack('Tiempo de procesamiento continuo listo para guardarse con la máquina.');
+              _showSnack('Tiempo máximo de procesamiento continuo listo para guardarse con la máquina.');
             },
             icon: const Icon(Icons.save),
-            label: const Text('Guardar tiempo de procesamiento continuo'),
+            label: const Text('Guardar tiempo máximo de procesamiento continuo'),
           ),
         ),
       ],

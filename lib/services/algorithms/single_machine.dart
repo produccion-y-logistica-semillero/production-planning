@@ -468,10 +468,10 @@ void scheduleTabuSearch() {
     _generateOutput(input);
     return;
   }
-const int maxIterations       = 1000;  // maximas iteraciones 
+const int maxIterations       = 200;  // maximas iteraciones 
 const int tabuTenure          = 10;   // cuántas iteraciones permanece prohibido un movimiento.
-const int maxNoImprove        = 50;  //  Numero de maximo de iteraciones sin mejora 
-const int vecinosPorIteracion = 8;   // Cantidad  de swaps por iteracion 
+const int maxNoImprove        = 20;  //  Numero de maximo de iteraciones sin mejora 
+const int vecinosPorIteracion = 7;   // Cantidad  de swaps por iteracion 
 
   // Solución inicial aleatoria
   List<SingleMachineInput> currentSolution =List.from(input)..shuffle();

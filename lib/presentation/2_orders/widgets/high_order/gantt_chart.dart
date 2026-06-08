@@ -58,7 +58,11 @@ class _GanttChartState extends State<GanttChart> {
   @override
   void initState() {
     super.initState();
+    // Ensure _selectedRule is valid from the items list
     _selectedRule = widget.selectedRule;
+    if (_selectedRule == null && widget.items.isNotEmpty) {
+      _selectedRule = widget.items.first.value;
+    }
     _calculateChartDateRange();
 
     initialHour = widget.schedule.value1.hour;
@@ -179,11 +183,9 @@ class _GanttChartState extends State<GanttChart> {
       children: [
         DropdownButton<int>(
           value: _selectedRule,
-          items: widget.items
-              .where((item) => item.value == _selectedRule)
-              .toList(),
+          items: widget.items.isNotEmpty ? widget.items : [DropdownMenuItem<int>(value: -1, child: Text('No hay reglas disponibles'))],
           onChanged: (int? id) {
-            if (id != null) {
+            if (id != null && id != -1) {
               setState(() {
                 _selectedRule = id;
               });

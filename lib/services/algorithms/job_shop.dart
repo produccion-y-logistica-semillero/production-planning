@@ -14,8 +14,8 @@ class JobShop {
   // job id -> List of <machine id, duration>
   // Cada trabajo tiene su propia ruta y duración en las máquinas
 
-  List<DateTime> machineAvailability = [];
-  // Registro de disponibilidad de cada máquina
+  Map<int, DateTime> machineAvailability = {};
+  // Registro de disponibilidad de cada máquina por machineId
 
   List<Tuple3<int, int, Tuple2<DateTime, DateTime>>> output = [];
   // job id | machine id | <start, end time>
@@ -28,19 +28,19 @@ class JobShop {
     String rule,
   ) {
     // Inicializar la disponibilidad de las máquinas
-    int totalMachines = _getTotalMachines();
-    machineAvailability = List.generate(totalMachines, (_) => startDate);
+    for (final machineId in _getMachineIds()) {
+      machineAvailability[machineId] = startDate;
+    }
 
     _applyRule(rule);
     printOutput();
   }
 
-  // Obtiene el número total de máquinas en uso
-  int _getTotalMachines() {
-    final machineIds = jobRoutes.values
+  // Obtiene el conjunto de máquinas en uso
+  Set<int> _getMachineIds() {
+    return jobRoutes.values
         .expand((routes) => routes.map((route) => route.value1))
         .toSet();
-    return machineIds.length;
   }
 
   void _applyRule(String rule) {
@@ -224,7 +224,7 @@ class JobShop {
         final machineId = route.value1;
         final duration = route.value2;
 
-        final machineFree = machineAvailability[machineId];
+        final machineFree = machineAvailability[machineId] ?? startDate;
         final avail = jobAvailable[jid]!;
         final earliest = machineFree.isAfter(avail) ? machineFree : avail;
         final adjusted = adjustForWorkingSchedule(earliest);
@@ -232,7 +232,10 @@ class JobShop {
         candidates.add((jobId: jid, opIndex: idx, machineId: machineId, duration: duration, earliestStart: adjusted));
       }
 
-      if (candidates.isEmpty) break;
+      if (candidates.isEmpty) {
+        print('JobShop.scheduleWithRule: no schedulable candidates remaining, aborting loop');
+        break;
+      }
 
       candidates.sort((a, b) {
         final cmpStart = a.earliestStart.compareTo(b.earliestStart);

@@ -233,6 +233,11 @@ class OpenShop {
     DateTime current = start;
     Duration remaining = end.difference(start);
 
+    // Si no hay tiempo que acomodar, retornar inmediatamente
+    if (remaining <= Duration.zero) {
+      return start;
+    }
+
     while (remaining > Duration.zero) {
       current = _adjustForWorkingSchedule(current);
 
@@ -280,11 +285,29 @@ class OpenShop {
 
       if (availableToday > Duration.zero && remaining <= availableToday) {
         return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
+      } else if (availableToday > Duration.zero) {
+        // Solo restamos si hay tiempo disponible
+        remaining -= availableToday;
+        if (remaining <= Duration.zero) {
+          // La tarea termina exactamente hoy
+          return nextAvailable.add(availableToday + remaining);
         }
-        current = current.add(const Duration(days: 1));
+        current = DateTime(
+          dayEnd.year,
+          dayEnd.month,
+          dayEnd.day + 1,
+          workingSchedule.value1.hour,
+          workingSchedule.value1.minute,
+        );
+      } else {
+        // No hay tiempo disponible hoy, pasar al siguiente día
+        current = DateTime(
+          dayEnd.year,
+          dayEnd.month,
+          dayEnd.day + 1,
+          workingSchedule.value1.hour,
+          workingSchedule.value1.minute,
+        );
       }
     }
 

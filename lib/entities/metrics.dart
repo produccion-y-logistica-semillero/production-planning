@@ -4,14 +4,18 @@ class Metrics {
   final int totalJobs;
   final Duration maxDelay;
   final Duration avarageProcessingTime;
-  final Duration avarageDelayTime; //delay has to be positive, if it ended before then its 0
-  final Duration avarageLatenessTime; //latness can be negative
+  final Duration avarageDelayTime; // average tardiness, always non-negative
+  final Duration avarageLatenessTime; // average lateness, can be negative
   final int delayedJobs;
   final double percentageDelayedJobs;
-  // New metrics
   final Duration makespan;
   final Duration totalFlow;
-  final Duration totalWeightedDelay;
+  final Duration totalTardiness;
+  final Duration maxTardiness;
+  final Duration totalWeightedTardiness;
+  final Duration maxLateness;
+
+  Duration get totalWeightedDelay => totalWeightedTardiness;
 
   Metrics(
       {required this.idle,
@@ -23,7 +27,10 @@ class Metrics {
       required this.delayedJobs,
       required this.makespan,
       required this.totalFlow,
-      required this.totalWeightedDelay})
+      required this.totalTardiness,
+      required this.maxTardiness,
+      required this.totalWeightedTardiness,
+      required this.maxLateness})
       : percentageDelayedJobs =
             totalJobs == 0 ? 0.0 : (delayedJobs / totalJobs) * 100;
 }

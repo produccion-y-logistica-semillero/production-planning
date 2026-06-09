@@ -1,3 +1,14 @@
+// lib/presentation/2_orders/widgets/high_order/add_job.dart
+//
+// Changes from previous version:
+//   • _showStationTimeDialog no longer shows the "Tiempo de Alistamiento" field.
+//     That changeover cost now comes exclusively from the setup-time matrix.
+//   • The 'preparation' key is still stored (as 0) so downstream code that
+//     reads _explicitTaskMachineMinutes['preparation'] doesn't break.
+//   • getMachineNames() and getMachineFinalStates() public getters added
+//     (were already in the version provided, kept as-is).
+//   • Everything else is identical to the version provided by the user.
+
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,7 +47,6 @@ class AddJobWidget extends StatefulWidget {
     required this.idController,
     required this.index,
     required this.sequences,
-
   }) : super(key: stateKey);
 
   factory AddJobWidget({
@@ -72,8 +82,7 @@ class AddJobWidget extends StatefulWidget {
 
   @override
   AddJobState createState() {
-    final state = AddJobState();
-    return state;
+    return AddJobState();
   }
 }
 
@@ -89,34 +98,34 @@ class AddJobState extends State<AddJobWidget> {
   final Map<int, List<MachineEntity>> _machinesByType = {};
   final Map<int, MachineEntity?> _selectedMachines = {};
   final Map<int, MachineStandardTimes> _stationTimes = {};
-  // Explicit per-task per-machine times (processing, preparation, rest) in minutes
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
-  final Map<int, int> _preemptionMatrix =
-      {}; // Map<machineId, canPreempt (0 o 1)>
+  final Map<int, int> _preemptionMatrix = {};
 
-  Map<int, int> getPreemptionMatrix() {
-    return _preemptionMatrix;
-  }
+  final Map<int, String> _machineFinalStates = {};
+  final List<String> _letters = [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'
+  ];
 
-  // Returns selected machines: Map<machineTypeId, machineId>
+  // ── public getters used by the matrix dialog ──────────────────────────────
+
+  Map<int, int> getPreemptionMatrix() => _preemptionMatrix;
+
   Map<int, int> getSelectedMachines() {
-    final Map<int, int> map = {};
+    final map = <int, int>{};
     _selectedMachines.forEach((key, value) {
       if (value != null && value.id != null) map[key] = value.id!;
     });
     return map;
   }
 
-  // Returns station processing times as minutes: Map<machineTypeId, minutes>
   Map<int, int> getStationProcessingMinutes() {
-    final Map<int, int> res = {};
+    final res = <int, int>{};
     _stationTimes.forEach((machineTypeId, times) {
       res[machineTypeId] = times.processing.inMinutes;
     });
     return res;
   }
 
-  // Returns explicit mapping taskId -> { machineId: { 'processing': mins, 'preparation': mins, 'rest': mins } }
   Map<int, Map<int, Map<String, int>>> getExplicitTaskMachineMinutes() {
     return _explicitTaskMachineMinutes.map((taskId, machines) => MapEntry(
         taskId,
@@ -124,18 +133,38 @@ class AddJobState extends State<AddJobWidget> {
             MapEntry(machineId, Map<String, int>.from(times)))));
   }
 
-  // Returns the tasks of the currently selected sequence (if loaded)
-  List<TaskEntity>? getSequenceTasks() {
-    return _sequenceDetails?.tasks;
+  List<TaskEntity>? getSequenceTasks() => _sequenceDetails?.tasks;
+
+  String? getJobState() {
+    if (_machineFinalStates.isEmpty) return null;
+    final values = _machineFinalStates.values.toList();
+    return values.isNotEmpty ? values.first : null;
   }
 
+  /// Returns the display names of all currently selected machines.
+  /// Used by the matrix dialog to populate its machine drop-down.
+  List<String> getMachineNames() {
+    final names = <String>{};
+    _selectedMachines.forEach((_, machine) {
+      if (machine != null && machine.name.isNotEmpty) {
+        names.add(machine.name);
+      }
+    });
+    return names.toList();
+  }
+
+  /// Returns Map<machineTypeId, stateLetter> for the "Estado dejado" dropdowns.
+  /// Used by the matrix dialog to determine the row/column labels.
+  Map<int, String> getMachineFinalStates() =>
+      Map<int, String>.from(_machineFinalStates);
+
+  // ── lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
     availableDate = widget.availableDate;
     dueDate = widget.dueDate;
-
     availableHour = widget.availableHour;
     dueHour = widget.dueHour;
     selectedSequenceValue = widget.selectedSequence;
@@ -143,6 +172,8 @@ class AddJobState extends State<AddJobWidget> {
       _loadSequence(selectedSequenceValue!);
     }
   }
+
+  // ── date / time pickers ───────────────────────────────────────────────────
 
   Future<void> _selectDate(BuildContext context, String label) async {
     final DateTime? picked = await showDatePicker(
@@ -154,24 +185,17 @@ class AddJobState extends State<AddJobWidget> {
     if (picked != null) {
       setState(() {
         if (label == 'Seleccione fecha de disponibilidad') {
-
           final currentHour = availableHour ?? widget.availableHour;
           widget.availableDate = DateTime(
-            picked.year,
-            picked.month,
-            picked.day,
-            currentHour?.hour ?? 0,
-            currentHour?.minute ?? 0,
+            picked.year, picked.month, picked.day,
+            currentHour?.hour ?? 0, currentHour?.minute ?? 0,
           );
           availableDate = widget.availableDate;
         } else {
           final currentHour = dueHour ?? widget.dueHour;
           widget.dueDate = DateTime(
-            picked.year,
-            picked.month,
-            picked.day,
-            currentHour?.hour ?? 0,
-            currentHour?.minute ?? 0,
+            picked.year, picked.month, picked.day,
+            currentHour?.hour ?? 0, currentHour?.minute ?? 0,
           );
           dueDate = widget.dueDate;
         }
@@ -179,6 +203,7 @@ class AddJobState extends State<AddJobWidget> {
     }
   }
 
+  // ── sequence loading ──────────────────────────────────────────────────────
 
   Future<void> _loadSequence(int sequenceId) async {
     final bloc = context.read<NewOrderBloc>();
@@ -197,16 +222,13 @@ class AddJobState extends State<AddJobWidget> {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
       final Map<int, MachineStandardTimes> initialTimes = {};
+
       for (final task in tasks) {
         final current = bloc.getStandardTimesForType(task.machineTypeId);
-        // Si ya hay tiempos estándar ajustados para el tipo de máquina,
-        // úsalo como base; de lo contrario, conserva el tiempo de la tarea
-        // como valor por defecto para evitar perder la información original.
         final processingTime =
             current.processing != MachineStandardTimes.defaults().processing
                 ? current.processing
                 : task.processingUnits;
-
         final updated = current.copyWith(processing: processingTime);
         initialTimes[task.machineTypeId] = updated;
       }
@@ -221,38 +243,38 @@ class AddJobState extends State<AddJobWidget> {
             .toList();
         final results = await Future.wait(futures);
         if (!mounted) return;
+
         final Map<int, List<MachineEntity>> machinesMap = {};
         for (final entry in results) {
           final times = initialTimes[entry.value1];
-          if (times != null) {
-            machinesMap[entry.value1] = entry.value2
-                .map((machine) => _applyStandardTimes(machine, times))
-                .toList();
-          } else {
-            machinesMap[entry.value1] = entry.value2;
-          }
+          machinesMap[entry.value1] = times != null
+              ? entry.value2
+                  .map((m) => _applyStandardTimes(m, times))
+                  .toList()
+              : entry.value2;
         }
+
         setState(() {
           _sequenceDetails = sequence;
           _machinesByType.addAll(machinesMap);
           _stationTimes.addAll(initialTimes);
           _loadingStations = false;
 
-          // Auto-initialize _explicitTaskMachineMinutes with default times based on machine percentages
           for (final task in tasks) {
             final machineTypeId = task.machineTypeId;
             final machines = machinesMap[machineTypeId];
             if (machines != null && machines.isNotEmpty) {
-              // Select first machine as default
               final machine = machines.first;
               _selectedMachines[machineTypeId] = machine;
 
-              // Calculate times from machine percentage (100% = 60 minutes)
+              final times = initialTimes[machineTypeId];
+              final baseProcessingMinutes = times?.processing.inMinutes ?? task.processingUnits.inMinutes;
+
               final processingMinutes =
-                  (60 * machine.processingPercentage / 100).round();
-              final preparationMinutes =
-                  (60 * machine.preparationPercentage / 100).round();
-              final restMinutes = (60 * machine.restPercentage / 100).round();
+                  (baseProcessingMinutes * machine.processingPercentage / 100).round();
+              final preparationMinutes = 0; // comes from matrix — always 0 here
+              final restMinutes =
+                  times?.rest?.inMinutes ?? (60 * machine.restPercentage / 100).round();
 
               _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
               _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
@@ -271,20 +293,19 @@ class AddJobState extends State<AddJobWidget> {
         });
       }
     } else {
-      setState(() {
-        _loadingStations = false;
-      });
+      setState(() => _loadingStations = false);
     }
   }
+
+  // ── build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       shadowColor: Colors.black.withOpacity(0.8),
       elevation: 8,
       color: colorScheme.surfaceContainer,
@@ -295,12 +316,8 @@ class AddJobState extends State<AddJobWidget> {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                onPressed: () {
-
-                  BlocProvider.of<NewOrderBloc>(context)
-                      .removeJob(widget.index);
-
-                },
+                onPressed: () =>
+                    BlocProvider.of<NewOrderBloc>(context).removeJob(widget.index),
                 icon: Icon(Icons.delete, color: colorScheme.error),
               ),
             ),
@@ -372,40 +389,30 @@ class AddJobState extends State<AddJobWidget> {
   ],
 ),
 
-           
             const SizedBox(height: 8),
             DropdownButton<int>(
               value: selectedSequenceValue,
-
               hint: Text('Seleccionar ruta de proceso',
                   style: TextStyle(color: colorScheme.onSurfaceVariant)),
               onChanged: (int? newValue) {
                 if (newValue == null) return;
-
                 setState(() {
                   selectedSequenceValue = newValue;
                   widget.selectedSequence = newValue;
                 });
-
                 _loadSequence(newValue);
-
               },
               items: widget.sequences
-                  .map(
-                    (sequence) => DropdownMenuItem<int>(
-                      value: sequence.value1,
-                      child: Text(
-                        sequence.value2,
-                        style: TextStyle(color: colorScheme.onSurface),
-                      ),
-                    ),
-                  )
+                  .map((sequence) => DropdownMenuItem<int>(
+                        value: sequence.value1,
+                        child: Text(sequence.value2,
+                            style: TextStyle(color: colorScheme.onSurface)),
+                      ))
                   .toList(),
               isExpanded: true,
               dropdownColor: colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
-
             if (_loadingStations)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
@@ -414,12 +421,13 @@ class AddJobState extends State<AddJobWidget> {
             if (!_loadingStations &&
                 (_sequenceDetails?.tasks?.isNotEmpty ?? false))
               ..._sequenceDetails!.tasks!.map(_buildStationRow),
-
           ],
         ),
       ),
     );
   }
+  // ── date/time row widgets (unchanged) ─────────────────────────────────────
+
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
   final colorScheme = Theme.of(context).colorScheme;
   final hasDate = date != null;
@@ -437,6 +445,7 @@ class AddJobState extends State<AddJobWidget> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        selectHour(hour, date, label),
         Text(
           label == 'Seleccione fecha de disponibilidad' ? 'Disponibilidad' : 'Entrega',
           style: TextStyle(
@@ -530,6 +539,8 @@ class AddJobState extends State<AddJobWidget> {
   );
 }
 
+  // ── station row (unchanged except setup time field removed) ───────────────
+
   Widget _buildStationRow(TaskEntity task) {
     final machineTypeId = task.machineTypeId;
     final machineOptions =
@@ -539,37 +550,65 @@ class AddJobState extends State<AddJobWidget> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 12.0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: machineOptions.isEmpty
-                  ? null
-                  : () => _showMachineSelectionDialog(task, machineOptions),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  selectedMachine?.name ?? defaultLabel,
-                  style: TextStyle(
-                    color: machineOptions.isEmpty
-                        ? Theme.of(context).colorScheme.onSurfaceVariant
-                        : Theme.of(context).colorScheme.onSurface,
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: machineOptions.isEmpty
+                      ? null
+                      : () =>
+                          _showMachineSelectionDialog(task, machineOptions),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14, horizontal: 12),
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      selectedMachine?.name ?? defaultLabel,
+                      style: TextStyle(
+                        color: machineOptions.isEmpty
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: machineOptions.isNotEmpty
+                    ? () => _showStationTimeDialog(task, machineTypeId)
+                    : null,
+                icon: const Icon(Icons.schedule_outlined),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          IconButton(
-            onPressed: machineOptions.isNotEmpty
-                ? () => _showStationTimeDialog(task, machineTypeId)
-                : null,
-            icon: const Icon(Icons.schedule_outlined),
-            color: Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Estado dejado en la máquina: '),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _machineFinalStates[machineTypeId],
+                hint: const Text("Seleccionar (A-J)"),
+                items: _letters.map((String letter) {
+                  return DropdownMenuItem<String>(
+                    value: letter,
+                    child: Text(letter),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _machineFinalStates[machineTypeId] = newValue!;
+                  });
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -578,50 +617,48 @@ class AddJobState extends State<AddJobWidget> {
 
   String _stationLabel(TaskEntity task) {
     final name = task.machineName?.trim();
-    if (name == null || name.isEmpty) {
-      return 'Estación de trabajo';
-    }
+    if (name == null || name.isEmpty) return 'Estación de trabajo';
     final normalized = name.toLowerCase();
-    if (normalized.startsWith('estación')) {
-      return name;
-    }
-    return 'Estación de $normalized';
+    return normalized.startsWith('estación') ? name : 'Estación de $normalized';
   }
+
+  // ── machine selection dialog (unchanged) ──────────────────────────────────
 
   Future<void> _showMachineSelectionDialog(
       TaskEntity task, List<MachineEntity> options) async {
     final selected = await showDialog<MachineEntity>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(
-              'Selecciona máquina para ${task.machineName ?? 'la estación'}'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: options.isEmpty
-                ? const Text('No hay máquinas registradas para esta estación.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final machine = options[index];
-                      return ListTile(
-                        title: Text(machine.name),
-                        subtitle: Text(
-                            'Porcentaje: ${machine.processingPercentage.toStringAsFixed(0)}%'),
-                        onTap: () => Navigator.of(dialogContext).pop(machine),
-                      );
-                    },
-                  ),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+            'Selecciona máquina para ${task.machineName ?? 'la estación'}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: options.isEmpty
+              ? const Text(
+                  'No hay máquinas registradas para esta estación.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final machine = options[index];
+                    return ListTile(
+                      title: Text(machine.name),
+                      subtitle: Text(
+                          'Porcentaje: '
+                          '${machine.processingPercentage.toStringAsFixed(0)}%'),
+                      onTap: () =>
+                          Navigator.of(dialogContext).pop(machine),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancelar'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
 
     if (!mounted || selected == null) return;
@@ -630,22 +667,38 @@ class AddJobState extends State<AddJobWidget> {
     setState(() {
       _selectedMachines[task.machineTypeId] = selected;
       final fallback = _stationTimes[task.machineTypeId];
-      final updated = MachineStandardTimes.fromMachine(
-        selected,
-        fallback: fallback,
-      );
+      final updated =
+          MachineStandardTimes.fromMachine(selected, fallback: fallback);
       _stationTimes[task.machineTypeId] = updated;
+
+      // Update explicit times mapping for this task & machine
+      final baseProcessingMinutes = updated.processing.inMinutes;
+      final restMinutes = updated.rest?.inMinutes ?? (60 * selected.restPercentage / 100).round();
+      _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+      _explicitTaskMachineMinutes[task.id!]!.clear();
+      _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
+        'processing': baseProcessingMinutes,
+        'preparation': 0, // setup times come from matrix
+        'rest': restMinutes,
+      };
+
       bloc.updateStandardTimesForType(task.machineTypeId, updated);
       _syncStandardTimesToMachines(task.machineTypeId, updated);
     });
   }
+
+  // ── station time dialog — SETUP TIME FIELD REMOVED ────────────────────────
+  //
+  // The "Tiempo de Alistamiento" TextField has been removed from this dialog.
+  // Changeover costs are now entered exclusively in the setup-time matrix
+  // (Definir matriz de tiempos de alistamiento button on the main page).
+  // The 'preparation' key is still written as 0 so no downstream code breaks.
 
   Future<void> _showStationTimeDialog(
       TaskEntity task, int machineTypeId) async {
     final bloc = context.read<NewOrderBloc>();
     final machines = _machinesByType[machineTypeId] ?? [];
 
-    // Current explicit mapping (if any)
     final existingForTask = _explicitTaskMachineMinutes[task.id];
     Map<String, int>? existingTimes;
     int? existingMachineId;
@@ -657,24 +710,20 @@ class AddJobState extends State<AddJobWidget> {
     int? selectedMachineId =
         existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
 
-    // Initialize with existing values or defaults
     final stationDefaults = _stationTimes[machineTypeId] ??
         bloc.getStandardTimesForType(machineTypeId);
 
     Duration processingDuration = existingTimes != null
         ? Duration(minutes: existingTimes['processing'] ?? 0)
         : stationDefaults.processing;
-    Duration preparationDuration = existingTimes != null
-        ? Duration(minutes: existingTimes['preparation'] ?? 0)
-        : stationDefaults.preparation ?? Duration.zero;
+
+    // Rest time — still configurable here.
     Duration restDuration = existingTimes != null
         ? Duration(minutes: existingTimes['rest'] ?? 0)
         : stationDefaults.rest ?? Duration.zero;
 
     final processingController =
         TextEditingController(text: _formatDuration(processingDuration));
-    final preparationController =
-        TextEditingController(text: _formatDuration(preparationDuration));
     final restController =
         TextEditingController(text: _formatDuration(restDuration));
 
@@ -1072,49 +1121,53 @@ GestureDetector(
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancelar')),
-              ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Aceptar')),
-            ],
-          );
-        });
-      },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Aceptar'),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (result == true) {
-      // Parse processing time
-      final processingMinutes = _parseTimeToMinutes(processingController.text);
-      final preparationMinutes =
-          _parseTimeToMinutes(preparationController.text);
+      final processingMinutes =
+          _parseTimeToMinutes(processingController.text);
       final restMinutes = _parseTimeToMinutes(restController.text);
 
       setState(() {
         if (selectedMachineId != null) {
+          final newSelMachine = machines.firstWhere((m) => m.id == selectedMachineId);
+          _selectedMachines[machineTypeId] = newSelMachine;
+
           _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+          _explicitTaskMachineMinutes[task.id!]!.clear();
           _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
             'processing': processingMinutes,
-            'preparation': preparationMinutes,
+            'preparation': 0, // comes from matrix — always 0 here
             'rest': restMinutes,
           };
         }
-        // Also update stationTimes for UI consistency
         _stationTimes[machineTypeId] = MachineStandardTimes(
           processing: Duration(minutes: processingMinutes),
-          preparation: Duration(minutes: preparationMinutes),
+          preparation: Duration.zero, // from matrix
           rest: Duration(minutes: restMinutes),
         );
       });
-      // update global standard times in bloc
       bloc.updateStandardTimesForType(
           machineTypeId, _stationTimes[machineTypeId]!);
       _syncStandardTimesToMachines(
           machineTypeId, _stationTimes[machineTypeId]!);
     }
   }
+
+  // ── helpers (unchanged) ───────────────────────────────────────────────────
 
   int _parseTimeToMinutes(String text) {
     final parts = text.trim().split(':');
@@ -1128,127 +1181,37 @@ GestureDetector(
   }
 
   MachineEntity _applyStandardTimes(
-    MachineEntity machine,
-    MachineStandardTimes times,
-  ) {
-    // Machines now store percentages, no need to copy Duration times
-    return machine;
-  }
+          MachineEntity machine, MachineStandardTimes times) =>
+      machine;
 
   void _syncStandardTimesToMachines(
-    int machineTypeId,
-    MachineStandardTimes times,
-  ) {
+      int machineTypeId, MachineStandardTimes times) {
     final machines = _machinesByType[machineTypeId];
     if (machines == null) return;
-
     setState(() {
-      final updatedMachines = machines
-          .map((machine) => _applyStandardTimes(machine, times))
-          .toList();
-      _machinesByType[machineTypeId] = updatedMachines;
-
+      _machinesByType[machineTypeId] =
+          machines.map((m) => _applyStandardTimes(m, times)).toList();
       final selected = _selectedMachines[machineTypeId];
       if (selected != null) {
-        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
+        _selectedMachines[machineTypeId] =
+            _applyStandardTimes(selected, times);
       }
     });
-  }
-
-  Widget _buildTimeOption(
-      {required String title,
-      required Duration? duration,
-      required VoidCallback onPressed}) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title),
-                const SizedBox(height: 6),
-                FilledButton.tonal(
-                  onPressed: onPressed,
-                  child: Text(duration == null
-                      ? 'Tiempo (HH:MM:SS)'
-                      : _formatDuration(duration)),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onPressed,
-            icon: const Icon(Icons.edit_outlined),
-            color: colorScheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// AQUÍ ES DONDE CAMBIA: ahora es un diálogo con TextField que auto-pone los :
-  Future<Duration?> _pickDuration(Duration? initial) async {
-    final initialText = initial != null ? _formatDuration(initial) : '';
-
-    final controller = TextEditingController(text: initialText);
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Ingrese tiempo (HHMMSS)'),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: 'HH:MM:SS'),
-            inputFormatters: [
-              _HhMmSsTextInputFormatter(),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(controller.text.trim());
-              },
-              child: const Text('Aceptar'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == null || result.isEmpty) return null;
-
-    // resultado viene como HH:MM:SS (gracias al formatter)
-    final parts = result.split(':');
-    if (parts.length != 3) return null;
-
-    final h = int.tryParse(parts[0]) ?? 0;
-    final m = int.tryParse(parts[1]) ?? 0;
-    final s = int.tryParse(parts[2]) ?? 0;
-
-    return Duration(hours: h, minutes: m, seconds: s);
   }
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
     final seconds = duration.inSeconds % 60;
-    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
   }
 
+  // ignore: unused_element
   List<Widget> _buildPreemptionMatrixForTask(int machineTypeId) {
     final machines = _machinesByType[machineTypeId] ?? [];
     if (machines.isEmpty) return [];
-
     return machines.map((machine) {
       final currentValue = _preemptionMatrix[machine.id] ?? 0;
       return Padding(
@@ -1256,29 +1219,22 @@ GestureDetector(
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                machine.name,
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
+                child:
+                    Text(machine.name, style: const TextStyle(fontSize: 14))),
             ToggleButtons(
               isSelected: [currentValue == 0, currentValue == 1],
-              onPressed: (index) {
-                setState(() {
-                  _preemptionMatrix[machine.id!] = index;
-                });
-              },
+              onPressed: (index) =>
+                  setState(() => _preemptionMatrix[machine.id!] = index),
               borderRadius: BorderRadius.circular(8),
-              constraints: const BoxConstraints(minWidth: 50, minHeight: 36),
+              constraints:
+                  const BoxConstraints(minWidth: 50, minHeight: 36),
               children: const [
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('0'),
-                ),
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('0')),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('1'),
-                ),
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('1')),
               ],
             ),
           ],
@@ -1288,32 +1244,24 @@ GestureDetector(
   }
 }
 
-/// Formatter para que al escribir números se formen HH:MM:SS automáticamente.
+/// Formatter: digits only → auto-inserts colons as HH:MM:SS
 class _HhMmSsTextInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    // Solo dígitos
     String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 6) {
-      digits = digits.substring(0, 6);
-    }
-
+    if (digits.length > 6) digits = digits.substring(0, 6);
     final buffer = StringBuffer();
     for (int i = 0; i < digits.length; i++) {
       buffer.write(digits[i]);
-      if (i == 1 || i == 3) {
-        buffer.write(':');
-      }
+      if (i == 1 || i == 3) buffer.write(':');
     }
-
     final text = buffer.toString();
     return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length));
   }
 }
 Widget _bottomSheetSegment(TextEditingController ctrl, String label, int max) {

@@ -36,15 +36,21 @@ class FlexibleFlowShop {
   List<FlexibleFlowInput> inputJobs = [];
   Map<int, DateTime> machinesAvailability;
   List<FlexibleFlowOutput> output = [];
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
+  final Map<int, Map<int, String>>? jobStates;
+  final Map<int, int?> _machineLastJob = {};
 
   FlexibleFlowShop(
     this.startDate,
     this.workingSchedule,
     this.inputJobs,
     this.machinesAvailability,
-    String rule,
-  ) {
-    switch (rule) {
+    String rule, {
+    this.stateSetupMatrix,
+    this.jobStates,
+  }) {
+    final r = rule.toUpperCase();
+    switch (r) {
       case "EDD":
         eddRule();
         break;
@@ -86,9 +92,19 @@ class FlexibleFlowShop {
         break;
       case "JOHNSON":
         _applyJohnsonRuleFlexible(inputJobs);
+        break;
 
       case "CDS":
         cdsAlgorithm();
+        break;
+      case "GENETICS":
+        // Fallback genetics: order by combined score
+        _schedule((a, b) {
+          final scoreA = (a.priority / max(1, _totalProcessingTime(a))) + (1 / max(1, _totalProcessingTime(a)));
+          final scoreB = (b.priority / max(1, _totalProcessingTime(b))) + (1 / max(1, _totalProcessingTime(b)));
+          return scoreB.compareTo(scoreA);
+        });
+        break;
     }
   }
 
@@ -127,30 +143,39 @@ class FlexibleFlowShop {
       int stationId = task.value1;
       Map<int, Duration> machinesInStation = task.value2;
 
-
       Tuple2<int, int> selectedMachine =
-          _selectBestMachine(stationId, machinesInStation);
+          _selectBestMachine(stationId, machinesInStation, job.jobId, jobStartTime);
       int machineId = selectedMachine.value2;
       Duration processingTime = machinesInStation[machineId]!;
 
       DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
-
       DateTime startTime = jobStartTime.isAfter(machineAvailable)
           ? jobStartTime
           : machineAvailable;
 
       startTime = _adjustForWorkingSchedule(startTime);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-          startTime, startTime.add(processingTime));
 
+      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
+      final Duration setupDuration = _getSetupDuration(
+        machineId,
+        job.jobId,
+        previousJob,
+      );
+
+      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
+          startTime, startTime.add(setupDuration));
+      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
+      DateTime endTime = _adjustEndTimeForWorkingSchedule(
+          taskStart, taskStart.add(processingTime));
 
       // Guarda el primer tiempo real de inicio
-      actualStartTime ??= startTime;
+      actualStartTime ??= taskStart;
       // Guarda el último tiempo de finalización
       finalEndTime = endTime;
 
-      scheduling[stationId] = Tuple2(machineId, Range(startTime, endTime));
+      scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
       machinesAvailability[machineId] = endTime;
+      _machineLastJob[machineId] = job.jobId;
 
       jobStartTime = endTime;
     }
@@ -166,23 +191,46 @@ class FlexibleFlowShop {
 
 
   Tuple2<int, int> _selectBestMachine(
-      int stationId, Map<int, Duration> machinesInStation) {
-    final best = machinesInStation.entries.reduce((a, b) {
-      final availableA = machinesAvailability[a.key] ?? startDate;
-      final availableB = machinesAvailability[b.key] ?? startDate;
+      int stationId,
+      Map<int, Duration> machinesInStation,
+      int jobId,
+      DateTime jobStartTime,
+  ) {
+    int bestMachineId = -1;
+    DateTime bestEndTime = DateTime(9999);
+    DateTime bestStartTime = DateTime(9999);
 
-      if (availableA.isBefore(availableB)) {
-        return a;
-      } else if (availableB.isBefore(availableA)) {
-        return b;
-      } else {
+    for (var entry in machinesInStation.entries) {
+      final machineId = entry.key;
+      final processingTime = entry.value;
+      final machineAvailable = machinesAvailability[machineId] ?? startDate;
+      DateTime startTime = jobStartTime.isAfter(machineAvailable)
+          ? jobStartTime
+          : machineAvailable;
+      startTime = _adjustForWorkingSchedule(startTime);
 
-        // Si ambos están disponibles al mismo tiempo, elige por menor duración
+      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
+      final Duration setupDuration = _getSetupDuration(machineId, jobId, previousJob);
+      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
+        startTime,
+        startTime.add(setupDuration),
+      );
+      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
+      DateTime endTime = _adjustEndTimeForWorkingSchedule(
+        taskStart,
+        taskStart.add(processingTime),
+      );
 
-        return a.value.compareTo(b.value) <= 0 ? a : b;
+      if (bestMachineId == -1 ||
+          endTime.isBefore(bestEndTime) ||
+          (endTime.isAtSameMomentAs(bestEndTime) && taskStart.isBefore(bestStartTime))) {
+        bestMachineId = machineId;
+        bestEndTime = endTime;
+        bestStartTime = taskStart;
       }
-    });
-    return Tuple2(stationId, best.key); // retorna stationId y machineId
+    }
+
+    return Tuple2(stationId, bestMachineId);
   }
 
   int _totalProcessingTime(FlexibleFlowInput job) {
@@ -252,6 +300,30 @@ class FlexibleFlowShop {
     return end;
   }
 
+  Duration _getSetupDuration(
+    int machineId,
+    int currentJobId,
+    int? previousJobId,
+  ) {
+    // Only apply state-based setup if we have previous job and both matrices
+    if (previousJobId != null && 
+        previousJobId > 0 && 
+        stateSetupMatrix != null && 
+        jobStates != null) {
+      final machineStates = stateSetupMatrix![machineId];
+      if (machineStates != null) {
+        final previousState = jobStates![previousJobId]?[machineId];
+        final currentState = jobStates![currentJobId]?[machineId];
+        if (previousState != null && currentState != null) {
+          final setupMinutes = machineStates[previousState]?[currentState];
+          if (setupMinutes != null) {
+            return Duration(minutes: setupMinutes);
+          }
+        }
+      }
+    }
+    return Duration.zero;
+  }
 
   void eddaRule() => _dynamicSchedule((a, b) => a.dueDate.compareTo(b.dueDate));
   void sptaRule() => _dynamicSchedule(
@@ -574,6 +646,85 @@ class FlexibleFlowShop {
     return makespanEndTime.difference(startDate).inMinutes;
   }
 
-}   
+List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload) {
+  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+  final workingSchedule = Tuple2(
+    TimeOfDay(hour: payload['workingStartHour'] as int, minute: payload['workingStartMinute'] as int),
+    TimeOfDay(hour: payload['workingEndHour'] as int, minute: payload['workingEndMinute'] as int),
+  );
+
+  final inputJobs = (payload['inputJobs'] as List<dynamic>).map((jobData) {
+    final jobMap = Map<String, dynamic>.from(jobData as Map);
+    final taskSequence = (jobMap['taskSequence'] as List<dynamic>).map((taskData) {
+      final taskMap = Map<String, dynamic>.from(taskData as Map);
+      final machineDurations = (taskMap['machineDurations'] as Map<dynamic, dynamic>).map(
+        (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
+      );
+      return Tuple2(taskMap['taskId'] as int, machineDurations);
+    }).toList();
+
+    return FlexibleFlowInput(
+      jobMap['jobId'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['dueDate'] as int),
+      jobMap['priority'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['availableDate'] as int),
+      taskSequence,
+    );
+  }).toList();
+
+  final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
+      .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
+
+  final stateSetupMatrix = payload['stateSetupMatrix'] == null
+      ? null
+      : (payload['stateSetupMatrix'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+                key as int,
+                (Map<dynamic, dynamic>.from(value as Map)).map(
+                  (prev, curr) => MapEntry(
+                    prev as String,
+                    (Map<dynamic, dynamic>.from(curr as Map)).map(
+                      (next, minutes) => MapEntry(next as String, minutes as int),
+                    ),
+                  ),
+                ),
+              ),
+        );
+
+  final jobStates = payload['jobStates'] == null
+      ? null
+      : (payload['jobStates'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+            key as int,
+            (Map<dynamic, dynamic>.from(value as Map)).map((mKey, state) => MapEntry(mKey as int, state as String)),
+          ),
+        );
+
+  final output = FlexibleFlowShop(
+    startDate,
+    workingSchedule,
+    inputJobs,
+    machinesAvailability,
+    payload['rule'] as String,
+    stateSetupMatrix: stateSetupMatrix,
+    jobStates: jobStates,
+  ).output;
+
+  return output.map((out) {
+    return {
+      'jobId': out.jobId,
+      'dueDate': out.dueDate.millisecondsSinceEpoch,
+      'startDate': out.startDate.millisecondsSinceEpoch,
+      'endTime': out.endTime.millisecondsSinceEpoch,
+      'scheduling': out.scheduling.map((key, value) => MapEntry(key.toString(), {
+            'machineId': value.value1,
+            'start': value.value2.startDate.millisecondsSinceEpoch,
+            'end': value.value2.endDate.millisecondsSinceEpoch,
+          })),
+    };
+  }).toList();
+}
+
+}
 
 

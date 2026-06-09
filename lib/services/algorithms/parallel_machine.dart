@@ -50,7 +50,8 @@ class ParallelMachine {
     this.machines,
     String rule,
   ) {
-    switch (rule) {
+    final r = rule.toUpperCase();
+    switch (r) {
       case "SPT":
         sptRule();
         break;

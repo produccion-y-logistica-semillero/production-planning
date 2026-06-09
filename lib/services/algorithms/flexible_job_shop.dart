@@ -2,21 +2,34 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'dart:math';
 
 class FlexibleJobInput {
   final int jobId;
+  final int dbJobId;
   final int sequenceId;
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
   final List<Tuple2<int, Map<int, Duration>>> taskSequence;
-  FlexibleJobInput(this.jobId, this.sequenceId, this.dueDate, this.priority,
-      this.availableDate, this.taskSequence);
+  final List<TaskDependencyEntity> dependencies;
+
+  FlexibleJobInput(
+    this.jobId,
+    this.dbJobId,
+    this.sequenceId,
+    this.dueDate,
+    this.priority,
+    this.availableDate,
+    this.taskSequence, {
+    this.dependencies = const [],
+  });
 }
 
 class FlexibleJobOutput {
   final int jobId;
+  final int dbJobId;
   final DateTime dueDate;
   final DateTime startDate;
   final DateTime endTime;
@@ -24,7 +37,7 @@ class FlexibleJobOutput {
 
 
   FlexibleJobOutput(
-      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
+      this.jobId, this.dbJobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
 }
 
 class FlexibleJobShop {
@@ -37,7 +50,10 @@ class FlexibleJobShop {
   final Map<int, Duration?> machineRestTime;
   Map<int, int> machineProcessedCount = {};
   final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
+  final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
+  final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
 
   FlexibleJobShop(
@@ -51,6 +67,8 @@ class FlexibleJobShop {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
     this.changeoverMatrix = const {},
+    this.stateSetupMatrix,
+    this.jobStates,
   }) {
     // Inicializar contador de procesamiento por máquina
     for (final machineId in machinesAvailability.keys) {
@@ -58,7 +76,8 @@ class FlexibleJobShop {
     }
     _initializeMachineLastSequence();
 
-    switch (rule) {
+    final r = rule.toUpperCase();
+    switch (r) {
       case "FIFO":
         scheduleFlexibleJobShopFIFO();
         break;
@@ -86,24 +105,78 @@ class FlexibleJobShop {
       case "CR":
         scheduleFlexibleJobShopCR();
         break;
+      case "GENETICS":
+        scheduleFlexibleJobShopGENETICS();
+        break;
     }
   }
+ 
+  void scheduleFlexibleJobShopGENETICS() {
+    // Simple genetics-like heuristic: combine CR and WSPT into a score
+    print('FlexibleJobShop: starting scheduling (GENETICS)');
+    _schedule((a, b) {
+      final scoreA = _geneticsScore(a.job, a.duration);
+      final scoreB = _geneticsScore(b.job, b.duration);
+      return scoreB.compareTo(scoreA);
+    });
+    print('FlexibleJobShop: scheduling finished (GENETICS)');
+  }
 
-
+  double _geneticsScore(FlexibleJobInput job, Duration duration) {
+    final cr = _calculateCR(job, duration, 0);
+    final wspt = job.priority / max(1, duration.inMinutes);
+    return (1 / max(cr, 0.0001)) + wspt;
+  }
   void _initializeMachineLastSequence() {
     for (final machineId in machinesAvailability.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
     for (final machineId in changeoverMatrix.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
+      _machineLastJob.putIfAbsent(machineId, () => null);
     }
   }
 
   Duration _getSetupDuration(
     int machineId,
-    int currentSequenceId,
-    int? previousSequenceId,
+    int currentJobId,
+    int? previousJobId,
   ) {
+    final currentJob = inputJobs.firstWhere((j) => j.jobId == currentJobId);
+    final currentDbJobId = currentJob.dbJobId;
+
+    if (previousJobId != null &&
+        previousJobId > 0 &&
+        stateSetupMatrix != null &&
+        jobStates != null) {
+      final machineStates = stateSetupMatrix![machineId];
+      if (machineStates != null) {
+        final previousState = jobStates![previousJobId]?[machineId];
+        final currentState = jobStates![currentDbJobId]?[machineId];
+        if (previousState != null && currentState != null) {
+          final setupMinutes = machineStates[previousState]?[currentState];
+          if (setupMinutes != null) {
+            return Duration(minutes: setupMinutes);
+          }
+        }
+      }
+    }
+
+    // Fallback to sequence-based changeover
+    FlexibleJobInput? previousJob;
+    if (previousJobId != null && previousJobId > 0) {
+      for (final j in inputJobs) {
+        if (j.dbJobId == previousJobId) {
+          previousJob = j;
+          break;
+        }
+      }
+    }
+
+    final currentSequenceId = currentJob.sequenceId;
+    final previousSequenceId = previousJob?.sequenceId;
+
     final machineMatrix = changeoverMatrix[machineId];
     if (machineMatrix == null) return Duration.zero;
 
@@ -163,9 +236,9 @@ class FlexibleJobShop {
     for (int i = currentOpIndex; i < job.taskSequence.length; i++) {
       final task = job.taskSequence[i];
 
-      final avgDuration =
-          task.value2.values.map((d) => d.inMinutes).reduce((a, b) => a + b) ~/
-              task.value2.length;
+      if (task.value2.isEmpty) continue;
+      final sum = task.value2.values.map((d) => d.inMinutes).fold<int>(0, (a, b) => a + b);
+      final avgDuration = sum ~/ task.value2.length;
       totalMinutes += avgDuration;
     }
 
@@ -305,25 +378,81 @@ class FlexibleJobShop {
     return taskCount > 0 ? totalProcessingTime / taskCount : 1;
   }
 
+  bool _isTaskReady(FlexibleJobInput job, int taskId, Set<int> completed) {
+    if (job.dependencies.isEmpty) {
+      final idx = job.taskSequence.indexWhere((t) => t.value1 == taskId);
+      if (idx > 0) {
+        final predId = job.taskSequence[idx - 1].value1;
+        return completed.contains(predId);
+      }
+      return true;
+    } else {
+      for (final dep in job.dependencies) {
+        if (dep.successor_id == taskId) {
+          if (!completed.contains(dep.predecessor_id)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+  }
+
+  DateTime _getJobReadyTime(FlexibleJobInput job, int taskId, Map<int, DateTime> compTimes) {
+    if (job.dependencies.isEmpty) {
+      final idx = job.taskSequence.indexWhere((t) => t.value1 == taskId);
+      if (idx > 0) {
+        final predId = job.taskSequence[idx - 1].value1;
+        return compTimes[predId] ?? job.availableDate;
+      }
+      return job.availableDate;
+    } else {
+      DateTime readyTime = job.availableDate;
+      for (final dep in job.dependencies) {
+        if (dep.successor_id == taskId) {
+          final predEndTime = compTimes[dep.predecessor_id];
+          if (predEndTime != null && predEndTime.isAfter(readyTime)) {
+            readyTime = predEndTime;
+          }
+        }
+      }
+      return readyTime;
+    }
+  }
+
   void _schedule(int Function(dynamic, dynamic) comparator) {
+    print('FlexibleJobShop._schedule: entering main loop');
     jobOperationIndex = {
       for (var job in inputJobs) job.jobId: 0,
+    };
+
+    Map<int, Set<int>> completedTasks = {
+      for (var job in inputJobs) job.jobId: <int>{},
+    };
+
+    Map<int, Map<int, DateTime>> taskCompletionTimes = {
+      for (var job in inputJobs) job.jobId: {},
     };
 
     Map<int, Map<int, Tuple2<int, Range>>> jobSchedulings = {
       for (var job in inputJobs) job.jobId: {},
     };
 
-    Map<int, DateTime> jobAvailability = {
-      for (var job in inputJobs) job.jobId: job.availableDate,
-    };
+    int _iter = 0;
+    const int _maxIter = 1000000; // safety cap
 
-    while (jobOperationIndex.values.any((i) {
-
-      final job = inputJobs.firstWhere((j) =>
-          j.jobId == jobOperationIndex.keys.firstWhere((id) => j.jobId == id));
-      return i < job.taskSequence.length;
+    while (completedTasks.entries.any((entry) {
+      final job = inputJobs.firstWhere((j) => j.jobId == entry.key);
+      return entry.value.length < job.taskSequence.length;
     })) {
+      _iter++;
+      if (_iter % 10000 == 0) {
+        print('FlexibleJobShop._schedule: iter=$_iter, remainingJobs=${completedTasks.values.map((s) => s.length).join(',')}');
+      }
+      if (_iter > _maxIter) {
+        print('FlexibleJobShop._schedule: reached max iterations ($_maxIter), aborting to avoid freeze');
+        break;
+      }
       List<
           ({
             FlexibleJobInput job,
@@ -334,33 +463,40 @@ class FlexibleJobShop {
           })> candidates = [];
 
       for (var job in inputJobs) {
-        final opIndex = jobOperationIndex[job.jobId]!;
+        final completed = completedTasks[job.jobId]!;
+        final compTimes = taskCompletionTimes[job.jobId]!;
 
-        if (opIndex >= job.taskSequence.length) continue;
+        for (var task in job.taskSequence) {
+          final taskId = task.value1;
+          if (completed.contains(taskId)) continue;
 
-        final task = job.taskSequence[opIndex];
-        final taskId = task.value1;
+          if (!_isTaskReady(job, taskId, completed)) continue;
 
-        for (var entry in task.value2.entries) {
-          final machineId = entry.key;
-          final duration = entry.value;
-          final machineAvailable = machinesAvailability[machineId] ?? startDate;
-          final available = jobAvailability[job.jobId]!;
+          final jobReadyTime = _getJobReadyTime(job, taskId, compTimes);
 
+          for (var entry in task.value2.entries) {
+            final machineId = entry.key;
+            final duration = entry.value;
+            final machineAvailable = machinesAvailability[machineId] ?? startDate;
 
-          final earliestStart = machineAvailable.isAfter(available)
-              ? machineAvailable
-              : available;
-          final adjustedStart = _adjustForWorkingSchedule(earliestStart);
+            final earliestStart = machineAvailable.isAfter(jobReadyTime)
+                ? machineAvailable
+                : jobReadyTime;
+            final adjustedStart = _adjustForWorkingSchedule(earliestStart);
 
-          candidates.add((
-            job: job,
-            taskId: taskId,
-            machineId: machineId,
-            duration: duration,
-            earliestStart: adjustedStart
-          ));
+            candidates.add((
+              job: job,
+              taskId: taskId,
+              machineId: machineId,
+              duration: duration,
+              earliestStart: adjustedStart
+            ));
+          }
         }
+      }
+
+      if (candidates.isEmpty) {
+        break;
       }
 
       candidates.sort((a, b) {
@@ -373,10 +509,10 @@ class FlexibleJobShop {
       final start = selected.earliestStart;
 
       // Calcular tiempo de alistamiento
-      final int? previousSequence =
-          _machineLastSequence.putIfAbsent(selected.machineId, () => null);
+      final int? previousJob =
+          _machineLastJob.putIfAbsent(selected.machineId, () => null);
       final Duration setupDuration = _getSetupDuration(
-          selected.machineId, selected.job.sequenceId, previousSequence);
+          selected.machineId, selected.job.jobId, previousJob);
       final Duration totalDuration = selected.duration + setupDuration;
 
       final end = start.add(totalDuration);
@@ -402,23 +538,27 @@ class FlexibleJobShop {
           Tuple2(selected.machineId, Range(start, adjustedEnd));
 
       machinesAvailability[selected.machineId] = finalEnd;
-      jobAvailability[selected.job.jobId] = adjustedEnd;
+      completedTasks[selected.job.jobId]!.add(selected.taskId);
+      taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
       jobOperationIndex[selected.job.jobId] =
           (jobOperationIndex[selected.job.jobId] ?? 0) + 1;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
+      _machineLastJob[selected.machineId] = selected.job.dbJobId;
     }
+    print('FlexibleJobShop._schedule: exiting main loop after iter=$_iter');
 
     for (var job in inputJobs) {
       final sched = jobSchedulings[job.jobId]!;
+      if (sched.isEmpty) continue;
 
-      final start = sched.values
-          .map((t) => t.value2.start)
-          .reduce((a, b) => a.isBefore(b) ? a : b);
-      final end = sched.values
-          .map((t) => t.value2.end)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
+      final start = sched.values.map((t) => t.value2.start).fold<DateTime?>(
+          null, (a, b) => a == null ? b : (a.isBefore(b) ? a : b))!;
+      final end = sched.values.map((t) => t.value2.end).fold<DateTime?>(
+          null, (a, b) => a == null ? b : (a.isAfter(b) ? a : b))!;
+
       output.add(FlexibleJobOutput(
         job.jobId,
+        job.dbJobId,
         job.dueDate,
         start,
         end,
@@ -554,15 +694,139 @@ class FlexibleJobShop {
 
 
   int calcularCmax(List<FlexibleJobOutput> output) {
+    if (output.isEmpty) return 0;
     final startTimes = output.map((job) => job.startDate).toList();
     final endTimes = output.map((job) => job.endTime).toList();
 
-    final earliestStart = startTimes.reduce((a, b) => a.isBefore(b) ? a : b);
-    final latestEnd = endTimes.reduce((a, b) => a.isAfter(b) ? a : b);
+    final earliestStart = startTimes.fold<DateTime>(startTimes.first,
+        (a, b) => a.isBefore(b) ? a : b);
+    final latestEnd = endTimes.fold<DateTime>(endTimes.first,
+        (a, b) => a.isAfter(b) ? a : b);
 
     final duration = latestEnd.difference(earliestStart);
     return duration.inHours;
   }
+}
+
+List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload) {
+  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+  final workingSchedule = Tuple2(
+    TimeOfDay(hour: payload['workingStartHour'] as int, minute: payload['workingStartMinute'] as int),
+    TimeOfDay(hour: payload['workingEndHour'] as int, minute: payload['workingEndMinute'] as int),
+  );
+
+  final inputJobs = (payload['inputJobs'] as List<dynamic>).map((jobData) {
+    final jobMap = Map<String, dynamic>.from(jobData as Map);
+    final taskSequence = (jobMap['taskSequence'] as List<dynamic>).map((taskData) {
+      final taskMap = Map<String, dynamic>.from(taskData as Map);
+      final durations = (taskMap['machineDurations'] as Map<dynamic, dynamic>).map(
+        (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
+      );
+      return Tuple2(taskMap['taskId'] as int, durations);
+    }).toList();
+
+    final dependencies = (jobMap['dependencies'] as List<dynamic>)
+        .map((depData) {
+          final depMap = Map<String, dynamic>.from(depData as Map);
+          return TaskDependencyEntity(
+            predecessor_id: depMap['predecessor_id'] as int,
+            successor_id: depMap['successor_id'] as int,
+            sequenceId: depMap['sequenceId'] as int,
+          );
+        })
+        .cast<TaskDependencyEntity>()
+        .toList();
+
+    return FlexibleJobInput(
+      jobMap['jobId'] as int,
+      jobMap['dbJobId'] as int,
+      jobMap['sequenceId'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['dueDate'] as int),
+      jobMap['priority'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jobMap['availableDate'] as int),
+      taskSequence,
+      dependencies: dependencies,
+    );
+  }).toList();
+
+  final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
+      .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
+
+  final machineInactivities = <int, List<MachineInactivityEntity>>{};
+  for (final entry in (payload['machineInactivities'] as Map<dynamic, dynamic>).entries) {
+    final machineId = entry.key as int;
+    final list = (entry.value as List<dynamic>);
+    machineInactivities[machineId] = list.map((item) {
+      final map = Map<String, dynamic>.from(item as Map);
+      return MachineInactivityEntity(
+        machineId: map['machineId'] as int,
+        name: map['name'] as String,
+        weekdays: (map['weekdays'] as List<dynamic>).map((w) => Weekday.values[w as int]).toSet(),
+        startTime: Duration(minutes: map['startTimeMinutes'] as int),
+        duration: Duration(minutes: map['durationMinutes'] as int),
+      );
+    }).cast<MachineInactivityEntity>().toList();
+  }
+
+  final machineContinueCapacity = (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
+      .map((key, value) => MapEntry(key as int, value as int));
+
+  final machineRestTime = <int, Duration?>{};
+  for (final entry in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
+    machineRestTime[entry.key as int] =
+        entry.value == null ? null : Duration(milliseconds: entry.value as int);
+  }
+
+  final stateSetupMatrix = payload['stateSetupMatrix'] == null
+      ? null
+      : (payload['stateSetupMatrix'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+            key as int,
+            (Map<dynamic, dynamic>.from(value as Map)).map(
+              (prev, curr) => MapEntry(
+                prev as String,
+                (Map<dynamic, dynamic>.from(curr as Map)).map((next, minutes) => MapEntry(next as String, minutes as int)),
+              ),
+            ),
+          ),
+        );
+
+  final jobStates = payload['jobStates'] == null
+      ? null
+      : (payload['jobStates'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+            key as int,
+            (Map<dynamic, dynamic>.from(value as Map)).map((mKey, state) => MapEntry(mKey as int, state as String)),
+          ),
+        );
+
+  final output = FlexibleJobShop(
+    startDate,
+    workingSchedule,
+    inputJobs,
+    machinesAvailability,
+    payload['rule'] as String,
+    machineInactivities: machineInactivities,
+    machineContinueCapacity: machineContinueCapacity,
+    machineRestTime: machineRestTime,
+    stateSetupMatrix: stateSetupMatrix,
+    jobStates: jobStates,
+  ).output;
+
+  return output.map((out) {
+    return {
+      'jobId': out.jobId,
+      'dbJobId': out.dbJobId,
+      'dueDate': out.dueDate.millisecondsSinceEpoch,
+      'startDate': out.startDate.millisecondsSinceEpoch,
+      'endTime': out.endTime.millisecondsSinceEpoch,
+      'scheduling': out.scheduling.map((key, value) => MapEntry(key.toString(), {
+            'machineId': value.value1,
+            'start': value.value2.startDate.millisecondsSinceEpoch,
+            'end': value.value2.endDate.millisecondsSinceEpoch,
+          })),
+    };
+  }).toList();
 }
 
 // ---------- MAIN ----------
@@ -575,7 +839,7 @@ void main() {
   final jobs = [
     FlexibleJobInput(
       1,
-
+      1,
       1,
       start.add(const Duration(days: 1)),
       1,
@@ -589,8 +853,8 @@ void main() {
     ),
     FlexibleJobInput(
       2,
-
       1,
+      2,
       start.add(const Duration(days: 1)),
       1,
       start,
@@ -602,8 +866,8 @@ void main() {
     ),
     FlexibleJobInput(
       3,
-
       1,
+      3,
       start.add(const Duration(days: 1)),
       1,
       start,

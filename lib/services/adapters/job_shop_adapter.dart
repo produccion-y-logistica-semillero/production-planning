@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -8,90 +9,97 @@ import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
-import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
+import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
-class FlexibleFlowShopAdapter {
+class JobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
 
-  FlexibleFlowShopAdapter({
-    required this.orderRepository,
-    required this.machineRepository,
-  });
+  JobShopAdapter({required this.orderRepository, required this.machineRepository});
 
-  int toInt(dynamic value) {
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
-  }
-
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> jobShopAdapter(
       int orderId, String rule) async {
-    // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
+    OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
     if (order == null || order.orderJobs == null) return null;
 
-    // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
+    // Collect all machines used by tasks (one machine per type expected)
     final List<int> machineTypeIds = order.orderJobs!
         .expand((job) => job.sequence!.tasks!.map((t) => t.machineTypeId))
         .toSet()
         .toList();
+
     final List<MachineEntity> machines = [];
     for (final typeId in machineTypeIds) {
-      final responseMachines =
-          await machineRepository.getAllMachinesFromType(typeId);
-      final machineList = responseMachines.fold((_) => null, (m) => m);
+      final resp = await machineRepository.getAllMachinesFromType(typeId);
+      final machineList = resp.fold((_) => null, (m) => m);
       if (machineList == null || machineList.isEmpty) return null;
-      machines.addAll(machineList); // Agregar todas las máquinas del tipo
+      // Expecting exactly one machine per type for JOB SHOP; take the first
+      machines.add(machineList.first);
     }
 
-    // Crear el input para el algoritmo Flexible Flow Shop y expandir por `amount` (cantidad)
-    final List<FlexibleFlowInput> inputJobs = [];
+    // Build inputJobs and jobRoutes
+    final List<FlexibleJobInput> inputJobs = [];
+
     for (final job in order.orderJobs!) {
+      final sequence = job.sequence!;
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
-      for (final task in job.sequence!.tasks!) {
+      for (final task in sequence.tasks!) {
         final Map<int, Duration> machineDurations = {};
-        for (final machine
-            in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
-          // Priority 1: Explicit per-job per-task per-machine time
-          final explicit = getExplicitProcessingDuration(job, task.id!, machine);
-          if (explicit != null) {
-            machineDurations[machine.id!] = explicit;
+        final machine = machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
+        
+        final explicit = getExplicitProcessingDuration(job, task.id!, machine);
+        if (explicit != null) {
+          machineDurations[machine.id!] = explicit;
+        } else {
+          if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+            machineDurations[machine.id!] = task.processingUnits;
           } else {
-            // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
-            if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
-              // Standard machine: use processingUnits as-is
-              machineDurations[machine.id!] = task.processingUnits;
-            } else {
-              // Non-standard machine: scale processingUnits by machine percentage
-              final ratio = machine.processingPercentage / 100.0;
-              final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
-              machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
-            }
+            final ratio = machine.processingPercentage / 100.0;
+            final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
+            machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
           }
         }
         taskSequence.add(Tuple2(task.id!, machineDurations));
       }
 
       for (var i = 0; i < job.amount; i++) {
-        inputJobs.add(FlexibleFlowInput(
+        final uniqueJobId = job.jobId! * 1000 + i;
+        inputJobs.add(FlexibleJobInput(
+          uniqueJobId,
           job.jobId!,
+          job.sequence!.id!,
           job.dueDate,
           job.priority,
           job.availableDate,
           taskSequence,
+          dependencies: job.sequence!.dependencies ?? [],
         ));
       }
     }
 
-    // Crear la disponibilidad inicial de las máquinas
+    // Create initial availability for machines
     final Map<int, DateTime> machinesAvailability = {};
     for (final machine in machines) {
       machinesAvailability[machine.id!] = order.regDate;
+    }
+
+    // Setup inactivities, resting, and capacity
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      if (machine.restPercentage == 100 || machine.restPercentage <= 0) {
+        machineRestTimeMap[machine.id!] = const Duration(hours: 1);
+      } else {
+        final ratio = machine.restPercentage / 100.0;
+        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
+        machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
+      }
     }
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
@@ -99,25 +107,28 @@ class FlexibleFlowShopAdapter {
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
 
-    // Ejecutar el algoritmo Flexible Flow Shop
-    List<FlexibleFlowOutput> output;
+    // Run Flexible Job Shop algorithm (highly optimized Non-delay & DAG-enabled)
+    List<FlexibleJobOutput> output;
     try {
-      output = FlexibleFlowShop(
+      output = FlexibleJobShop(
         order.regDate,
         Tuple2(START_SCHEDULE, END_SCHEDULE),
         inputJobs,
         machinesAvailability,
         rule.toUpperCase(),
+        machineInactivities: machineInactivitiesMap,
+        machineContinueCapacity: machineContinueCapacityMap,
+        machineRestTime: machineRestTimeMap,
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
       ).output;
     } catch (error, stack) {
-      print('FlexibleFlowShopAdapter.flexibleFlowShopAdapter error: ${error.toString()}');
+      print('JobShopAdapter.jobShopAdapter error: ${error.toString()}');
       print(stack.toString());
       return null;
     }
 
-    // Transformar la salida en PlanningMachineEntity
+    // Transform output into PlanningMachineEntity
     final List<PlanningMachineEntity> planningMachines = [];
     for (final machine in machines) {
       planningMachines.add(PlanningMachineEntity(
@@ -130,10 +141,11 @@ class FlexibleFlowShopAdapter {
 
     final Map<int, int> jobCounter = {};
     for (final out in output) {
-      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
+      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
       final sequence = job.sequence!;
-      final current = (jobCounter[out.jobId] ?? 0) + 1;
-      jobCounter[out.jobId] = current;
+      final current = (jobCounter[out.dbJobId] ?? 0) + 1;
+      jobCounter[out.dbJobId] = current;
+
       for (final taskEntry in out.scheduling.entries) {
         final taskId = taskEntry.key;
         final machineId = taskEntry.value.value1;
@@ -141,10 +153,8 @@ class FlexibleFlowShopAdapter {
 
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
-        final jobName = job.jobName ?? 'Job ${out.jobId}';
-        final displayName = current == 1
-            ? jobName
-            : '$jobName (${current - 1})';
+        final jobName = job.jobName ?? 'Job ${out.dbJobId}';
+        final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
@@ -152,9 +162,9 @@ class FlexibleFlowShopAdapter {
           displayName: displayName,
           taskId: task.id!,
           numberProcess: taskId,
-          startDate: timeRange.startDate,
-          endDate: timeRange.endDate,
-          retarded: out.dueDate.isBefore(timeRange.endDate),
+          startDate: timeRange.start,
+          endDate: timeRange.end,
+          retarded: out.dueDate.isBefore(timeRange.end),
           jobId: job.jobId!,
           orderId: orderId,
         );
@@ -165,19 +175,15 @@ class FlexibleFlowShopAdapter {
       }
     }
 
-    // Calcular métricas
+    // Calculate metrics
     final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
-      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
+      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
       jobsDates.add(Tuple4(
           job.availableDate, out.endTime, out.dueDate, job.priority));
     }
 
-    final metrics = getMetricts(
-      planningMachines,
-      jobsDates,
-    );
-
+    final metrics = getMetricts(planningMachines, jobsDates);
     return Tuple2(planningMachines, metrics);
   }
 }

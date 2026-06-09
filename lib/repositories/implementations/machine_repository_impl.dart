@@ -248,4 +248,21 @@ class MachineRepositoryImpl implements MachineRepository {
       return Left(failure);
     }
   }
+  @override
+Future<Either<Failure, bool>> updateMachine(MachineEntity machine) async {
+  try {
+    final updated = await machineDao.updateMachine(machine.id!, {
+      'machine_name': machine.name,
+      'processing_percentage': machine.processingPercentage,
+      'preparation_percentage': machine.preparationPercentage,
+      'rest_percentage': machine.restPercentage,
+      'continue_capacity': machine.continueCapacity,
+      'availability_time': machine.availabilityDateTime.toString(),
+    });
+    return Right(updated);
+  } on Failure catch (failure) {
+    return Left(failure);
+  }
+}
+  
 }

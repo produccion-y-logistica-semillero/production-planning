@@ -68,6 +68,8 @@ class SingleMachine {
       case "MINSLACK": scheduleMinimumSlack(); break;
       case "CR": scheduleCriticalRatio(); break;
       case "GENETICS": scheduleGeneticAlgorithm(); break;
+      case "TABU": scheduleTabuSearch(); break;
+      
 
     }
   }
@@ -402,5 +404,218 @@ class SingleMachine {
     individual[j] = temp;
     return individual;
   }
+  Duration calcularMakespanTabuSingle(List<SingleMachineInput> jobSequence) {
+  DateTime current = _getStartTime(jobSequence.first.availableDate);
+
+  for (var job in jobSequence) {
+    current = _getAvailableStartTime(current, job.machineDuration);
+    current = current.add(job.machineDuration);
+  }
+
+  return current.difference(_getStartTime(jobSequence.first.availableDate));
+}
+
+Duration evaluateFlujoTotal(List<SingleMachineInput> seq) {
+
+  DateTime current = _getStartTime(seq.first.availableDate);
+  DateTime origin  = current; 
+
+  Duration sumCompletions = Duration.zero;
+  for (var job in seq) {
+    current = _getAvailableStartTime(current, job.machineDuration);
+    current = current.add(job.machineDuration);
+    sumCompletions += current.difference(origin); // ← origin en vez de startDate
+  }
+  return sumCompletions;
+}
+
+
+void _generateOutput(List<SingleMachineInput> solution) {
+  output.clear();
+  var time = evaluateFlujoTotal(solution);
+  print("Tiempo del tabu: $time");
+
+  if (solution.isEmpty) return;
+
+  DateTime scheduleTime = _getStartTime(solution.first.availableDate);
+
+  for (var job in solution) {
+    print("job ${job.jobId} → duración: ${job.machineDuration} | available: ${job.availableDate} | due: ${job.dueDate}");
+
+    DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
+    DateTime end = start.add(job.machineDuration);
+    Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
+
+    output.add(
+      SingleMachineOutput(
+        job.jobId,
+        job.machineDuration,
+        start,
+        end,
+        job.dueDate,
+        delay,
+      ),
+    );
+
+    scheduleTime = end;
+  }
+}
+
+
+void scheduleTabuSearch() { 
+
+  if (input.length < 2) {
+    _generateOutput(input);
+    return;
+  }
+const int maxIterations       = 200;  // maximas iteraciones 
+const int tabuTenure          = 10;   // cuántas iteraciones permanece prohibido un movimiento.
+const int maxNoImprove        = 20;  //  Numero de maximo de iteraciones sin mejora 
+const int vecinosPorIteracion = 7;   // Cantidad  de swaps por iteracion 
+
+  // Solución inicial aleatoria
+  List<SingleMachineInput> currentSolution =List.from(input)..shuffle();
+
+  Duration currentFitness =evaluateFlujoTotal(currentSolution);
+  // Guarda la mejor en una lista independiente 
+  List<SingleMachineInput> bestSolution =List.from(currentSolution);
+
+  Duration bestFitness = currentFitness;
+  // movimiento prohibidos
+  Map<String, int> tabuMap = {};
+
+  int sinMejora = 0;
+
+  final random = Random();
+
+  int n = currentSolution.length;
+  // ciclo de revison 
+  for (int iter = 0; iter < maxIterations; iter++) {
+
+
+    // Limpiar movimientos tabú vencidos
+    tabuMap.removeWhere((_, exp) => exp <= iter);
+
+    List<SingleMachineInput>? bestNeighbor; // Lista de Maquinas 
+
+    Duration bestNeighborFitness = const Duration(days: 9999); // Inicializacion del flujo 
+
+    int bestI = -1; // Asegura los indices 
+    int bestJ = -1;
+
+    // Explorar solo algunos vecinos aleatorios
+    for (int k = 0; k < vecinosPorIteracion; k++) {
+
+      int i = random.nextInt(n); // dos posiciones al azar 
+      int j = random.nextInt(n);
+
+      while (i == j) {
+        j = random.nextInt(n);
+      }
+      // Copia de la lista 
+      List<SingleMachineInput> neighbor = List.from(currentSolution);
+      // swap 
+      final temp = neighbor[i];
+      neighbor[i] = neighbor[j];
+      neighbor[j] = temp;
+
+      Duration neighborFitness =evaluateFlujoTotal(neighbor); // Evalua al vecino 
+
+      String key = '${i}_$j';
+
+      bool isTabu =tabuMap.containsKey(key); // revisa si esta prohibido 
+
+      // Criterio de aspiración
+      bool aspiracion = isTabu && neighborFitness < bestFitness;
+      // Actualizar la mejor solución
+      if ((!isTabu || aspiracion) && neighborFitness <bestNeighborFitness) {
+
+        bestNeighborFitness = neighborFitness;
+
+        bestNeighbor = neighbor;
+
+        bestI = i;
+        bestJ = j;
+      }
+    }
+
+    if (bestNeighbor == null) {
+      continue;
+    }
+
+    // Moverse al mejor vecino(el mejor swap) encontrado y seguir 
+    currentSolution = bestNeighbor;
+    currentFitness = bestNeighborFitness;
+
+    // Registrar movimiento tabú
+    tabuMap['${bestI}_$bestJ'] = iter + tabuTenure +random.nextInt(6) -2;
+
+    // Actualizar mejor global
+    if (currentFitness < bestFitness) {
+
+      bestFitness = currentFitness;
+
+      bestSolution =  List.from(currentSolution);
+
+      sinMejora = 0;
+
+    } else {
+
+      sinMejora++;
+
+    }
+
+
+    // Diversificación (Escapar de optimos locales)
+    if (sinMejora >= maxNoImprove) {
+
+      currentSolution =List.from(bestSolution)..shuffle();
+
+      currentFitness = evaluateFlujoTotal(currentSolution);
+
+      tabuMap.clear();
+
+      sinMejora = 0;
+    }
+  }
+
+  // Mejor solución encontrada
+  input = bestSolution; // mejor secuencia 
+  // Falta esto :
+  output.clear();
+
+  var time = evaluateFlujoTotal(bestSolution) ;
+
+
+  print("Tiempo del tabu: $time");
+
+
+  DateTime scheduleTime = _getStartTime(input.first.availableDate);
+
+  for (var job in input) {
+
+     print("job ${job.jobId} → duración: ${job.machineDuration} | available: ${job.availableDate} | due: ${job.dueDate}");
+
+
+    DateTime start = _getAvailableStartTime(scheduleTime,job.machineDuration);
+
+    DateTime end =start.add(job.machineDuration);
+
+    Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate): Duration.zero;
+
+    output.add(
+      SingleMachineOutput(
+        job.jobId,
+        job.machineDuration,
+        start,
+        end,
+        job.dueDate,
+        delay,
+      ),
+    );
+
+    scheduleTime = end;
+  }
+}
 
 }

@@ -97,6 +97,11 @@ class ParallelMachine {
       case "GENETICS":
         geneticsRule();
         break;
+      case "TABU":        
+        tabuSearchRule();
+      break;
+
+
     }
 
   }
@@ -218,6 +223,11 @@ class ParallelMachine {
     _assignJobsToMachines();
   }
 
+  void _clearSchedule() {
+      output.clear();
+      machines.updateAll((key, value) => []);
+    }
+
   double _averageProcessingTime(ParallelInput job) {
     return job.durationsInMachines.values.fold(
           0,
@@ -234,6 +244,8 @@ class ParallelMachine {
     );
     return remainingMinutes - totalProcessingTime;
   }
+
+
 
   double _criticalRatio(ParallelInput job) {
     int remainingMinutes = job.dueDate.difference(job.availableDate).inMinutes;
@@ -538,4 +550,154 @@ class ParallelMachine {
     individual[j] = temp;
     return individual;
   }
-}
+  Duration evaluateFlujoTotalParallel(List<ParallelInput> jobSequence) {
+    if (jobSequence.isEmpty) return Duration.zero;
+
+    Map<int, DateTime> machineAvailability = {
+      for (var id in machines.keys) id: startDate,
+    };
+
+    Duration totalFlow = Duration.zero;
+
+    for (var job in jobSequence) {
+      DateTime bestEndTime = DateTime(9999);
+      int bestMachineId = -1;
+
+      for (var entry in job.durationsInMachines.entries) {
+        int machineId = entry.key;
+        Duration processing = entry.value;
+
+        DateTime available = machineAvailability[machineId] ?? startDate;
+
+        DateTime start = job.availableDate.isAfter(available)
+            ? job.availableDate
+            : available;
+
+        start = _adjustForWorkingSchedule(start);
+
+        DateTime end = _adjustEndTimeForWorkingSchedule(start, processing);
+
+        if (end.isBefore(bestEndTime)) {
+          bestEndTime = end;
+          bestMachineId = machineId;
+        }
+      }
+
+      if (bestMachineId != -1) {
+        machineAvailability[bestMachineId] = bestEndTime;
+        totalFlow += bestEndTime.difference(startDate);
+      }
+    }
+
+    return totalFlow;
+  }
+
+  void tabuSearchRule() {
+    if (inputJobs.length < 2) {
+      _clearSchedule();
+      _assignJobsToMachines();
+      return;
+    }
+
+    const int maxIterations = 1000;
+    const int tabuTenure = 10;
+    const int maxNoImprove = 50;
+    const int vecinosPorIteracion = 8;
+
+    final random = Random();
+
+    List<ParallelInput> currentSolution = List.from(inputJobs)..shuffle();
+    Duration currentFitness = evaluateFlujoTotalParallel(currentSolution);
+
+    List<ParallelInput> bestSolution = List.from(currentSolution);
+    Duration bestFitness = currentFitness;
+
+    Map<String, int> tabuMap = {};
+    int sinMejora = 0;
+
+    final int n = currentSolution.length;
+
+    for (int iter = 0; iter < maxIterations; iter++) {
+      tabuMap.removeWhere((_, expiration) => expiration <= iter);
+
+      List<ParallelInput>? bestNeighbor;
+      Duration bestNeighborFitness = const Duration(days: 9999);
+
+      int bestI = -1;
+      int bestJ = -1;
+
+      for (int k = 0; k < vecinosPorIteracion; k++) {
+        int i = random.nextInt(n);
+        int j = random.nextInt(n);
+
+        while (i == j) {
+          j = random.nextInt(n);
+        }
+
+        List<ParallelInput> neighbor = List.from(currentSolution);
+
+        final temp = neighbor[i];
+        neighbor[i] = neighbor[j];
+        neighbor[j] = temp;
+
+        Duration neighborFitness = evaluateFlujoTotalParallel(neighbor);
+
+        String key = '${i}_$j';
+        String reverseKey = '${j}_$i';
+
+        bool isTabu =
+            tabuMap.containsKey(key) || tabuMap.containsKey(reverseKey);
+
+        bool aspiration = isTabu && neighborFitness < bestFitness;
+
+        if ((!isTabu || aspiration) &&
+            neighborFitness < bestNeighborFitness) {
+          bestNeighbor = neighbor;
+          bestNeighborFitness = neighborFitness;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+
+      if (bestNeighbor == null) {
+        continue;
+      }
+
+      currentSolution = bestNeighbor;
+      currentFitness = bestNeighborFitness;
+
+      tabuMap['${bestI}_$bestJ'] = iter + tabuTenure;
+
+      if (currentFitness < bestFitness) {
+        bestFitness = currentFitness;
+        bestSolution = List.from(currentSolution);
+        sinMejora = 0;
+      } else {
+        sinMejora++;
+      }
+
+      if (sinMejora >= maxNoImprove) {
+        currentSolution = List.from(bestSolution)..shuffle();
+        currentFitness = evaluateFlujoTotalParallel(currentSolution);
+        tabuMap.clear();
+        sinMejora = 0;
+      }
+    }
+
+    inputJobs = bestSolution;
+
+    _clearSchedule();
+    _assignJobsToMachines();
+
+    print("Tiempo del tabu parallel: $bestFitness");
+  }
+
+  }
+
+  
+
+
+
+
+
+  

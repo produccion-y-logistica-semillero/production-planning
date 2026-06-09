@@ -714,7 +714,10 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
     final inner = <int?, Map<int, Duration>>{};
     for (final prevEntry in map.entries) {
       final prevKey = prevEntry.key;
-      final prevId = prevKey == 'null' ? null : prevKey as int;
+      // El adaptador serializa esta clave con `prevSeqId?.toString() ?? 'null'`,
+      // por lo que aquí llega como String ("5", "null", ...), no como int.
+      final prevId =
+          prevKey == 'null' ? null : int.parse(prevKey as String);
       inner[prevId] = (Map<dynamic, dynamic>.from(prevEntry.value as Map)).map(
         (key, value) => MapEntry(key as int, Duration(minutes: value as int)),
       );

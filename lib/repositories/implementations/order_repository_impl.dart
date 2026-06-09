@@ -54,8 +54,14 @@ class OrderRepositoryImpl implements OrderRepository {
         for (final model in jobs) {
           final sequenceModel =
               await sequencesDao.getSequenceById(model.sequenceId);
+          if (sequenceModel == null) {
+            print(
+                'OrderRepositoryImpl.getAllOrders: el job ${model.jobId} referencia '
+                'la secuencia ${model.sequenceId} inexistente. Se omite el job.');
+            continue;
+          }
           final List<TaskModel> tasks =
-              await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
+              await tasksDao.getTasksBySequenceId(sequenceModel.sequenceId!);
           final List<TaskDependencyModel> dependenciesM =
               await taskDependencyDao
                   .getDependenciesBySequenceId(sequenceModel.sequenceId!);
@@ -179,8 +185,14 @@ class OrderRepositoryImpl implements OrderRepository {
       for (final model in jobs) {
         final sequenceModel =
             await sequencesDao.getSequenceById(model.sequenceId);
+        if (sequenceModel == null) {
+          print(
+              'OrderRepositoryImpl.getFullOrder: el job ${model.jobId} referencia '
+              'la secuencia ${model.sequenceId} que NO existe en la BD.');
+          return Left(LocalStorageFailure());
+        }
         final List<TaskModel> tasks =
-            await tasksDao.getTasksBySequenceId(sequenceModel!.sequenceId!);
+            await tasksDao.getTasksBySequenceId(sequenceModel.sequenceId!);
         final List<TaskDependencyModel> dependenciesM = await taskDependencyDao
             .getDependenciesBySequenceId(sequenceModel.sequenceId!);
 

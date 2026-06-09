@@ -161,6 +161,12 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
             }
 
             final env = state.enviroment;
+            if (env != null) {
+              // Log rules for debugging
+              try {
+                print('DEBUG: AlgorithmPickerPage env.rules.length=${env.rules.length}');
+              } catch (_) {}
+            }
             if (env == null) {
               return Center(
                 child: Column(

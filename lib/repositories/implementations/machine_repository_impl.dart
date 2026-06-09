@@ -189,11 +189,19 @@ class MachineRepositoryImpl implements MachineRepository {
     Duration? restTime,
   }) async {
     try {
-      final updated = await machineDao.updateMachine(machineId, {
+      final values = <String, dynamic>{
         'continue_capacity': continueCapacity,
-        'rest_time': _durationToSqlTime(restTime),
-      });
-      return Right(updated);
+      };
+      if (restTime != null) {
+        final minutes = restTime.inMinutes;
+        values['rest_percentage'] =
+            minutes <= 0 ? 0.0 : (minutes / 60.0) * 100.0;
+      }
+      final updated = await machineDao.updateMachine(machineId, values);
+      if (!updated) {
+        return Left(LocalStorageFailure());
+      }
+      return const Right(true);
     } on Failure catch (failure) {
       return Left(failure);
     }

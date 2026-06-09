@@ -1,5 +1,6 @@
 
 import 'package:production_planning/entities/job_entity.dart';
+import 'package:production_planning/entities/machine_times.dart';
 
 class JobModel {
   final int jobId;
@@ -9,14 +10,16 @@ class JobModel {
   final DateTime dueDate;
   final DateTime availableDate;
   final int priority;
+  final String? jobState;
 
   final Map<int, int>? preemptionMatrix;
   // Map<taskId, Map<machineId, Map<'processing'|'preparation'|'rest', minutes>>>
   final Map<int, Map<int, Map<String, int>>>? taskMachineTimesMinutes;
+  final Map<int, String>? machineFinalStates;
 
   JobModel(this.jobId, this.sequenceId, this.amount, this.jobName, this.dueDate,
       this.priority, this.availableDate,
-      {this.preemptionMatrix, this.taskMachineTimesMinutes});
+      {this.preemptionMatrix, this.taskMachineTimesMinutes, this.jobState, this.machineFinalStates});
 
   factory JobModel.fromJson(Map<String, dynamic> json) {
     return JobModel(
@@ -26,20 +29,22 @@ class JobModel {
         json['job_name'],
         DateTime.parse(json['due_date']),
         json['priority'],
-        DateTime.parse(json['available_date']));
+        DateTime.parse(json['available_date']),
+        jobState: json['job_state'] as String?);
   }
   JobEntity toEntity() {
     // convert minutes map to MachineTimes map
-    Map<int, Map<int, dynamic>>? taskTimes;
+    Map<int, Map<int, MachineTimes>>? taskTimes;
     if (taskMachineTimesMinutes != null) {
       taskTimes = {};
       taskMachineTimesMinutes!.forEach((taskId, mm) {
-        final inner = <int, dynamic>{};
+        final inner = <int, MachineTimes>{};
         mm.forEach((machineId, mMap) {
-          final processing = Duration(minutes: mMap['processing'] ?? 0);
-          final preparation = Duration(minutes: mMap['preparation'] ?? 0);
-          final rest = Duration(minutes: mMap['rest'] ?? 0);
-          inner[machineId] = (processing, preparation, rest);
+          inner[machineId] = MachineTimes(
+            processing: Duration(minutes: mMap['processing'] ?? 0),
+            preparation: Duration(minutes: mMap['preparation'] ?? 0),
+            rest: Duration(minutes: mMap['rest'] ?? 0),
+          );
         });
         taskTimes![taskId] = inner;
       });

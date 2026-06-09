@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   final dir = await getApplicationSupportDirectory();
   await dir.create(recursive: true);
 

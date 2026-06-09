@@ -8,6 +8,7 @@ import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
+import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/services/machines_service.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/services/sequences_service.dart';
@@ -21,8 +22,11 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   final Map<int, SequenceEntity> _sequenceCache = {};
   final Map<int, List<MachineEntity>> _machinesCache = {};
 
-  NewOrderBloc(this.orderService, this.seqService, this.machinesService)
-      : super(NewOrdersInitialState());
+  NewOrderBloc(
+    this.orderService,
+    this.seqService,
+    this.machinesService,
+  ) : super(NewOrdersInitialState());
 
   Future<void> retrieveSequences() async {
     final response = await seqService.getSequences();
@@ -30,8 +34,8 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       (failure) => emit(NewOrdersFailureState()),
       (sequences) {
         emit(NewOrdersState(
-          [],
-          sequences.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
+          jobs: [],
+          sequences: sequences.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
         ));
       },
     );
@@ -69,7 +73,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         sequences: sequences,
       ));
 
-      emit(NewOrdersState(jobs, sequences));
+      emit(currentState.copyWith(jobs: jobs));
     }
   }
 
@@ -77,10 +81,9 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     if (state is NewOrdersState) {
       final currentState = state as NewOrdersState;
       List<AddJobWidget> jobs = List.from(currentState.jobs);
-      List<Tuple2<int, String>> sequences = currentState.sequences;
 
       jobs.removeWhere((widget) => widget.index == index);
-      emit(NewOrdersState(jobs, sequences));
+      emit(currentState.copyWith(jobs: jobs));
     }
   }
 
@@ -174,6 +177,12 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   //     machineTypeId: machineTypeId,
   //   );
   // }
+  
+  void setSetupTimeMatrix(Map<String, Map<String, Map<String, int>>> matrix) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState).copyWith(setupTimeMatrix: matrix));
+    }
+  }
 
   Future<void> saveOrder() async {
     if (state is NewOrdersState) {
@@ -234,11 +243,18 @@ class NewOrderBloc extends Cubit<NewOrderState> {
           wid.idController!.text.isNotEmpty ? wid.idController!.text : null,
           preemptionMatrix: wid.stateKey.currentState?.getPreemptionMatrix(),
           taskMachineTimesMinutes: taskMachineTimes,
-
+          machineFinalStates: wid.stateKey.currentState?.getMachineFinalStates(),
         );
       }).toList();
 
-      final response = await orderService.addOrder(jobs);
+      late Either<Failure, bool> response;
+      try {
+        response = await orderService.addOrder(jobs, setupTimeMatrix: currentState.setupTimeMatrix);
+      } catch (error, stack) {
+        print('NewOrderBloc.saveOrder error: ${error.toString()}');
+        print(stack.toString());
+        response = Left(LocalStorageFailure());
+      }
 
       // Diagnostic: print the taskMachineTimesMinutes for each job before saving
       for (var j in jobs) {
@@ -247,14 +263,19 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       }
       response.fold(
         (failure) {
-          final newState =
-              NewOrdersState(currentState.jobs, currentState.sequences);
-          newState.justSaved = false;
+          final newState = NewOrdersState(
+            jobs: currentState.jobs,
+            sequences: currentState.sequences,
+            justSaved: false,
+          );
           emit(newState);
         },
         (success) {
-          final newState = NewOrdersState([], currentState.sequences);
-          newState.justSaved = true;
+          final newState = NewOrdersState(
+            jobs: [],
+            sequences: currentState.sequences,
+            justSaved: true,
+          );
           emit(newState);
         },
       );

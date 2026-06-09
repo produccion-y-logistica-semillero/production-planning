@@ -47,11 +47,14 @@ class _OrderMetricsState extends State<OrderMetrics> {
     super.dispose();
   }
 
-  /// Devuelve una cadena para el retardo promedio.
-  /// Si la clase Metrics no tiene ese campo, retorna '-'.
+  /// Devuelve una cadena para la tardanza promedio.
   String _fmtAverageDelay(Metrics m) {
-
     final d = m.avarageDelayTime;
+    return _durationToString(d);
+  }
+
+  String _fmtAverageLateness(Metrics m) {
+    final d = m.avarageLatenessTime;
     return _durationToString(d);
   }
 
@@ -318,6 +321,15 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   ),
                                   DataColumn(
                                     label: Text(
+                                      'Tardanza\nprom',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
                                       'Retardo\nprom',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
@@ -358,7 +370,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   DataColumn(
                                     numeric: true,
                                     label: Text(
-                                      'Tiempo total\nretardo',
+                                      'Tardanza\ntotal',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: colorScheme.primary,
@@ -450,6 +462,15 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                           ),
                                         ),
                                         DataCell(
+                                          Text(
+                                            _fmtAverageLateness(m),
+                                            style: TextStyle(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
                                           Column(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
@@ -496,7 +517,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                         ),
                                         DataCell(
                                           Text(
-                                            '${Duration(minutes: m.avarageDelayTime.inMinutes * m.totalJobs)}',
+                                            '${m.totalTardiness}',
                                             style: TextStyle(
                                               color: colorScheme.onSurface,
                                               fontWeight: FontWeight.w500,
@@ -505,7 +526,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                         ),
                                         DataCell(
                                           Text(
-                                            '${m.totalWeightedDelay}',
+                                            '${m.totalWeightedTardiness}',
                                             style: TextStyle(
                                               color: colorScheme.onSurface,
                                               fontWeight: FontWeight.w500,

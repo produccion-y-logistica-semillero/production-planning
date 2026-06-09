@@ -1,3 +1,14 @@
+// lib/services/adapters/flow_shop_Adapter.dart
+//
+// Changes from merged version:
+//   • Accepts SetupTimeService and uses OrdersService helper to load the
+//     order WITH the in-memory setup matrices attached.
+//   • buildMachineStateSetupMatrix / buildJobMachineStates are imported from
+//     shared/functions/functions.dart (where they now live).
+//   • _buildDefaultChangeoverMatrix now produces ZERO durations so it no
+//     longer corrupts the Gantt when no sequence-based setup times are stored
+//     in the DB.  The state-based matrix takes precedence via _getSetupDuration.
+
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
@@ -9,6 +20,7 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flow_shop.dart';
+import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
@@ -16,10 +28,12 @@ import '../../shared/utils/task_time_utils.dart';
 class FlowShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService; // <── added
 
   FlowShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
+    required this.setupTimeService,
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flowShopAdapter(
@@ -27,16 +41,36 @@ class FlowShopAdapter {
     String rule, {
     Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
   }) async {
+    // ── 1. Load order WITH setup matrices attached ─────────────────────────
+    // We use the orderRepository directly here since OrdersService would
+    // create a circular dependency.  Instead we manually attach the cache.
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
-    if (order == null) return null;
+    OrderEntity? baseOrder = responseOrder.fold((f) => null, (or) => or);
+    if (baseOrder == null) return null;
 
-    //We get all machines
-    final List<int> machinesTypesIds = order.orderJobs![0].sequence!.tasks!
-        .map((t) => t.machineTypeId)
+    // Attach cached matrices to the entity, but preserve any persisted
+    // setup matrix values already loaded from the order.
+    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
+    if (baseOrder.setupTimeMatrix != null) {
+      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
+    }
+    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
+
+    final OrderEntity order = OrderEntity(
+      baseOrder.orderId,
+      baseOrder.regDate,
+      baseOrder.orderJobs,
+      setupTimeMatrix:
+          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
+    );
+
+    // ── 2. Resolve machines ────────────────────────────────────────────────
+    final List<int> machineTypeIds = order.orderJobs!
+        .expand((job) => job.sequence!.tasks!.map((t) => t.machineTypeId))
+        .toSet()
         .toList();
     final List<MachineEntity> machines = [];
-    for (final typeId in machinesTypesIds) {
+    for (final typeId in machineTypeIds) {
       final machinesSpecific =
           await machineRepository.getAllMachinesFromType(typeId);
       final machineList = machinesSpecific.fold((_) => null, (m) => m);
@@ -44,33 +78,46 @@ class FlowShopAdapter {
       machines.addAll(machineList);
     }
 
+    // ── 3. Build setup data ────────────────────────────────────────────────
     final sequenceIds = order.orderJobs!
         .where((job) => job.sequence != null && job.sequence!.id != null)
         .map((job) => job.sequence!.id!)
         .toSet();
 
-    final defaultMatrix = _buildDefaultChangeoverMatrix(machines, sequenceIds);
+    // Default changeover matrix uses ZERO durations — the state-based matrix
+    // takes precedence, so non-zero defaults would add spurious setup time.
+    final defaultMatrix =
+        _buildZeroChangeoverMatrix(machines, sequenceIds);
     final mergedMatrix =
         _mergeChangeoverMatrices(defaultMatrix, changeoverMatrix);
 
-    //we create the input and expand jobs by their `amount` (cantidad)
+    final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
+        buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
+    final Map<int, Map<int, String>> jobStates =
+        buildJobMachineStates(order.orderJobs!, machines);
+
+    // ── 4. Build FlowShopInput list ────────────────────────────────────────
     final List<FlowShopInput> inputJobs = [];
     for (final job in order.orderJobs!) {
       final Map<int, Duration> taskTimes = {};
       final List<Tuple2<int, int>> taskSequence = [];
-      //iterating over all tasks, and for each one, we get the time it takes on the machine we have for the machine type
       for (final task in job.sequence!.tasks!) {
         final machineOfTask =
-            machines.where((m) => m.machineTypeId == task.machineTypeId).first;
-        // Prefer explicit job-task-machine time when present (robust)
+            machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
         final explicit =
             getExplicitProcessingDuration(job, task.id!, machineOfTask);
-        // Calculate duration from machine percentage (100% = 1 hour base)
-        final baseDuration = Duration(
-            minutes: (60 * machineOfTask.processingPercentage / 100).round());
-        taskTimes[task.id!] =
-            explicit ?? ruleOf3(baseDuration, task.processingUnits);
-        taskSequence.add(Tuple2(task.id!, task.machineTypeId));
+        if (explicit != null) {
+          taskTimes[task.id!] = explicit;
+        } else if (machineOfTask.processingPercentage == 100 ||
+            machineOfTask.processingPercentage <= 0) {
+          taskTimes[task.id!] = task.processingUnits;
+        } else {
+          final ratio = machineOfTask.processingPercentage / 100.0;
+          final scaledMillis =
+              (task.processingUnits.inMilliseconds * ratio).round();
+          taskTimes[task.id!] = Duration(milliseconds: scaledMillis);
+        }
+        taskSequence.add(Tuple2(task.id!, machineOfTask.id!));
       }
       for (var i = 0; i < job.amount; i++) {
         inputJobs.add(FlowShopInput(
@@ -116,21 +163,23 @@ class FlowShopAdapter {
       machineRestTime: machineRestTimeMap,
     ).output;
 
-    //transform to planning machines
-    final List<PlanningMachineEntity> planningMachines = [];
-    for (final m in machines) {
-      planningMachines.add(PlanningMachineEntity(
-        m.machineTypeId!,
-        m.name,
-        [],
-        scheduledInactivities: m.scheduledInactivities,
-      ));
-    }
+    // ── 7. Build PlanningMachineEntity list ────────────────────────────────
+    final List<PlanningMachineEntity> planningMachines = [
+      for (final m in machines)
+        if (m.id != null)
+          PlanningMachineEntity(
+            m.id!,
+            m.name,
+            [],
+            scheduledInactivities: m.scheduledInactivities,
+          ),
+    ];
 
     final Map<int, int> jobCounter = {};
     for (final out in output) {
       int i = 0;
-      final job = order.orderJobs!.where((j) => j.jobId == out.jobId).first;
+      final job =
+          order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final jobSequence = job.sequence!;
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
@@ -139,76 +188,59 @@ class FlowShopAdapter {
           ? jobName
           : '$jobName (${current - 1})';
       for (final machineScheduling in out.machinesScheduling.entries) {
-        //we get the planning machine where this task belongs
         final planningMachineEntity = planningMachines
-            .where((pm) => pm.machineId == machineScheduling.key)
-            .first;
-        final DateTime taskStart = machineScheduling.value.value2.startDate;
-        final DateTime taskEnd = machineScheduling.value.value2.endDate;
-        final planningTask = PlanningTaskEntity(
-            sequenceId: jobSequence.id!,
-            sequenceName: jobSequence.name,
-            displayName: displayName,
-            taskId: machineScheduling.value.value1,
-            numberProcess: i++,
-            startDate: taskStart,
-            endDate: taskEnd,
-            retarded: out.dueDate.isBefore(out.endTime),
-            orderId: orderId,
-            jobId: out.jobId);
-
-        planningMachineEntity.tasks.add(planningTask);
+            .firstWhere((pm) => pm.machineId == machineScheduling.key);
+        final taskStart = machineScheduling.value.value2.startDate;
+        final taskEnd = machineScheduling.value.value2.endDate;
+        planningMachineEntity.tasks.add(PlanningTaskEntity(
+          sequenceId: jobSequence.id!,
+          sequenceName: jobSequence.name,
+          displayName: displayName,
+          taskId: machineScheduling.value.value1,
+          numberProcess: i++,
+          startDate: taskStart,
+          endDate: taskEnd,
+          retarded: out.dueDate.isBefore(out.endTime),
+          orderId: orderId,
+          jobId: out.jobId,
+        ));
       }
     }
-    //we get the metrics
 
-    final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
-    for (final out in output) {
+    // ── 8. Metrics ────────────────────────────────────────────────────────
+    final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      jobsDates
-          .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
-    }
+      return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
+          job.priority);
+    }).toList();
 
-    final metrics = getMetricts(
-      planningMachines,
-      jobsDates,
-    );
-    return Tuple2(planningMachines, metrics);
+    return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
   }
 
   Map<int, Map<int?, Map<int, Duration>>> _buildDefaultChangeoverMatrix(
     List<MachineEntity> machines,
     Set<int> sequenceIds,
   ) {
-    final Map<int, Map<int?, Map<int, Duration>>> matrix = {};
+    final result = <int, Map<int?, Map<int, Duration>>>{};
     for (final machine in machines) {
-      if (machine.machineTypeId == null) continue;
-      final machineId = machine.machineTypeId!;
-      if (matrix.containsKey(machineId)) continue;
-      // Calculate preparation duration from percentage (100% = 1 hour base)
-      final Duration baseDuration =
-          Duration(minutes: (60 * machine.preparationPercentage / 100).round());
-      final Map<int, Duration> defaultTargets = {
-        for (final seqId in sequenceIds) seqId: baseDuration,
+      if (machine.id == null) continue;
+      final Map<int, Duration> zeroTargets = {
+        for (final seqId in sequenceIds) seqId: Duration.zero,
       };
-      final Map<int?, Map<int, Duration>> machineMatrix = {
-        null: Map<int, Duration>.from(defaultTargets),
+      result[machine.id!] = {
+        null: Map.from(zeroTargets),
+        for (final previous in sequenceIds)
+          previous: Map.from(zeroTargets),
       };
-      for (final previous in sequenceIds) {
-        machineMatrix[previous] = Map<int, Duration>.from(defaultTargets);
-      }
-      matrix[machineId] = machineMatrix;
     }
-    return matrix;
+    return result;
   }
 
   Map<int, Map<int?, Map<int, Duration>>> _mergeChangeoverMatrices(
     Map<int, Map<int?, Map<int, Duration>>> baseMatrix,
     Map<int, Map<int?, Map<int, Duration>>>? overrideMatrix,
   ) {
-    if (overrideMatrix == null || overrideMatrix.isEmpty) {
-      return baseMatrix;
-    }
+    if (overrideMatrix == null || overrideMatrix.isEmpty) return baseMatrix;
 
     final result = <int, Map<int?, Map<int, Duration>>>{};
     final machineIds = <int>{...baseMatrix.keys, ...overrideMatrix.keys};
@@ -220,17 +252,12 @@ class FlowShopAdapter {
       for (final previousId in previousIds) {
         final baseDurations = baseMachine[previousId] ?? {};
         final overrideDurations = overrideMachine[previousId] ?? {};
-        final currentIds = <int>{
-          ...baseDurations.keys,
-          ...overrideDurations.keys
-        };
+        final currentIds = <int>{...baseDurations.keys, ...overrideDurations.keys};
         final mergedDurations = <int, Duration>{};
         for (final currentId in currentIds) {
-          if (overrideDurations.containsKey(currentId)) {
-            mergedDurations[currentId] = overrideDurations[currentId]!;
-          } else if (baseDurations.containsKey(currentId)) {
-            mergedDurations[currentId] = baseDurations[currentId]!;
-          }
+          mergedDurations[currentId] = overrideDurations.containsKey(currentId)
+              ? overrideDurations[currentId]!
+              : baseDurations[currentId]!;
         }
         mergedMachine[previousId] = mergedDurations;
       }

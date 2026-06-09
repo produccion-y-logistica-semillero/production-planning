@@ -56,6 +56,9 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
 
         if (state.successMessage != null) {
           _showSnack(state.successMessage!);
+          if (state.successMessage!.contains('automática')) {
+            _syncAutomaticFieldsFromState(state);
+          }
           context.read<MachineInactivitiesCubit>().clearFeedback();
         }
         if (state.errorMessage != null) {
@@ -330,15 +333,16 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     }
 
     final restMinutesText = _restMinutesController.text.trim();
-    Duration? restDuration;
-    if (restMinutesText.isNotEmpty) {
-      final restMinutes = int.tryParse(restMinutesText);
-      if (restMinutes == null || restMinutes < 0) {
-        _showSnack('Ingresa una duración en minutos válida.', isError: true);
-        return;
-      }
-      restDuration = Duration(minutes: restMinutes);
+    if (restMinutesText.isEmpty) {
+      _showSnack('Ingresa los minutos de descanso.', isError: true);
+      return;
     }
+    final restMinutes = int.tryParse(restMinutesText);
+    if (restMinutes == null || restMinutes <= 0) {
+      _showSnack('Ingresa una duración en minutos válida.', isError: true);
+      return;
+    }
+    final restDuration = Duration(minutes: restMinutes);
 
     context.read<MachineInactivitiesCubit>().saveAutomatic(
           continueCapacity: continueCapacity,
@@ -394,6 +398,16 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
       return;
     }
     context.read<MachineInactivitiesCubit>().removeScheduled(id);
+  }
+
+  void _syncAutomaticFieldsFromState(MachineInactivitiesState state) {
+    _continueCapacityController.text = state.continueCapacity > 0
+        ? state.continueCapacity.toString()
+        : '';
+    _restMinutesController.text =
+        state.restTime != null && state.restTime!.inMinutes > 0
+            ? state.restTime!.inMinutes.toString()
+            : '';
   }
 
   void _resetScheduledForm() {

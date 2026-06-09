@@ -18,8 +18,9 @@ class JobEntity {
   final Map<int, int>? preemptionMatrix; // Map<machineId, canPreempt (0 o 1)>
   // Map<taskId, Map<machineId, MachineTimes>>: optional explicit processing/setup/rest times
   final Map<int, Map<int, MachineTimes>>? taskMachineTimes;
+  final Map<int, String>? machineFinalStates;
 
   JobEntity(this.jobId, this.sequence, this.amount, this.jobName, this.dueDate, this.priority,
       this.availableDate,
-      {this.preemptionMatrix, this.taskMachineTimes});
+      {this.preemptionMatrix, this.taskMachineTimes, this.machineFinalStates});
 }

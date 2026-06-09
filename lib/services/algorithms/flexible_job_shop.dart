@@ -122,11 +122,14 @@ class FlexibleJobShop {
     print('FlexibleJobShop: scheduling finished (GENETICS)');
   }
 
+  int _safeMinutes(Duration duration) => max(duration.inMinutes, 1);
+
   double _geneticsScore(FlexibleJobInput job, Duration duration) {
     final cr = _calculateCR(job, duration, 0);
-    final wspt = job.priority / max(1, duration.inMinutes);
+    final wspt = job.priority / _safeMinutes(duration);
     return (1 / max(cr, 0.0001)) + wspt;
   }
+
   void _initializeMachineLastSequence() {
     for (final machineId in machinesAvailability.keys) {
       _machineLastSequence.putIfAbsent(machineId, () => null);
@@ -216,8 +219,8 @@ class FlexibleJobShop {
 
   void scheduleFlexibleJobShopWSPT() {
     _schedule((a, b) {
-      final wsptA = a.job.priority / a.duration.inMinutes;
-      final wsptB = b.job.priority / b.duration.inMinutes;
+      final wsptA = a.job.priority / _safeMinutes(a.duration);
+      final wsptB = b.job.priority / _safeMinutes(b.duration);
       return wsptB.compareTo(wsptA); // mayor primero
     });
   }
@@ -235,10 +238,9 @@ class FlexibleJobShop {
 
     for (int i = currentOpIndex; i < job.taskSequence.length; i++) {
       final task = job.taskSequence[i];
-
       if (task.value2.isEmpty) continue;
-      final sum = task.value2.values.map((d) => d.inMinutes).fold<int>(0, (a, b) => a + b);
-      final avgDuration = sum ~/ task.value2.length;
+      final sum = task.value2.values.fold<int>(0, (total, duration) => total + duration.inMinutes);
+      final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
       totalMinutes += avgDuration;
     }
 
@@ -266,16 +268,15 @@ class FlexibleJobShop {
 
   int _accumulatedProcessingTimeForJob(
       FlexibleJobInput job, int currentAccumulatedTime) {
-    int totalProcessingTime =
-        currentAccumulatedTime; // Empezamos desde el tiempo acumulado
+    int totalProcessingTime = currentAccumulatedTime; // Empezamos desde el tiempo acumulado
 
     final opIndex = jobOperationIndex[job.jobId]!;
 
     for (int i = 0; i < opIndex; i++) {
       final task = job.taskSequence[i];
-      final avgDuration =
-          task.value2.values.map((d) => d.inMinutes).reduce((a, b) => a + b) ~/
-              task.value2.length;
+      if (task.value2.isEmpty) continue;
+      final sum = task.value2.values.fold<int>(0, (total, duration) => total + duration.inMinutes);
+      final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
       totalProcessingTime += avgDuration;
     }
 
@@ -288,7 +289,7 @@ class FlexibleJobShop {
     final dj = job.dueDate;
     final pj = duration;
     final slack = dj.difference(DateTime.now()).inMinutes -
-        pj.inMinutes -
+        _safeMinutes(pj) -
         accumulatedProcessingTime;
     return slack < 0 ? 0 : slack.toDouble();
   }
@@ -318,7 +319,7 @@ class FlexibleJobShop {
     final pj = duration;
     final cr =
         (dj.difference(DateTime.now()).inMinutes - accumulatedProcessingTime) /
-            pj.inMinutes;
+            _safeMinutes(pj);
     return cr < 0 ? 0 : cr;
   }
 
@@ -353,12 +354,12 @@ class FlexibleJobShop {
 
     final maxSlack = max(
         dj.difference(DateTime.now()).inMinutes -
-            pj.inMinutes -
+            _safeMinutes(pj) -
             accumulatedProcessingTime,
         0);
     const k = 1.0; // Este parámetro k puede ser ajustado
     final exponent = -(maxSlack / (k * pPromedio));
-    final atcs = (wj / pj.inMinutes) * exp(exponent);
+    final atcs = (wj / _safeMinutes(pj)) * exp(exponent);
 
     return atcs;
   }
@@ -440,6 +441,8 @@ class FlexibleJobShop {
 
     int _iter = 0;
     const int _maxIter = 1000000; // safety cap
+    int lastCompletedCount = 0;
+    int stallIterations = 0;
 
     while (completedTasks.entries.any((entry) {
       final job = inputJobs.firstWhere((j) => j.jobId == entry.key);
@@ -453,6 +456,18 @@ class FlexibleJobShop {
         print('FlexibleJobShop._schedule: reached max iterations ($_maxIter), aborting to avoid freeze');
         break;
       }
+      final currentCompletedCount = completedTasks.values.fold<int>(0, (sum, set) => sum + set.length);
+      if (currentCompletedCount == lastCompletedCount) {
+        stallIterations += 1;
+      } else {
+        stallIterations = 0;
+      }
+      lastCompletedCount = currentCompletedCount;
+      if (stallIterations > 1000) {
+        print('FlexibleJobShop._schedule: no progress after $stallIterations iterations, aborting to avoid freeze');
+        break;
+      }
+
       List<
           ({
             FlexibleJobInput job,
@@ -496,6 +511,7 @@ class FlexibleJobShop {
       }
 
       if (candidates.isEmpty) {
+        print('FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
         break;
       }
 
@@ -513,11 +529,12 @@ class FlexibleJobShop {
           _machineLastJob.putIfAbsent(selected.machineId, () => null);
       final Duration setupDuration = _getSetupDuration(
           selected.machineId, selected.job.jobId, previousJob);
-      final Duration totalDuration = selected.duration + setupDuration;
 
-      final end = start.add(totalDuration);
-      final adjustedEnd =
-          _adjustEndTimeWithInactivities(selected.machineId, start, end);
+      final DateTime setupEnd = _adjustEndTimeWithInactivities(
+          selected.machineId, start, start.add(setupDuration));
+      final DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
+      final DateTime adjustedEnd = _adjustEndTimeWithInactivities(
+          selected.machineId, taskStart, taskStart.add(selected.duration));
 
       // Aplicar descanso por continueCapacity
       DateTime finalEnd = adjustedEnd;
@@ -535,7 +552,7 @@ class FlexibleJobShop {
         }
       }
       jobSchedulings[selected.job.jobId]![selected.taskId] =
-          Tuple2(selected.machineId, Range(start, adjustedEnd));
+          Tuple2(selected.machineId, Range(taskStart, adjustedEnd));
 
       machinesAvailability[selected.machineId] = finalEnd;
       completedTasks[selected.job.jobId]!.add(selected.taskId);

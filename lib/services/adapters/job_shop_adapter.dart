@@ -10,20 +10,40 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
+import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class JobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
-  JobShopAdapter({required this.orderRepository, required this.machineRepository});
+  JobShopAdapter({
+    required this.orderRepository,
+    required this.machineRepository,
+    required this.setupTimeService,
+  });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> jobShopAdapter(
       int orderId, String rule) async {
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
-    if (order == null || order.orderJobs == null) return null;
+    OrderEntity? baseOrder = responseOrder.fold((f) => null, (o) => o);
+    if (baseOrder == null || baseOrder.orderJobs == null) return null;
+
+    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
+    if (baseOrder.setupTimeMatrix != null) {
+      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
+    }
+    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
+
+    final OrderEntity order = OrderEntity(
+      baseOrder.orderId,
+      baseOrder.regDate,
+      baseOrder.orderJobs,
+      setupTimeMatrix:
+          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
+    );
 
     // Collect all machines used by tasks (one machine per type expected)
     final List<int> machineTypeIds = order.orderJobs!
@@ -176,11 +196,11 @@ class JobShopAdapter {
     }
 
     // Calculate metrics
-    final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
+    final List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-      jobsDates.add(Tuple4(
-          job.availableDate, out.endTime, out.dueDate, job.priority));
+      jobsDates.add(Tuple5(out.dbJobId, out.startDate, out.endTime, out.dueDate,
+          job.priority));
     }
 
     final metrics = getMetricts(planningMachines, jobsDates);

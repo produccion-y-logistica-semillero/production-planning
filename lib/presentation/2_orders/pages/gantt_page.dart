@@ -70,19 +70,31 @@ class GanttPage extends StatelessWidget {
                     child: Text("Hubo problemas planificando la orden")));
               }
               if (state is GanttPlanningSuccess) {
-                content.add(
-                  GanttChart(
-                    number: number,
-                    machines: state.planningMachines,
-                    selectedRule: state.selectedRule,
-                    metrics: state.metrics,
-                    schedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
-                    items: state.enviroment!.rules.map((value) {
+                // Deduplicate items based on rule ID to prevent dropdown errors
+                final seenIds = <int>{};
+                final uniqueItems = state.enviroment!.rules
+                    .where((rule) => seenIds.add(rule.value1))
+                    .map((value) {
                       return DropdownMenuItem<int>(
                         value: value.value1,
                         child: Text(value.value2),
                       );
-                    }).toList(),
+                    }).toList();
+                
+                // Ensure selectedRule is valid; default to first item if null
+                int? validSelectedRule = state.selectedRule;
+                if (validSelectedRule == null && uniqueItems.isNotEmpty) {
+                  validSelectedRule = uniqueItems.first.value;
+                }
+                
+                content.add(
+                  GanttChart(
+                    number: number,
+                    machines: state.planningMachines,
+                    selectedRule: validSelectedRule,
+                    metrics: state.metrics,
+                    schedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
+                    items: uniqueItems,
                   ),
                 );
               }

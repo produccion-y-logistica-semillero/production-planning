@@ -31,8 +31,22 @@ class OpenShopAdapter {
       int orderId, String rule) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
-    if (order == null || order.orderJobs == null) return null;
+    OrderEntity? baseOrder = responseOrder.fold((f) => null, (order) => order);
+    if (baseOrder == null || baseOrder.orderJobs == null) return null;
+
+    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
+    if (baseOrder.setupTimeMatrix != null) {
+      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
+    }
+    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
+
+    final OrderEntity order = OrderEntity(
+      baseOrder.orderId,
+      baseOrder.regDate,
+      baseOrder.orderJobs,
+      setupTimeMatrix:
+          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
+    );
 
     // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
     final List<int> machineTypeIds = order.orderJobs!
@@ -272,7 +286,8 @@ class OpenShopAdapter {
       planningMachines,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-        return Tuple4(job.availableDate, out.endTime, out.dueDate, job.priority);
+        return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
+            job.priority);
       }).toList(),
     );
 

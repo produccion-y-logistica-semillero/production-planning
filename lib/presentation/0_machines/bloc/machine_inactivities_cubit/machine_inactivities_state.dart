@@ -8,6 +8,7 @@ class MachineInactivitiesState extends Equatable {
   final String? errorMessage;
   final String? successMessage;
   final int machineId;
+  final int? machineTypeId;
   final String machineName;
   final int continueCapacity;
   final Duration? restTime;
@@ -20,6 +21,7 @@ class MachineInactivitiesState extends Equatable {
     required this.errorMessage,
     required this.successMessage,
     required this.machineId,
+    required this.machineTypeId,
     required this.machineName,
     required this.continueCapacity,
     required this.restTime,
@@ -33,6 +35,7 @@ class MachineInactivitiesState extends Equatable {
         errorMessage: null,
         successMessage: null,
         machineId: -1,
+        machineTypeId: null,
         machineName: '',
         continueCapacity: 0,
         restTime: null,
@@ -46,12 +49,14 @@ class MachineInactivitiesState extends Equatable {
     String? errorMessage,
     String? successMessage,
     int? machineId,
+    int? machineTypeId,
     String? machineName,
     int? continueCapacity,
     Duration? restTime,
     List<MachineInactivityEntity>? scheduled,
     bool clearError = false,
     bool clearSuccess = false,
+    bool setRestTime = false,
   }) {
     return MachineInactivitiesState(
       isLoading: isLoading ?? this.isLoading,
@@ -61,9 +66,10 @@ class MachineInactivitiesState extends Equatable {
       successMessage:
           clearSuccess ? null : (successMessage ?? this.successMessage),
       machineId: machineId ?? this.machineId,
+      machineTypeId: machineTypeId ?? this.machineTypeId,
       machineName: machineName ?? this.machineName,
       continueCapacity: continueCapacity ?? this.continueCapacity,
-      restTime: restTime ?? this.restTime,
+      restTime: setRestTime ? restTime : (restTime ?? this.restTime),
       scheduled: scheduled ?? this.scheduled,
     );
   }
@@ -78,6 +84,7 @@ class MachineInactivitiesState extends Equatable {
         errorMessage,
         successMessage,
         machineId,
+        machineTypeId,
         machineName,
         continueCapacity,
         restTime,

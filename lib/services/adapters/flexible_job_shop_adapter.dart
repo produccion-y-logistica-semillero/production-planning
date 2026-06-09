@@ -12,16 +12,19 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
+import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
+  final SetupTimeService setupTimeService;
 
   FlexibleJobShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
+    required this.setupTimeService,
   });
 
   int toInt(dynamic value) {
@@ -35,8 +38,22 @@ class FlexibleJobShopAdapter {
       int orderId, String rule) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? order = responseOrder.fold((f) => null, (order) => order);
-    if (order == null || order.orderJobs == null) return null;
+    OrderEntity? baseOrder = responseOrder.fold((f) => null, (order) => order);
+    if (baseOrder == null || baseOrder.orderJobs == null) return null;
+
+    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
+    if (baseOrder.setupTimeMatrix != null) {
+      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
+    }
+    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
+
+    final OrderEntity order = OrderEntity(
+      baseOrder.orderId,
+      baseOrder.regDate,
+      baseOrder.orderJobs,
+      setupTimeMatrix:
+          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
+    );
 
     // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
     final List<int> machineTypeIds = order.orderJobs!
@@ -260,11 +277,11 @@ class FlexibleJobShopAdapter {
     }
 
     // Calcular métricas
-    final List<Tuple4<DateTime, DateTime, DateTime, int>> jobsDates = [];
+    final List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-      jobsDates.add(Tuple4(
-          job.availableDate, out.endTime, out.dueDate, job.priority));
+      jobsDates.add(Tuple5(out.dbJobId, job.availableDate, out.endTime,
+          out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(

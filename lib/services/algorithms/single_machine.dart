@@ -2,57 +2,72 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'dart:math';
 
-
-class SingleMachineInput{
-
+class SingleMachineInput {
   final int jobId;
   final Duration machineDuration;
   final DateTime dueDate;
   final int priority;
   final DateTime availableDate;
-  SingleMachineInput(this.jobId, this.machineDuration, this.dueDate,
-      this.priority, this.availableDate);
+
+  /// Product family / job-type label used as the row/column key in the
+  /// state-based setup matrix (e.g. "A", "B", "C").
+  final String jobState;
+
+  SingleMachineInput(
+    this.jobId,
+    this.machineDuration,
+    this.dueDate,
+    this.priority,
+    this.availableDate, {
+    this.jobState = 'A',
+  });
 }
 
 class SingleMachineOutput {
-
   final int jobId;
   final Duration processingTime;
   final DateTime startDate;
   final DateTime endDate;
   final DateTime dueDate;
   final Duration delay;
-  SingleMachineOutput(this.jobId, this.processingTime, this.startDate, this.endDate, this.dueDate, this.delay);
+
+  SingleMachineOutput(
+    this.jobId,
+    this.processingTime,
+    this.startDate,
+    this.endDate,
+    this.dueDate,
+    this.delay,
+  );
 }
 
 class SingleMachine {
   final int machineId;
   final DateTime startDate;
-  final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; //like 8-17
-  //List<Tuple5<int, Duration, DateTime, int, DateTime>> input = [];
+  final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; // like 8-17
+
   List<SingleMachineInput> input = [];
-  //the input comes like a table of type
-  //  job id   |     unique machine duration   |     due date        |       priority    |     Available date
-  //  1         |         15:30                 |   2024/8/30/6:00    |         1         |     2024/8/28/6:00 
-
-  //  2         |         20:41                 |   2024/8/30/6:00    |         3         |     2024/8/28/6:00
-  //  3         |         01:25                 |   2024/8/30/6:00    |         2         |     2024/8/28/6:00
-
-  //List<Tuple6<int, Duration, DateTime, DateTime, DateTime, Duration>> output = [];
   List<SingleMachineOutput> output = [];
-  //the output goes like a table of type
-  //  job id   |   processing time   |   start date    |     End date    |     due date        |     Delay (Retraso)    
 
-  //  1         |       01:30         |  26/09/24/10:00 | 26/09/24/11:30  |   2024/8/30/6:00    |     00:00
-  //  2         |       02:30         |  26/09/24/11:30 | 26/09/24/14:00  |   2024/8/30/6:00    |     00:00
+  // ── Setup-time state ──────────────────────────────────────────────────────
+  // stateSetupMatrix: machineId → fromState → toState → minutes.
+  // Only the entry for [machineId] is used; the map wrapper is kept so the
+  // structure is identical to every other environment and the same
+  // buildMachineStateSetupMatrix helper can populate it.
+  final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
+
+  // Tracks the job-state of the job that last ran on the machine.
+  // Starts as null (cold start → no setup cost for the first job).
+  String? _lastJobState;
 
   SingleMachine(
     this.machineId,
     this.startDate,
     this.workingSchedule,
     this.input,
-    String rule,
-  ) {
+    String rule, {
+    this.stateSetupMatrix,
+  }) {
     switch (rule) {
       //case "JHONSON":jhonsonRule();break;
       case "EDD": eddRule(); break;
@@ -74,334 +89,310 @@ class SingleMachine {
     }
   }
 
-  
-  DateTime _getStartTime(DateTime availableDate) {
-    DateTime workStart = DateTime(startDate.year, startDate.month, startDate.day,
-        workingSchedule.value1.hour, workingSchedule.value1.minute);
+  // ── Setup-time helper ─────────────────────────────────────────────────────
 
+  /// Returns s_{fromState → toState} for [machineId].
+  /// Returns [Duration.zero] on cold start (null fromState) or missing cell.
+  Duration _setupDuration(String? fromState, String toState) {
+    if (stateSetupMatrix == null || fromState == null) return Duration.zero;
+    final minutes = stateSetupMatrix![machineId]?[fromState]?[toState];
+    return minutes != null ? Duration(minutes: minutes) : Duration.zero;
+  }
+
+  // ── Working-schedule helpers ───────────────────────────────────────────────
+
+  DateTime _getStartTime(DateTime availableDate) {
+    final workStart = DateTime(
+      startDate.year, startDate.month, startDate.day,
+      workingSchedule.value1.hour, workingSchedule.value1.minute,
+    );
     return availableDate.isBefore(workStart) ? workStart : availableDate;
   }
 
+  /// Pushes [current] to the next working-day start if adding [duration]
+  /// would exceed the end of the current working day.
   DateTime _getAvailableStartTime(DateTime current, Duration duration) {
-    int workEndMinutes = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
-    int currentMinutes = current.hour * 60 + current.minute + duration.inMinutes;
-    if (currentMinutes > workEndMinutes) {
-      DateTime nextDay = current.add(const Duration(days: 1));
-      return DateTime(nextDay.year, nextDay.month, nextDay.day, workingSchedule.value1.hour, workingSchedule.value1.minute);
-
+    final endMinutes =
+        workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
+    final currentMinutes =
+        current.hour * 60 + current.minute + duration.inMinutes;
+    if (currentMinutes > endMinutes) {
+      final next = current.add(const Duration(days: 1));
+      return DateTime(next.year, next.month, next.day,
+          workingSchedule.value1.hour, workingSchedule.value1.minute);
     }
     return current;
   }
 
-  void eddRule() {
-    input.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    DateTime startWorkDateTime = DateTime(
-      startDate.year,
-      startDate.month,
-      startDate.day,
-      workingSchedule.value1.hour,
-      workingSchedule.value1.minute,
-    );
+  // ── Core assignment ───────────────────────────────────────────────────────
 
-    DateTime earliestJobAvailableTime = input[0].availableDate;
-    DateTime scheduleTime = earliestJobAvailableTime.isBefore(startWorkDateTime)
-        ? startWorkDateTime
-        : earliestJobAvailableTime;
+  /// Schedules [job] at [scheduleTime], prepending the setup duration
+  /// s_{_lastJobState → job.jobState} before processing.
+  ///
+  /// Returns the updated schedule pointer (= end of this job's processing).
+  DateTime _assignJob(SingleMachineInput job, DateTime scheduleTime) {
+    // 1. Compute setup duration for this transition.
+    final setup = _setupDuration(_lastJobState, job.jobState);
 
-    for (var job in input) {
-      DateTime start;
-      DateTime end;
-      Duration delay;
-
-      int totalTime = (scheduleTime.hour * 60) + scheduleTime.minute + job.machineDuration.inMinutes;
-      int endOfDay = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
-
-
-      if (totalTime < endOfDay) {
-        start = scheduleTime;
-      } else {
-        scheduleTime = scheduleTime.add(const Duration(days: 1));
-        scheduleTime = DateTime(
-          scheduleTime.year,
-          scheduleTime.month,
-          scheduleTime.day,
-          workingSchedule.value1.hour,
-          workingSchedule.value1.minute,
-        );
-        start = scheduleTime;
-      }
-
-      scheduleTime = scheduleTime.add(job.machineDuration);
-      end = scheduleTime;
-
-      delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+    // 2. If there is a setup cost, advance the pointer past it (and
+    //    re-check working-schedule boundaries after the setup period).
+    DateTime processStart = scheduleTime;
+    if (setup > Duration.zero) {
+      processStart = _getAvailableStartTime(scheduleTime, setup);
+      processStart = processStart.add(setup);
+      // Re-align to working hours in case the setup pushed us past day-end.
+      processStart = _alignToWorkingHours(processStart);
     }
+
+    // 3. Schedule processing after setup.
+    processStart = _getAvailableStartTime(processStart, job.machineDuration);
+    final DateTime end = processStart.add(job.machineDuration);
+    final Duration delay = end.isAfter(job.dueDate)
+        ? end.difference(job.dueDate)
+        : Duration.zero;
+
+    output.add(SingleMachineOutput(
+      job.jobId, job.machineDuration, processStart, end, job.dueDate, delay,
+    ));
+
+    // 4. Remember this job's state for the next iteration.
+    _lastJobState = job.jobState;
+
+    return end;
   }
 
- void sptRule() {
-
-    input.sort((a, b) => a.machineDuration.compareTo(b.machineDuration));
-    DateTime scheduleTime = _getStartTime(input[0].availableDate);
-
-    for (var job in input) {
-      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
-      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-      scheduleTime = end;
+  /// Pushes [dt] to the start of the next working day if it falls outside
+  /// working hours (i.e. at or after day-end).
+  DateTime _alignToWorkingHours(DateTime dt) {
+    final endH = workingSchedule.value2.hour;
+    final endM = workingSchedule.value2.minute;
+    if (dt.hour > endH || (dt.hour == endH && dt.minute >= endM)) {
+      final next = dt.add(const Duration(days: 1));
+      return DateTime(next.year, next.month, next.day,
+          workingSchedule.value1.hour, workingSchedule.value1.minute);
     }
+    return dt;
+  }
+
+  // ── Dispatching rules ─────────────────────────────────────────────────────
+
+  void eddRule() {
+    input.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    _runSequence();
+  }
+
+  void sptRule() {
+    input.sort((a, b) => a.machineDuration.compareTo(b.machineDuration));
+    _runSequence();
   }
 
   void lptRule() {
     input.sort((a, b) => b.machineDuration.compareTo(a.machineDuration));
-    DateTime scheduleTime = _getStartTime(input[0].availableDate);
-
-    for (var job in input) {
-      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
-      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-
-      scheduleTime = end;
-    }
+    _runSequence();
   }
 
   void fifoRule() {
     input.sort((a, b) => a.availableDate.compareTo(b.availableDate));
-    DateTime scheduleTime = _getStartTime(input[0].availableDate);
-    for (var job in input) {
-      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
-      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-
-      scheduleTime = end;
-    }
+    _runSequence();
   }
 
   void wsptRule() {
-    input.sort((a, b) => (b.priority / b.machineDuration.inMinutes).compareTo(a.priority / a.machineDuration.inMinutes));
-    DateTime scheduleTime = _getStartTime(input[0].availableDate);
-    for (var job in input) {
-      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
-      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-
-      scheduleTime = end;
-    }
+    input.sort((a, b) =>
+        (b.priority / b.machineDuration.inMinutes)
+            .compareTo(a.priority / a.machineDuration.inMinutes));
+    _runSequence();
   }
 
+  // The *Adapted variants re-sort and then call _runSequence directly.
   void eddRuleAdapted() {
     input.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    DateTime scheduleTime = _getStartTime(input[0].availableDate);
-
-    for (var job in input) {
-      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
-      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
-
-      output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-
-      scheduleTime = end;
-    }
+    _runSequence();
   }
 
   void sptRuleAdapted() {
     input.sort((a, b) => a.machineDuration.compareTo(b.machineDuration));
-    eddRuleAdapted();
+    _runSequence();
   }
 
   void lptRuleAdapted() {
     input.sort((a, b) => b.machineDuration.compareTo(a.machineDuration));
-    eddRuleAdapted();
+    _runSequence();
   }
 
-
   void fifoRuleAdapted() {
-
     input.sort((a, b) => a.availableDate.compareTo(b.availableDate));
-    eddRuleAdapted();
+    _runSequence();
   }
 
   void wsptRuleAdapted() {
-
-    input.sort((a, b) => (b.priority / b.machineDuration.inMinutes)
-        .compareTo(a.priority / a.machineDuration.inMinutes));
-
-    eddRuleAdapted();
+    input.sort((a, b) =>
+        (b.priority / b.machineDuration.inMinutes)
+            .compareTo(a.priority / a.machineDuration.inMinutes));
+    _runSequence();
   }
-
-  ///////////////////////////////////////////////////
-///////////////////Reglas DINÁMICAS////////////////////
-  ///////////////////////////////////////////////////
-  // Implementación de la regla de Minimum Slack
 
   void scheduleMinimumSlack() {
-
-    input.sort((a, b) => _slack(a) < _slack(b) ? -1 : 1);
-    eddRuleAdapted();
-  }
-
-  int _slack(SingleMachineInput job) {
-    int remainingMinutes = job.dueDate.difference(job.availableDate).inMinutes;
-    return remainingMinutes - job.machineDuration.inMinutes;
+    input.sort((a, b) => _slack(a).compareTo(_slack(b)));
+    _runSequence();
   }
 
   void scheduleCriticalRatio() {
     input.sort((a, b) => _criticalRatio(a).compareTo(_criticalRatio(b)));
-    eddRuleAdapted();
+    _runSequence();
   }
+
+  // ── Sequential runner ─────────────────────────────────────────────────────
+
+  /// Walks the (already-sorted) [input] list in order, calling [_assignJob]
+  /// for each job and threading the schedule-time pointer through.
+  ///
+  /// This is the single place where setup times are injected: [_assignJob]
+  /// prepends s_{prev → current} before every job's processing window.
+  void _runSequence() {
+    // Reset state tracking so re-entrant calls (e.g. from genetics) start clean.
+    _lastJobState = null;
+    output.clear();
+
+    if (input.isEmpty) return;
+    DateTime scheduleTime = _getStartTime(input.first.availableDate);
+
+    for (final job in input) {
+      scheduleTime = _assignJob(job, scheduleTime);
+    }
+  }
+
+  // ── Metric helpers ────────────────────────────────────────────────────────
+
+  int _slack(SingleMachineInput job) =>
+      job.dueDate.difference(job.availableDate).inMinutes -
+      job.machineDuration.inMinutes;
 
   double _criticalRatio(SingleMachineInput job) {
-    int remainingMinutes = job.dueDate.difference(job.availableDate).inMinutes;
-    return remainingMinutes / job.machineDuration.inMinutes;
+    final remaining = job.dueDate.difference(job.availableDate).inMinutes;
+    return remaining / job.machineDuration.inMinutes;
   }
 
+  // ── Genetic algorithm ─────────────────────────────────────────────────────
 
-  //ALGORITMO DE GENÉTICA Y SUS FUNCIONAS AUXILIARES 
-
-  //Busca el mejor orden posible de ejecución de trabajos para minimizar el makespan 
-  //(minimiza tiempo total desde que se inicia hasta que termina el último trabajo)
   void scheduleGeneticAlgorithm() {
     print("EJECUTANDO ALGORITMO GENÉTICO EN SINGLE MACHINE");
 
-    //Soluciones por generación
-    const int populationSize = 50; 
-    //# veces que se repite el ciclo de evolución
+    const int populationSize = 50;
     const int generations = 100;
-    //probabilidad de que un hijo sufra una mutación
     const double mutationRate = 0.1;
 
-    //Cada individuo es una lista ordenada de jobs
-    List<List<SingleMachineInput>> population = _initializePopulation(populationSize);
-
-    //Se guarda el mejor individuo y su valor
+    List<List<SingleMachineInput>> population =
+        _initializePopulation(populationSize);
     List<SingleMachineInput> bestIndividual = [];
-    Duration bestFitness = Duration(days: 9999);
+    Duration bestFitness = const Duration(days: 9999);
 
-    //para el numero de generaciones definido anteriormente
     for (int generation = 0; generation < generations; generation++) {
-      //Se evalúa cada individuo de la población
-      List<Tuple2<List<SingleMachineInput>, Duration>> evaluated = population.map((individual) {
-        return Tuple2(individual, _evaluateFitness(individual));
-      }).toList();
-
-      //Se ordena -> primero los de menor duración
+      final evaluated = population
+          .map((ind) => Tuple2(ind, _evaluateFitness(ind)))
+          .toList();
       evaluated.sort((a, b) => a.value2.compareTo(b.value2));
 
-
-      //Si el mejor de esta nueva generación es mejor que el de todas las anteriores, se cambia
       if (evaluated.first.value2 < bestFitness) {
         bestFitness = evaluated.first.value2;
         bestIndividual = evaluated.first.value1;
       }
 
-      //Se genera nueva población con mejores individuos actuales
-      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+      population =
+          _generateNewPopulation(evaluated, populationSize, mutationRate);
     }
 
-    // se asignan los trabajos en el orden del mejor individuo
     input = bestIndividual;
-    eddRuleAdapted(); // para asignación de tiempos y mostrar en pantalla
+    _runSequence();
   }
 
-
-  //Genera secuencias aleatorias de los jobs para comenzar con la evolución
   List<List<SingleMachineInput>> _initializePopulation(int size) {
-    List<List<SingleMachineInput>> population = [];
-
-    for (int i = 0; i < size; i++) {
-      List<SingleMachineInput> shuffled = List.from(input);
+    return List.generate(size, (_) {
+      final shuffled = List<SingleMachineInput>.from(input);
       shuffled.shuffle();
-      population.add(shuffled);
-    }
-
-    return population;
+      return shuffled;
+    });
   }
 
-  //Evalúa cuando tiempo tarda una secuencia en completarse
-  Duration _evaluateFitness(List<SingleMachineInput> jobSequence) {
-    //representa hora a la que empieza a trabajar la máquina (dentro del horario laboral)
-    DateTime current = _getStartTime(jobSequence.first.availableDate);
-    //inicia tiempo total en 0 
+  /// Pure fitness evaluation — does NOT mutate [output] or [_lastJobState].
+  /// Simulates [_runSequence] internally with a local state tracker so that
+  /// concurrent genetic evaluations don't interfere with each other.
+  Duration _evaluateFitness(List<SingleMachineInput> sequence) {
+    if (sequence.isEmpty) return Duration.zero;
+
+    String? localLastState;
+    DateTime current = _getStartTime(sequence.first.availableDate);
     Duration totalTime = Duration.zero;
 
-    //simula que los jobs se ejecutan uno por uno en el orden dado
-    for (var job in jobSequence) {
-      //por cada uno revisa que lo hago en una hora válida
-      current = _getAvailableStartTime(current, job.machineDuration);
-      DateTime end = current.add(job.machineDuration);
+    for (final job in sequence) {
+      // Mirror _assignJob logic without writing to output.
+      final setup = _setupDurationRaw(localLastState, job.jobState);
+
+      DateTime processStart = current;
+      if (setup > Duration.zero) {
+        processStart = _getAvailableStartTime(current, setup);
+        processStart = processStart.add(setup);
+        processStart = _alignToWorkingHours(processStart);
+      }
+
+      processStart = _getAvailableStartTime(processStart, job.machineDuration);
+      final end = processStart.add(job.machineDuration);
       totalTime += end.difference(startDate);
+      localLastState = job.jobState;
       current = end;
     }
 
-    return totalTime; // menor makespan
+    return totalTime;
   }
 
-  //para cada individuo selecciona dos padres, los cruza para crear un hijo
+  /// Raw setup lookup that doesn't touch instance state — safe to call from
+  /// fitness evaluations running over different candidate sequences.
+  Duration _setupDurationRaw(String? fromState, String toState) {
+    if (stateSetupMatrix == null || fromState == null) return Duration.zero;
+    final minutes = stateSetupMatrix![machineId]?[fromState]?[toState];
+    return minutes != null ? Duration(minutes: minutes) : Duration.zero;
+  }
+
   List<List<SingleMachineInput>> _generateNewPopulation(
-  List<Tuple2<List<SingleMachineInput>, Duration>> evaluated,
+    List<Tuple2<List<SingleMachineInput>, Duration>> evaluated,
     int size,
     double mutationRate,
   ) {
-    List<List<SingleMachineInput>> newPop = [];
-
-    for (int i = 0; i < size; i++) {
-      final parent1 = _selectParent(evaluated);
-      final parent2 = _selectParent(evaluated);
-
-      List<SingleMachineInput> child = _crossover(parent1, parent2);
-
-      if (Random().nextDouble() < mutationRate) {
-        child = _mutate(child);
-      }
-
-      newPop.add(child);
-    }
-
-    return newPop;
+    return List.generate(size, (_) {
+      final p1 = _selectParent(evaluated);
+      final p2 = _selectParent(evaluated);
+      var child = _crossover(p1, p2);
+      if (Random().nextDouble() < mutationRate) child = _mutate(child);
+      return child;
+    });
   }
 
-  //torneo binario para seleccionar individuo padre
-  List<SingleMachineInput> _selectParent(List<Tuple2<List<SingleMachineInput>, Duration>> evaluated) {
-    int k = 5;
-    //elige k individuos aleatorios y forma una lista
-    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+  List<SingleMachineInput> _selectParent(
+      List<Tuple2<List<SingleMachineInput>, Duration>> evaluated) {
+    const k = 5;
+    final selected =
+        List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
     selected.sort((a, b) => a.value2.compareTo(b.value2));
-    //selecciona el de menor tiempo
     return selected.first.value1;
   }
 
-  List<SingleMachineInput> _crossover(List<SingleMachineInput> p1, List<SingleMachineInput> p2) {
+  List<SingleMachineInput> _crossover(
+      List<SingleMachineInput> p1, List<SingleMachineInput> p2) {
     final length = p1.length;
-    //toma un punto de corte aleatorio 
-    final int point = Random().nextInt(length);
-    final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
-
-    //copia los trabajos de p1 desde 0 hasta el punto de corte
-    final List<SingleMachineInput> child = [
+    final point = Random().nextInt(length);
+    final taken = p1.sublist(0, point).map((j) => j.jobId).toSet();
+    return [
       ...p1.sublist(0, point),
-      //completa con los trabajos de p2 que no estén repetidos
-      ...p2.where((j) => !jobIds.contains(j.jobId)),
+      ...p2.where((j) => !taken.contains(j.jobId)),
     ];
-
-    return child;
   }
-  //intercambia de orden dos trabajos de un mismo individuio
+
   List<SingleMachineInput> _mutate(List<SingleMachineInput> individual) {
     if (individual.length < 2) return individual;
-    //se escogen dos posiciones aleatorias
-    int i = Random().nextInt(individual.length);
-    int j = Random().nextInt(individual.length);
-    //intercambia el orden de dos trabajos
-    final temp = individual[i];
+    final i = Random().nextInt(individual.length);
+    final j = Random().nextInt(individual.length);
+    final tmp = individual[i];
     individual[i] = individual[j];
-    individual[j] = temp;
+    individual[j] = tmp;
     return individual;
   }
   Duration calcularMakespanTabuSingle(List<SingleMachineInput> jobSequence) {

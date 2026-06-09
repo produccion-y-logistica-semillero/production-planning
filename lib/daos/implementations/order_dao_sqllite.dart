@@ -41,6 +41,7 @@ class OrderDaoSqlLite implements OrderDao {
       }
       return orders;
     } catch (error) {
+      print('OrderDaoSqlLite.getAllOrders error: ${error.toString()}');
       throw LocalStorageFailure();
     }
   }
@@ -71,7 +72,7 @@ class OrderDaoSqlLite implements OrderDao {
         setupTimeMatrix: matrix,
       );
     } catch (error) {
-
+      print('OrderDaoSqlLite.getOrderById error: ${error.toString()}');
       throw LocalStorageFailure();
     }
   }

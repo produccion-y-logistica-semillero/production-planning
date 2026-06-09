@@ -24,8 +24,8 @@ class SequenceModel{
 
   factory SequenceModel.fromJson(Map<String, dynamic> map){
     return  SequenceModel(
-      sequenceId: map["sequence_id"],
-      name: map["name"]
+      sequenceId: map["sequence_id"] ?? map["SEQUENCE_ID"] ?? map["sequenceId"],
+      name: map["name"] ?? map["NAME"] ?? '',
     );
   }
 

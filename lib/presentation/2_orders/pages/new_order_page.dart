@@ -260,7 +260,7 @@ class NewOrderPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna).',
+                      'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 16),

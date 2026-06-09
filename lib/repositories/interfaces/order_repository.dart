@@ -13,6 +13,8 @@ abstract class OrderRepository {
 
   Future<Either<Failure, bool>> createOrder(OrderEntity orderEntity);
 
+  Future<Either<Failure, bool>> updateOrder(OrderEntity order);
+
   Future<Either<Failure, bool>> deleteOrder(int orderId);
 
 }

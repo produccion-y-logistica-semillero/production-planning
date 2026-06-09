@@ -10,8 +10,10 @@ import 'package:production_planning/presentation/0_machines/widgets/low_order_wi
 class MachineDisplayTile extends StatelessWidget {
   final MachineEntity machine;
   final void Function() deleteHandler;
+    final void Function() editHandler;
 
-  const MachineDisplayTile(this.machine, this.deleteHandler, {super.key});
+  const MachineDisplayTile(this.machine, this.deleteHandler,this.editHandler, {super.key});
+
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +87,15 @@ class MachineDisplayTile extends StatelessWidget {
             ),
             tooltip: 'Eliminar Máquina',
           ),
+          IconButton(
+            onPressed: editHandler,
+            icon: Icon(
+              Icons.edit_outlined,
+              color: colorScheme.primary,
+            ),
+            tooltip: 'Modificar Maqina')
         ],
+        
       ),
     );
   }

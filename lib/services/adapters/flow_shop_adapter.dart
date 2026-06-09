@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -90,6 +91,18 @@ class FlowShopAdapter {
       machinesAvailability[task.machineTypeId] = DateTime.now();
     }
 
+    // Crear mapa de inactividades por máquina
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      final machineKey = machine.machineTypeId!;
+      machineInactivitiesMap[machineKey] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machineKey] = machine.continueCapacity;
+      machineRestTimeMap[machineKey] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
     //we call the algorithm and receive the output
     final output = FlowShop(
       order.regDate,
@@ -98,6 +111,9 @@ class FlowShopAdapter {
       machinesAvailability,
       rule,
       changeoverMatrix: mergedMatrix,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
     ).output;
 
     //transform to planning machines

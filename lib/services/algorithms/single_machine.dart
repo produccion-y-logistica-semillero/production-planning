@@ -1,5 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
 
@@ -46,13 +48,22 @@ class SingleMachine {
   //  1         |       01:30         |  26/09/24/10:00 | 26/09/24/11:30  |   2024/8/30/6:00    |     00:00
   //  2         |       02:30         |  26/09/24/11:30 | 26/09/24/14:00  |   2024/8/30/6:00    |     00:00
 
+  // Machine inactivity support
+  final List<MachineInactivityEntity> machineInactivities;
+  final int continueCapacity;
+  final Duration? restTime;
+  int processedCount = 0;
+
   SingleMachine(
     this.machineId,
     this.startDate,
     this.workingSchedule,
     this.input,
-    String rule,
-  ) {
+    String rule, {
+    this.machineInactivities = const [],
+    this.continueCapacity = 0,
+    this.restTime,
+  }) {
     switch (rule) {
       //case "JHONSON":jhonsonRule();break;
       case "EDD": eddRule(); break;
@@ -91,6 +102,95 @@ class SingleMachine {
     return current;
   }
 
+  // Obtener las inactividades para un día específico
+  List<Range> _getInactivitiesForDay(DateTime day) {
+    final weekday = day.weekday;
+    final List<Range> dayInactivities = [];
+
+    for (final inactivity in machineInactivities) {
+      final inactivityWeekdays =
+          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
+
+      if (inactivityWeekdays.contains(weekday)) {
+        final startHour = inactivity.startTime.inHours;
+        final startMinute = inactivity.startTime.inMinutes % 60;
+
+        final inactivityStart = DateTime(
+          day.year, day.month, day.day, startHour, startMinute,
+        );
+
+        final inactivityEnd = inactivityStart.add(inactivity.duration);
+        dayInactivities.add(Range(inactivityStart, inactivityEnd));
+      }
+    }
+
+    return dayInactivities;
+  }
+
+  // Ajustar el tiempo de finalización considerando inactividades programadas
+  DateTime _adjustEndTimeWithInactivities(DateTime start, DateTime end) {
+    DateTime current = start;
+    Duration remaining = end.difference(start);
+
+    while (remaining > Duration.zero) {
+      current = _getStartTime(current);
+
+      final dayInactivities = _getInactivitiesForDay(current);
+
+      final dayEnd = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value2.hour, workingSchedule.value2.minute,
+      );
+
+      DateTime nextAvailable = current;
+      for (final inactivity in dayInactivities) {
+        if (nextAvailable.isBefore(inactivity.end) &&
+            inactivity.start.isBefore(dayEnd)) {
+          if (nextAvailable.isBefore(inactivity.start)) {
+            final availableBeforeInactivity =
+                inactivity.start.difference(nextAvailable);
+
+            if (remaining <= availableBeforeInactivity) {
+              return nextAvailable.add(remaining);
+            } else {
+              remaining -= availableBeforeInactivity;
+              nextAvailable = inactivity.end;
+            }
+          } else {
+            if (nextAvailable.isBefore(inactivity.end)) {
+              nextAvailable = inactivity.end;
+            }
+          }
+        }
+      }
+
+      final availableToday = dayEnd.difference(nextAvailable);
+
+      if (availableToday > Duration.zero && remaining <= availableToday) {
+        return nextAvailable.add(remaining);
+      } else {
+        if (availableToday > Duration.zero) {
+          remaining -= availableToday;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return current;
+  }
+
+  // Aplicar descanso por continueCapacity y devolver el end time ajustado
+  DateTime _applyRestIfNeeded(DateTime endTime) {
+    if (continueCapacity > 0 && restTime != null) {
+      processedCount++;
+      if (processedCount >= continueCapacity) {
+        processedCount = 0;
+        return endTime.add(restTime!);
+      }
+    }
+    return endTime;
+  }
+
   void eddRule() {
     input.sort((a, b) => a.dueDate.compareTo(b.dueDate));
     DateTime startWorkDateTime = DateTime(
@@ -107,34 +207,15 @@ class SingleMachine {
         : earliestJobAvailableTime;
 
     for (var job in input) {
-      DateTime start;
-      DateTime end;
-      Duration delay;
+      DateTime start = _getStartTime(scheduleTime);
+      start = _getAvailableStartTime(start, job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
 
-      int totalTime = (scheduleTime.hour * 60) + scheduleTime.minute + job.machineDuration.inMinutes;
-      int endOfDay = workingSchedule.value2.hour * 60 + workingSchedule.value2.minute;
-
-
-      if (totalTime < endOfDay) {
-        start = scheduleTime;
-      } else {
-        scheduleTime = scheduleTime.add(const Duration(days: 1));
-        scheduleTime = DateTime(
-          scheduleTime.year,
-          scheduleTime.month,
-          scheduleTime.day,
-          workingSchedule.value1.hour,
-          workingSchedule.value1.minute,
-        );
-        start = scheduleTime;
-      }
-
-      scheduleTime = scheduleTime.add(job.machineDuration);
-      end = scheduleTime;
-
-      delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
+      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 
@@ -145,11 +226,12 @@ class SingleMachine {
 
     for (var job in input) {
       DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
-      scheduleTime = end;
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 
@@ -159,12 +241,13 @@ class SingleMachine {
 
     for (var job in input) {
       DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
 
-      scheduleTime = end;
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 
@@ -173,11 +256,12 @@ class SingleMachine {
     DateTime scheduleTime = _getStartTime(input[0].availableDate);
     for (var job in input) {
       DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
 
-      scheduleTime = end;
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 
@@ -186,11 +270,12 @@ class SingleMachine {
     DateTime scheduleTime = _getStartTime(input[0].availableDate);
     for (var job in input) {
       DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
 
-      scheduleTime = end;
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 
@@ -200,12 +285,13 @@ class SingleMachine {
 
     for (var job in input) {
       DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-      DateTime end = start.add(job.machineDuration);
+      final rawEnd = start.add(job.machineDuration);
+      DateTime end = _adjustEndTimeWithInactivities(start, rawEnd);
       Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
       output.add(SingleMachineOutput(job.jobId, job.machineDuration, start, end, job.dueDate, delay));
 
-      scheduleTime = end;
+      scheduleTime = _applyRestIfNeeded(end);
     }
   }
 

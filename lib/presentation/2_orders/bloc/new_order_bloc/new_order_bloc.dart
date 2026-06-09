@@ -37,6 +37,15 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     );
   }
 
+  int _getNextJobId(List<AddJobWidget> jobs) {
+    final parsedIds = jobs
+        .map((job) => int.tryParse(job.idController?.text ?? '') ?? 0)
+        .where((id) => id > 0)
+        .toList();
+    final maxId = parsedIds.isNotEmpty ? parsedIds.reduce((a, b) => a > b ? a : b) : 0;
+    return maxId + 1;
+  }
+
   void addJob() {
     if (state is NewOrdersState) {
       final currentState = state as NewOrdersState;
@@ -46,6 +55,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       int index = jobs.isNotEmpty
           ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b)
           : 0;
+      final nextJobId = _getNextJobId(jobs);
 
       jobs.add(AddJobWidget(
         availableDate: null,
@@ -54,7 +64,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         dueHour: null,
         priorityController: TextEditingController(),
         quantityController: TextEditingController(),
-        idController: TextEditingController(),
+        idController: TextEditingController(text: '$nextJobId'),
         index: index + 1,
         sequences: sequences,
       ));
@@ -70,6 +80,43 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       List<Tuple2<int, String>> sequences = currentState.sequences;
 
       jobs.removeWhere((widget) => widget.index == index);
+      emit(NewOrdersState(jobs, sequences));
+    }
+  }
+
+  void duplicateJob(int index) {
+    if (state is NewOrdersState) {
+      final currentState = state as NewOrdersState;
+      List<AddJobWidget> jobs = List.from(currentState.jobs);
+      List<Tuple2<int, String>> sequences = currentState.sequences;
+
+      // Find the source job to copy
+      final sourceJob = jobs.firstWhere((job) => job.index == index);
+
+      // Calculate next index and sequential job id
+      int nextIndex = jobs.isNotEmpty
+          ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b) + 1
+          : 1;
+      final nextJobId = _getNextJobId(jobs);
+
+      // Clone the job with all its current data
+      jobs.add(AddJobWidget(
+        availableDate: sourceJob.availableDate,
+        dueDate: sourceJob.dueDate,
+        availableHour: sourceJob.availableHour,
+        dueHour: sourceJob.dueHour,
+        priorityController: TextEditingController(
+          text: sourceJob.priorityController?.text ?? '',
+        ),
+        quantityController: TextEditingController(
+          text: sourceJob.quantityController?.text ?? '',
+        ),
+        idController: TextEditingController(text: '$nextJobId'),
+        index: nextIndex,
+        sequences: sequences,
+        selectedSequence: sourceJob.selectedSequence,
+      ));
+
       emit(NewOrdersState(jobs, sequences));
     }
   }
@@ -212,6 +259,106 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         },
       );
     }
+  }
+
+  Future<void> updateOrder(int orderId) async {
+    if (state is NewOrdersState) {
+      final currentState = state as NewOrdersState;
+      final List<NewOrderRequestModel> jobs = currentState.jobs.map((wid) {
+        final widgetState = wid.stateKey.currentState;
+        Map<int, Map<int, Map<String, int>>>? taskMachineTimes;
+        
+        if (widgetState != null) {
+          final explicit = widgetState.getExplicitTaskMachineMinutes();
+          if (explicit.isNotEmpty) {
+            taskMachineTimes = explicit;
+          } else {
+            final selectedMachines = widgetState.getSelectedMachines();
+            final stationTimes = widgetState.getStationProcessingMinutes();
+            taskMachineTimes = {};
+            final tasks = widgetState.getSequenceTasks();
+            if (tasks != null && tasks.isNotEmpty) {
+              for (final task in tasks) {
+                final machineType = task.machineTypeId;
+                final machineId = selectedMachines[machineType];
+                final minutes = stationTimes[machineType];
+                if (machineId != null && minutes != null) {
+                  taskMachineTimes[task.id!] = {
+                    machineId: {
+                      'processing': minutes,
+                      'preparation': 0,
+                      'rest': 0,
+                    }
+                  };
+                }
+              }
+            }
+          }
+        }
+
+        return NewOrderRequestModel(
+          wid.selectedSequence!,
+          wid.dueDate!,
+          wid.availableDate!,
+          int.parse(wid.priorityController!.text),
+          int.parse(wid.quantityController!.text),
+          preemptionMatrix: wid.stateKey.currentState?.getPreemptionMatrix(),
+          taskMachineTimesMinutes: taskMachineTimes,
+        );
+      }).toList();
+
+      final response = await orderService.updateOrder(orderId, jobs);
+
+      response.fold(
+        (failure) {
+          final newState =
+              NewOrdersState(currentState.jobs, currentState.sequences);
+          newState.justSaved = false;
+          emit(newState);
+        },
+        (success) {
+          final newState = NewOrdersState([], currentState.sequences);
+          newState.justSaved = true;
+          emit(newState);
+        },
+      );
+    }
+  }
+
+  Future<void> loadOrderForEdit(int orderId) async {
+    final seqResponse = await seqService.getSequences();
+    List<Tuple2<int, String>> sequences = [];
+    seqResponse.fold(
+      (failure) => null,
+      (seqs) => sequences = seqs.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
+    );
+
+    final response = await orderService.orderRepo.getFullOrder(orderId);
+    response.fold(
+      (failure) => emit(NewOrdersFailureState()),
+      (order) {
+        List<AddJobWidget> jobs = [];
+        if (order.orderJobs != null) {
+          int index = 1;
+          for (var job in order.orderJobs!) {
+            jobs.add(AddJobWidget(
+              availableDate: job.availableDate,
+              dueDate: job.dueDate,
+              availableHour: TimeOfDay.fromDateTime(job.availableDate ?? DateTime.now()),
+              dueHour: TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
+              priorityController: TextEditingController(text: job.priority.toString()),
+              quantityController: TextEditingController(text: job.amount.toString()),
+              idController: TextEditingController(text: job.jobId?.toString() ?? ''),
+              index: index,
+              sequences: sequences,
+              selectedSequence: job.sequence?.id,
+            ));
+            index++;
+          }
+        }
+        emit(NewOrdersState(jobs, sequences));
+      },
+    );
   }
 
   void newOrder() {

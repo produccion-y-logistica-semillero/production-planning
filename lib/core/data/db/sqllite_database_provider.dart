@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 
 class SQLLiteDatabaseProvider {
   static Database? _database;
@@ -32,7 +32,7 @@ class SQLLiteDatabaseProvider {
     final databasePath = docsDir.path;
     final path = join(databasePath, '${workspace.replaceAll(' ', '')}_v3.db');
 
-    // Remove legacy log file writing which causes permission issues
+    // Log the database path for debugging purposes
     print('Database path: $path');
 
     _database = await openDatabase(
@@ -41,12 +41,15 @@ class SQLLiteDatabaseProvider {
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
+        // ─── DDL ───────────────────────────────────────────────────────────────
+
         batch.execute('''
           CREATE TABLE STATUS (
               status_id INTEGER PRIMARY KEY AUTOINCREMENT,
               status VARCHAR(100) NOT NULL
           );
         ''');
+
         batch.execute('''
           CREATE TABLE MACHINE_TYPES(
               machine_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +57,7 @@ class SQLLiteDatabaseProvider {
               description TEXT
           );
         ''');
+
         batch.execute('''
           CREATE TABLE MACHINES (
               machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,24 +74,23 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
-        // Inline creation of MACHINE_INACTIVITIES to avoid async issues in batch
         batch.execute('''
-        CREATE TABLE IF NOT EXISTS MACHINE_INACTIVITIES (
-            inactivity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            machine_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            start_time TEXT NOT NULL,
-            duration_minutes INTEGER NOT NULL,
-            monday INTEGER NOT NULL DEFAULT 0,
-            tuesday INTEGER NOT NULL DEFAULT 0,
-            wednesday INTEGER NOT NULL DEFAULT 0,
-            thursday INTEGER NOT NULL DEFAULT 0,
-            friday INTEGER NOT NULL DEFAULT 0,
-            saturday INTEGER NOT NULL DEFAULT 0,
-            sunday INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id)
-        );
-      ''');
+          CREATE TABLE IF NOT EXISTS MACHINE_INACTIVITIES (
+              inactivity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              machine_id INTEGER NOT NULL,
+              name TEXT NOT NULL,
+              start_time TEXT NOT NULL,
+              duration_minutes INTEGER NOT NULL,
+              monday INTEGER NOT NULL DEFAULT 0,
+              tuesday INTEGER NOT NULL DEFAULT 0,
+              wednesday INTEGER NOT NULL DEFAULT 0,
+              thursday INTEGER NOT NULL DEFAULT 0,
+              friday INTEGER NOT NULL DEFAULT 0,
+              saturday INTEGER NOT NULL DEFAULT 0,
+              sunday INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id)
+          );
+        ''');
 
         batch.execute('''
           CREATE TABLE IF NOT EXISTS setup_times (
@@ -109,6 +112,7 @@ class SQLLiteDatabaseProvider {
               name VARCHAR(100) NOT NULL
           );
         ''');
+
         batch.execute('''
           CREATE TABLE tasks (
               task_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,15 +128,15 @@ class SQLLiteDatabaseProvider {
 
         batch.execute('''
           CREATE TABLE TaskDependency (
-            id SERIAL PRIMARY KEY,
-            predecessor_id INT NOT NULL,
-            successor_id INT NOT NULL,
-            sequence_id INT NOT NULL,
-            FOREIGN KEY (predecessor_id) REFERENCES tasks(id),
-            FOREIGN KEY (successor_id) REFERENCES tasks(id),
-            FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
-            CONSTRAINT unique_dependency UNIQUE (predecessor_id, successor_id),
-            CONSTRAINT no_self_dependency CHECK (predecessor_id <> successor_id)
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              predecessor_id INTEGER NOT NULL,
+              successor_id INTEGER NOT NULL,
+              sequence_id INTEGER NOT NULL,
+              FOREIGN KEY (predecessor_id) REFERENCES tasks(task_id),
+              FOREIGN KEY (successor_id) REFERENCES tasks(task_id),
+              FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
+              CONSTRAINT unique_dependency UNIQUE (predecessor_id, successor_id),
+              CONSTRAINT no_self_dependency CHECK (predecessor_id <> successor_id)
           );
         ''');
 
@@ -166,6 +170,7 @@ class SQLLiteDatabaseProvider {
               reg_date DATE NOT NULL
           );
         ''');
+
         batch.execute('''
           CREATE TABLE jobs (
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,203 +214,14 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
-
-      //DML TO POBLATE THE DATABASE BY DEFAULT FOR TESTING
-      await db.execute('''
-          -- Insert default statuses
-          INSERT INTO status (status) VALUES ('Active');
-          INSERT INTO status (status) VALUES ('Inactive');
-          INSERT INTO status (status) VALUES ('Maintenance');
-
-          -- Insert default machine types
-          INSERT INTO machine_types (name, description) VALUES ('Type A', 'Basic machine type A');
-          INSERT INTO machine_types (name, description) VALUES ('Type B', 'Advanced machine type B');
-          INSERT INTO machine_types (name, description) VALUES ('Type C', 'High capacity machine type C');
-
-          -- Insert default machines
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
-          VALUES (1,'type A 1', 1, 100.0, 100.0, 100.0, 5, '2024-09-08 10:00:00');
-
-          INSERT INTO machines (machine_type_id,machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
-          VALUES (2, 'type B 1', 1, 100.0, 100.0, 100.0, 3, '2024-09-08 11:00:00');
-
-          INSERT INTO machines (machine_type_id, machine_name, status_id, processing_percentage, preparation_percentage, rest_percentage, continue_capacity, availability_time)
-          VALUES (3,'type C 1', 2, 100.0, 100.0, 100.0, 7, '2024-09-08 12:00:00');
-
-          -- Insert default sequences
-          INSERT INTO sequences (name) VALUES ('Sequence Alpha');
-          INSERT INTO sequences (name) VALUES ('Sequence Beta');
-          INSERT INTO sequences (name) VALUES ('Sequence Gamma');
-
-          -- Insert default tasks
-          INSERT INTO tasks ( n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
-          VALUES ('2024-09-08 09:00:00', 'Task 1 description', 1, 1, 0);
-
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
-          VALUES ('2024-09-08 10:00:00', 'Task 2 description', 2, 2, 0);
-
-          INSERT INTO tasks (n_proc_units, description, sequence_id, machine_type_id, allow_preemption)
-          VALUES ('2024-09-08 11:00:00', 'Task 3 description', 3, 3, 0);
-
-          ---------------------------------------------------------------------------------------------------------------------------
-          --------------------------THIS INFO IS FUNDAMENTAL, ENVIRONMENTS AND DISPATCH RULES HAS TO BE INSERTED EVEN IN PRODUCTION
-          ---------------------------------------------------------------------------------------------------------------------------
-          -- Insert environments
-          INSERT INTO environments (name) VALUES('SINGLE MACHINE');       --ID 1
-          INSERT INTO environments (name) VALUES('PARALLEL MACHINES');    --ID 2
-          INSERT INTO environments (name) VALUES('FLOW SHOP');            --ID 3
-          INSERT INTO environments (name) VALUES('FLEXIBLE FLOW SHOP');   --ID 4
-          INSERT INTO environments (name) VALUES('JOB SHOP');             --ID 5
-          INSERT INTO environments (name) VALUES('FLEXIBLE JOB SHOP');    --ID 6
-          INSERT INTO environments (name) VALUES('OPEN SHOP');            --ID 7
-
-          -- Insert dispatch rules
-          ------ SINGLE MACHINE RULES
-          INSERT INTO dispatch_rules (name) VALUES('EDD');                --ID 1
-          INSERT INTO dispatch_rules (name) VALUES('SPT');                --ID 2
-          INSERT INTO dispatch_rules (name) VALUES('LPT');                --ID 3
-          INSERT INTO dispatch_rules (name) VALUES('FIFO');               --ID 4
-          INSERT INTO dispatch_rules (name) VALUES('WSPT');               --ID 5
-          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO');       --ID 6
-          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO');       --ID 7
-          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO');       --ID 8
-          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO');      --ID 9
-          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO');      --ID 10
-          INSERT INTO dispatch_rules (name) VALUES('MINSLACK');           --ID 11
-          INSERT INTO dispatch_rules (name) VALUES('CR');                 --ID 12
-          INSERT INTO dispatch_rules (name) VALUES('ATCS');               --ID 13
-
-          ------ PARALLEL MACHINE RULES
-          INSERT INTO dispatch_rules (name) VALUES('FIFO');  --ID 14
-          INSERT INTO dispatch_rules (name) VALUES('SPT_ADAPTADO');  --ID 15
-          INSERT INTO dispatch_rules (name) VALUES('EDD_ADAPTADO');  --ID 16
-          INSERT INTO dispatch_rules (name) VALUES('LPT_ADAPTADO');  --ID 17
-          INSERT INTO dispatch_rules (name) VALUES('FIFO_ADAPTADO'); --ID 18
-          INSERT INTO dispatch_rules (name) VALUES('WSPT_ADAPTADO'); --ID 19
-          INSERT INTO dispatch_rules (name) VALUES('CR');    --ID 20
-          INSERT INTO dispatch_rules (name) VALUES('MS');    --ID 21
-          INSERT INTO dispatch_rules (name) VALUES('ATCS');  --ID 22
-
-          ------ FLOW SHOP RULES
-          INSERT INTO dispatch_rules (name) VALUES('JOHNSON');  --ID 23
-          ------ FLEXIBLE FLOW SHOP RULES
-          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_2_MACHINES'); --ID 24
-          --INSERT INTO dispatch_rules (name) VALUES('JOHNSON_CDS');       --ID 25 
-          
-          --GENETICS ALGORITHM
-          INSERT INTO dispatch_rules (name) VALUES('GENETICS');  --ID 24 (los anteriores están comentados)
-          INSERT INTO dispatch_rules (name) VALUES('TABU');      --ID 25
-
-
--- Insert types_x_rules
-------- SINGLE MACHINE RULES
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 4);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 6);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 7);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 8);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 9);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 10);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 11);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 13);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 24);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 25);
-
-------- PARALLEL MACHINE RULES
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 14);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 11);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 6);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 7);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 10);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 15);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 16);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 17);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 18);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 19);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 20);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 21);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 22);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 24);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 25);
-
-
-------- FLOW SHOP MACHINE RULES (SPT,EDD,LPT,FIFO,WSPT,SPTA,EDDA,LPTA,FIFOA,WSPTA,CR, MS,ATCS,JOHNSON,JOHNSON3,CDS)
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 4);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 6);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 7);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 8);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 9);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 10);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 11);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 13);
-
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 23);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (3, 24);
-
-
-
-------- FLEXIBLE FLOW SHOP MACHINE RULES
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 4);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 6);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 7);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 8);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 9);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 10);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 13);
-
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 21);
-
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 23);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (4, 24);
-
--------- FLEXIBLE JOB SHOP MACHINE RULES
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 4);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 13);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 24);
-
--------- OPEN SHOP MACHINE RULES
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
-INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
-
+        // ─── DML SEED ──────────────────────────────────────────────────────────
 
         // Status
         batch.insert('status', {'status': 'Active'});
         batch.insert('status', {'status': 'Inactive'});
         batch.insert('status', {'status': 'Maintenance'});
 
-        // Machine Types
+        // Machine Types (base)
         batch.insert('machine_types', {
           'name': 'Type A',
           'description': 'Basic machine type A',
@@ -419,7 +235,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'description': 'High capacity machine type C',
         });
 
-        // Machines
+        // Machines (base)
         batch.insert('machines', {
           'machine_type_id': 1,
           'machine_name': 'type A 1',
@@ -451,12 +267,12 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'availability_time': '2024-09-08 12:00:00',
         });
 
-        // Sequences
+        // Sequences (base)
         batch.insert('sequences', {'name': 'Sequence Alpha'});
         batch.insert('sequences', {'name': 'Sequence Beta'});
         batch.insert('sequences', {'name': 'Sequence Gamma'});
 
-        // Tasks
+        // Tasks (base)
         batch.insert('tasks', {
           'n_proc_units': '2024-09-08 09:00:00',
           'description': 'Task 1 description',
@@ -479,7 +295,9 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Environments
+        // ─── Environments ──────────────────────────────────────────────────────
+        // IMPORTANT: environments and dispatch_rules must always be inserted,
+        // including in production.
         batch.insert('environments', {
           'environment_id': 1,
           'name': 'SINGLE MACHINE',
@@ -488,10 +306,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'environment_id': 2,
           'name': 'PARALLEL MACHINES',
         });
-        batch.insert('environments', {
-          'environment_id': 3,
-          'name': 'FLOW SHOP',
-        });
+        batch
+            .insert('environments', {'environment_id': 3, 'name': 'FLOW SHOP'});
         batch.insert('environments', {
           'environment_id': 4,
           'name': 'FLEXIBLE FLOW SHOP',
@@ -501,16 +317,14 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'environment_id': 6,
           'name': 'FLEXIBLE JOB SHOP',
         });
-        batch.insert('environments', {
-          'environment_id': 7,
-          'name': 'OPEN SHOP',
-        });
+        batch
+            .insert('environments', {'environment_id': 7, 'name': 'OPEN SHOP'});
         batch.insert('environments', {
           'environment_id': 8,
           'name': 'FLEXIBLE OPEN SHOP',
         });
 
-        // Dispatch Rules
+        // ─── Dispatch Rules ────────────────────────────────────────────────────
         // Single Machine (IDs 1-13)
         batch.insert('dispatch_rules', {'dispatch_rule_id': 1, 'name': 'EDD'});
         batch.insert('dispatch_rules', {'dispatch_rule_id': 2, 'name': 'SPT'});
@@ -542,10 +356,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'name': 'MINSLACK',
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 12, 'name': 'CR'});
-        batch.insert('dispatch_rules', {
-          'dispatch_rule_id': 13,
-          'name': 'ATCS',
-        });
+        batch
+            .insert('dispatch_rules', {'dispatch_rule_id': 13, 'name': 'ATCS'});
 
         // Parallel (IDs 14-22)
         batch.insert('dispatch_rules', {
@@ -574,10 +386,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 20, 'name': 'CR'});
         batch.insert('dispatch_rules', {'dispatch_rule_id': 21, 'name': 'MS'});
-        batch.insert('dispatch_rules', {
-          'dispatch_rule_id': 22,
-          'name': 'ATCS',
-        });
+        batch
+            .insert('dispatch_rules', {'dispatch_rule_id': 22, 'name': 'ATCS'});
 
         // Flow Shop (ID 23)
         batch.insert('dispatch_rules', {
@@ -585,13 +395,17 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'name': 'JOHNSON',
         });
 
-        // Genetics (ID 24)
+        // Meta-heuristics (IDs 24-25)
         batch.insert('dispatch_rules', {
           'dispatch_rule_id': 24,
           'name': 'GENETICS',
         });
+        batch.insert('dispatch_rules', {
+          'dispatch_rule_id': 25,
+          'name': 'TABU',
+        });
 
-        // Types x Rules
+        // ─── Types × Rules ─────────────────────────────────────────────────────
         void addRule(int envId, int ruleId) {
           batch.insert('types_x_rules', {
             'environment_id': envId,
@@ -600,25 +414,12 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
         }
 
         // 1: Single Machine
-        [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          24,
-        ].forEach((r) => addRule(1, r));
+        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 24, 25]) {
+          addRule(1, r);
+        }
 
-        // 2: Parallel
-        [
+        // 2: Parallel Machines
+        for (final r in [
           2,
           3,
           1,
@@ -638,73 +439,76 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           21,
           22,
           24,
-        ].forEach((r) => addRule(2, r));
+          25,
+        ]) {
+          addRule(2, r);
+        }
 
         // 3: Flow Shop
-        [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          23,
-          24,
-        ].forEach((r) => addRule(3, r));
+        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 23, 24]) {
+          addRule(3, r);
+        }
 
         // 4: Flexible Flow Shop
-        [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          12,
-          13,
-          21,
-          23,
-          24,
-        ].forEach((r) => addRule(4, r));
+        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24]) {
+          addRule(4, r);
+        }
 
         // 5: Job Shop
-        [1, 2, 3, 4, 5, 12, 13, 24].forEach((r) => addRule(5, r));
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 24]) {
+          addRule(5, r);
+        }
 
         // 6: Flexible Job Shop
-        [1, 2, 3, 4, 5, 12, 13, 21, 24].forEach((r) => addRule(6, r));
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24]) {
+          addRule(6, r);
+        }
 
         // 7: Open Shop
-        [1, 2, 3, 4, 5, 11, 12, 13, 24].forEach((r) => addRule(7, r));
+        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
+          addRule(7, r);
+        }
 
         // 8: Flexible Open Shop
-        [1, 2, 3, 4, 5, 11, 12, 13, 24].forEach((r) => addRule(8, r));
+        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
+          addRule(8, r);
+        }
 
-        //----------
+        // ─── Orders & Jobs (base) ──────────────────────────────────────────────
+        batch.insert('orders', {'order_id': 1, 'reg_date': '2024-09-08'});
+        batch.insert('orders', {'order_id': 2, 'reg_date': '2024-09-07'});
+        batch.insert('orders', {'order_id': 3, 'reg_date': '2024-09-06'});
+
+        batch.insert('jobs', {
+          'sequence_id': 1,
+          'order_id': 1,
+          'amount': 100,
+          'due_date': '2024-09-10',
+          'priority': 1,
+          'available_date': '2024-09-10',
+        });
+        batch.insert('jobs', {
+          'sequence_id': 2,
+          'order_id': 2,
+          'amount': 200,
+          'due_date': '2024-09-11',
+          'priority': 2,
+          'available_date': '2024-09-10',
+        });
+        batch.insert('jobs', {
+          'sequence_id': 3,
+          'order_id': 3,
+          'amount': 150,
+          'due_date': '2024-09-12',
+          'priority': 3,
+          'available_date': '2024-09-10',
+        });
+
         // ============================================================
-        // CONTEXTO: PANADERÍA Y PASTELERÍA "DELICIAS DEL DÍA"
-        // ============================================================
-        // Estaciones de trabajo = MACHINE_TYPES
-        // Máquinas específicas = MACHINES
-        // Recetas/Procesos = SEQUENCES
-        // Tareas por receta = TASKS
-        // Órdenes de clientes = ORDERS
-        // Programas de producción = JOBS
+        // EMPRESA 1: PANADERÍA Y PASTELERÍA "DELICIAS DEL DÍA"
         // ============================================================
 
-        // --- ESTACIONES DE TRABAJO (Machine Types) ---
-        // IDs explícitos: las estaciones base (Type A/B/C) ocupan 1-3,
-        // por lo que la panadería arranca en 4. NO depender del autoincrement.
+        // --- Machine Types (Panadería, IDs 4-8) ---
         batch.insert('machine_types', {
           'machine_type_id': 4,
           'name': 'Mezclado y Amasado',
@@ -731,8 +535,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'description': 'Estación de enfriamiento en bandas y empaque final',
         });
 
-        // --- MÁQUINAS (Estaciones de trabajo específicas) ---
-        // IDs explícitos (4-13) y machine_type_id corregido (4-8).
+        // --- Machines (Panadería, IDs 4-13) ---
         batch.insert('machines', {
           'machine_id': 4,
           'machine_type_id': 4,
@@ -844,21 +647,26 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'availability_time': '2024-10-14 08:00:00',
         });
 
-        // --- SECUENCIAS (Recetas / Programas de producción) ---
-        // IDs explícitos: las base (Alpha/Beta/Gamma) ocupan 1-3 → arrancamos en 4.
-        batch.insert(
-            'sequences', {'sequence_id': 4, 'name': 'Pan Artesanal de Molde'});
-        batch.insert('sequences',
-            {'sequence_id': 5, 'name': 'Croissants de Mantequilla'});
-        batch.insert('sequences',
-            {'sequence_id': 6, 'name': 'Pastel de Chocolate Familiar'});
-        batch.insert(
-            'sequences', {'sequence_id': 7, 'name': 'Galletas de Avena y Miel'});
+        // --- Sequences (Panadería, IDs 4-7) ---
+        batch.insert('sequences', {
+          'sequence_id': 4,
+          'name': 'Pan Artesanal de Molde',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 5,
+          'name': 'Croissants de Mantequilla',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 6,
+          'name': 'Pastel de Chocolate Familiar',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 7,
+          'name': 'Galletas de Avena y Miel',
+        });
 
-        // --- TAREAS por Secuencia ---
-        // sequence_id y machine_type_id corregidos para coincidir con los
-        // IDs explícitos asignados arriba (secuencias 4-7, tipos 4-8).
-        // Secuencia 4: Pan Artesanal de Molde
+        // --- Tasks (Panadería) ---
+        // Seq 4: Pan Artesanal de Molde
         batch.insert('tasks', {
           'n_proc_units': '2024-10-14 04:30:00',
           'description': 'Mezclado de harina, agua, levadura y sal',
@@ -895,7 +703,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Secuencia 5: Croissants de Mantequilla
+        // Seq 5: Croissants de Mantequilla
         batch.insert('tasks', {
           'n_proc_units': '2024-10-14 04:00:00',
           'description': 'Mezclado de masa base croissant',
@@ -932,7 +740,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Secuencia 6: Pastel de Chocolate Familiar
+        // Seq 6: Pastel de Chocolate Familiar
         batch.insert('tasks', {
           'n_proc_units': '2024-10-14 06:00:00',
           'description': 'Preparación de bizcocho de chocolate',
@@ -962,7 +770,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Secuencia 7: Galletas de Avena y Miel
+        // Seq 7: Galletas de Avena y Miel
         batch.insert('tasks', {
           'n_proc_units': '2024-10-14 05:00:00',
           'description': 'Mezclado de avena, miel y manteca',
@@ -992,18 +800,17 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // --- ÓRDENES DE CLIENTES ---
-        // IDs explícitos 1-3 (no había órdenes previas).
-        batch.insert('orders', {'order_id': 1, 'reg_date': '2024-10-14'});
-        batch.insert('orders', {'order_id': 2, 'reg_date': '2024-10-15'});
-        batch.insert('orders', {'order_id': 3, 'reg_date': '2024-10-16'});
+        // --- Orders (Panadería, IDs 4-6 reutilizando las existentes del branch 1 sería conflicto;
+        //     aquí van los IDs correctos del branch 2) ---
+        batch.insert('orders', {'order_id': 4, 'reg_date': '2024-10-14'});
+        batch.insert('orders', {'order_id': 5, 'reg_date': '2024-10-15'});
+        batch.insert('orders', {'order_id': 6, 'reg_date': '2024-10-16'});
 
-        // --- PROGRAMAS DE PRODUCCIÓN (Jobs) ---
-        // job_id explícito 1-5; sequence_id (4-7) y order_id (1-3) corregidos.
+        // --- Jobs (Panadería) ---
+        // No explicit job_id: autoincrement continues from 4 after the 3 base jobs.
         batch.insert('jobs', {
-          'job_id': 1,
           'sequence_id': 4,
-          'order_id': 1,
+          'order_id': 4,
           'amount': 50,
           'job_name': 'Lote Pan Integral Supermercado',
           'due_date': '2024-10-18',
@@ -1011,9 +818,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-14 04:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 2,
           'sequence_id': 5,
-          'order_id': 1,
+          'order_id': 4,
           'amount': 30,
           'job_name': 'Lote Croissants Vitrina',
           'due_date': '2024-10-18',
@@ -1021,9 +827,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-14 04:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 3,
           'sequence_id': 6,
-          'order_id': 2,
+          'order_id': 5,
           'amount': 5,
           'job_name': 'Pastel Cumpleaños El Rincón',
           'due_date': '2024-10-17',
@@ -1031,9 +836,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-15 06:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 4,
           'sequence_id': 7,
-          'order_id': 2,
+          'order_id': 5,
           'amount': 120,
           'job_name': 'Galletas Avena Pedido Mayorista',
           'due_date': '2024-10-19',
@@ -1041,9 +845,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-15 05:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 5,
           'sequence_id': 4,
-          'order_id': 3,
+          'order_id': 6,
           'amount': 25,
           'job_name': 'Pan Artesanal Evento Corporativo',
           'due_date': '2024-10-20',
@@ -1051,22 +854,19 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-16 06:00:00',
         });
 
-        // --- SETUP TIMES (Tiempos de preparación entre recetas) ---
-        // Limpieza de amasadora (machine 4) al cambiar de pan (4) a croissant (5)
+        // --- Setup Times (Panadería) ---
         batch.insert('setup_times', {
           'machine_id': 4,
           'from_sequence_id': 4,
           'to_sequence_id': 5,
           'setup_duration_minutes': 15,
         });
-        // Ajuste de temperatura en horno de carro (machine 8): pan (4) -> pastel (6)
         batch.insert('setup_times', {
           'machine_id': 8,
           'from_sequence_id': 4,
           'to_sequence_id': 6,
           'setup_duration_minutes': 20,
         });
-        // Cambio de molde en formadora (machine 6): croissant (5) -> galleta (7)
         batch.insert('setup_times', {
           'machine_id': 6,
           'from_sequence_id': 5,
@@ -1074,8 +874,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'setup_duration_minutes': 10,
         });
 
-        // --- INACTIVIDADES PROGRAMADAS (Mantenimiento) ---
-        // Horno de Carro: mantenimiento profundo todos los lunes
+        // --- Machine Inactivities (Panadería) ---
         batch.insert('machine_inactivities', {
           'machine_id': 8,
           'name': 'Mantenimiento Horno Carro',
@@ -1089,7 +888,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'saturday': 0,
           'sunday': 0,
         });
-        // Amasadora 50L: mantenimiento preventivo viernes
         batch.insert('machine_inactivities', {
           'machine_id': 4,
           'name': 'Limpieza Preventiva Amasadora',
@@ -1104,33 +902,25 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'sunday': 0,
         });
 
-        // --- PREEMPCIÓN DE TRABAJOS ---
-        // El pastel decorado (job 3) SÍ puede interrumpirse; mesa de decorado = machine 10
+        // --- Job Preemption (Panadería) ---
+        // Base jobs take IDs 1-3; bakery jobs take 4-8 in insertion order:
+        //   4=Pan Integral, 5=Croissants, 6=Pastel, 7=Galletas, 8=Pan Corporativo
         batch.insert('job_preemption', {
-          'job_id': 3,
+          'job_id': 6, // Pastel Cumpleaños → mesa de decorado
           'machine_id': 10,
           'can_preempt': 1,
         });
-        // El pan artesanal (job 1) NO puede interrumpirse en el horno; horno carro = machine 8
         batch.insert('job_preemption', {
-          'job_id': 1,
+          'job_id': 4, // Pan Integral → horno de carro
           'machine_id': 8,
           'can_preempt': 0,
         });
 
-        //----------
         // ============================================================
-        // SEGUNDA EMPRESA: MANUFACTURA TEXTIL "TELASINDUSTRIAL"
-        // ============================================================
-        // Tipos de máquinas: 9-17
-        // Máquinas: 14-26
-        // Secuencias: 8-12
-        // Tareas: 22-32
-        // Órdenes: 4-7
-        // Trabajos: 6-13
+        // EMPRESA 2: MANUFACTURA TEXTIL "TELASINDUSTRIAL"
         // ============================================================
 
-        // --- MACHINE TYPES (Textiles) ---
+        // --- Machine Types (Textiles, IDs 9-17) ---
         batch.insert('machine_types', {
           'machine_type_id': 9,
           'name': 'Planchado',
@@ -1161,7 +951,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'name': 'Confección',
           'description': 'Estación de costura y confección',
         });
-        // Machine types para Flow Shop (1 máquina cada uno)
         batch.insert('machine_types', {
           'machine_type_id': 15,
           'name': 'Tintorería Clásica',
@@ -1178,8 +967,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'description': 'Prensa industrial de vapor con 1 unidad',
         });
 
-        // --- MACHINES (Textiles) ---
-        // Single Machine: 1 planchadora
+        // --- Machines (Textiles, IDs 14-26) ---
         batch.insert('machines', {
           'machine_id': 14,
           'machine_type_id': 9,
@@ -1191,8 +979,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'continue_capacity': 5,
           'availability_time': '2024-10-20 06:00:00',
         });
-
-        // Parallel Machines: 2 cortadoras
         batch.insert('machines', {
           'machine_id': 15,
           'machine_type_id': 10,
@@ -1215,8 +1001,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'continue_capacity': 8,
           'availability_time': '2024-10-20 07:30:00',
         });
-
-        // Flow Shop: 1 máquina por etapa (Teñido, Lavado, Secado)
         batch.insert('machines', {
           'machine_id': 17,
           'machine_type_id': 11,
@@ -1250,8 +1034,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'continue_capacity': 12,
           'availability_time': '2024-10-20 06:00:00',
         });
-
-        // Flexible Flow Shop: 2 máquinas por etapa (Corte, Confección, Control=Secado)
         batch.insert('machines', {
           'machine_id': 20,
           'machine_type_id': 14,
@@ -1296,8 +1078,6 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'continue_capacity': 10,
           'availability_time': '2024-10-20 06:30:00',
         });
-
-        // Flow Shop: 1 máquina por etapa (Tintorería, Enjuague, Prensado)
         batch.insert('machines', {
           'machine_id': 24,
           'machine_type_id': 15,
@@ -1332,29 +1112,30 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'availability_time': '2024-10-22 06:00:00',
         });
 
-        // --- SEQUENCES (Textiles) ---
-        // Seq 8: Single Machine (solo planchado)
-        batch.insert('sequences',
-            {'sequence_id': 8, 'name': 'Planchado Simple Camisetas'});
+        // --- Sequences (Textiles, IDs 8-12) ---
+        batch.insert('sequences', {
+          'sequence_id': 8,
+          'name': 'Planchado Simple Camisetas',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 9,
+          'name': 'Corte de Telas Estándar',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 10,
+          'name': 'Ciclo Teñido Completo',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 11,
+          'name': 'Confección Camisas Premium',
+        });
+        batch.insert('sequences', {
+          'sequence_id': 12,
+          'name': 'Ciclo Tintura-Enjuague-Prensado',
+        });
 
-        // Seq 9: Parallel Machines (solo corte)
-        batch.insert('sequences',
-            {'sequence_id': 9, 'name': 'Corte de Telas Estándar'});
-
-        // Seq 10: Flow Shop (Teñido → Lavado → Secado con precedencias)
-        batch.insert('sequences',
-            {'sequence_id': 10, 'name': 'Ciclo Teñido Completo'});
-
-        // Seq 11: Flexible Flow Shop (Confección con precedencias)
-        batch.insert('sequences',
-            {'sequence_id': 11, 'name': 'Confección Camisas Premium'});
-
-        // Seq 12: Flow Shop (Tintorería → Enjuague → Prensado con precedencias)
-        batch.insert('sequences',
-            {'sequence_id': 12, 'name': 'Ciclo Tintura-Enjuague-Prensado'});
-
-        // --- TASKS (Textiles) ---
-        // Seq 8: Single Machine - 1 tarea (planchado)
+        // --- Tasks (Textiles, IDs 22-32) ---
+        // Seq 8: Single Machine
         batch.insert('tasks', {
           'task_id': 22,
           'n_proc_units': '1970-01-01 00:30:00',
@@ -1364,7 +1145,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Seq 9: Parallel Machines - 1 tarea (corte)
+        // Seq 9: Parallel Machines
         batch.insert('tasks', {
           'task_id': 23,
           'n_proc_units': '1970-01-01 00:45:00',
@@ -1374,7 +1155,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Seq 10: Flow Shop - 3 tareas con precedencias
+        // Seq 10: Flow Shop
         batch.insert('tasks', {
           'task_id': 24,
           'n_proc_units': '1970-01-01 01:00:00',
@@ -1400,7 +1181,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Seq 11: Flexible Flow Shop - 3 tareas con precedencias
+        // Seq 11: Flexible Flow Shop
         batch.insert('tasks', {
           'task_id': 27,
           'n_proc_units': '1970-01-01 00:50:00',
@@ -1426,7 +1207,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // Seq 12: Flow Shop - 3 tareas con precedencias (1 máquina cada tipo)
+        // Seq 12: Flow Shop (Tintura → Enjuague → Prensado)
         batch.insert('tasks', {
           'task_id': 30,
           'n_proc_units': '1970-01-01 01:00:00',
@@ -1452,8 +1233,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'allow_preemption': 0,
         });
 
-        // --- TASK DEPENDENCIES (Textiles) ---
-        // Flow Shop (Seq 10): Teñido → Lavado → Secado
+        // --- Task Dependencies (Textiles) ---
+        // Seq 10: Teñido → Lavado → Secado
         batch.insert('TaskDependency', {
           'predecessor_id': 24,
           'successor_id': 25,
@@ -1465,7 +1246,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'sequence_id': 10,
         });
 
-        // Flexible Flow Shop (Seq 11): Corte → Confección → Control
+        // Seq 11: Corte → Confección → Control
         batch.insert('TaskDependency', {
           'predecessor_id': 27,
           'successor_id': 28,
@@ -1477,7 +1258,7 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'sequence_id': 11,
         });
 
-        // Flow Shop (Seq 12): Tintura → Enjuague → Prensado
+        // Seq 12: Tintura → Enjuague → Prensado
         batch.insert('TaskDependency', {
           'predecessor_id': 30,
           'successor_id': 31,
@@ -1489,22 +1270,20 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'sequence_id': 12,
         });
 
-        // --- ORDERS (Textiles) ---
-        // Order 4: SINGLE MACHINE
-        batch.insert('orders', {'order_id': 4, 'reg_date': '2024-10-20'});
-        // Order 5: PARALLEL MACHINES
-        batch.insert('orders', {'order_id': 5, 'reg_date': '2024-10-21'});
-        // Order 6: FLOW SHOP
-        batch.insert('orders', {'order_id': 6, 'reg_date': '2024-10-22'});
-        // Order 7: FLEXIBLE FLOW SHOP
-        batch.insert('orders', {'order_id': 7, 'reg_date': '2024-10-23'});
+        // --- Orders (Textiles, IDs 7-10) ---
+        batch.insert('orders', {'order_id': 7, 'reg_date': '2024-10-20'});
+        batch.insert('orders', {'order_id': 8, 'reg_date': '2024-10-21'});
+        batch.insert('orders', {'order_id': 9, 'reg_date': '2024-10-22'});
+        batch.insert('orders', {'order_id': 10, 'reg_date': '2024-10-23'});
 
-        // --- JOBS (Textiles) ---
-        // Order 4: SINGLE MACHINE (2 jobs de seq 8)
+        // --- Jobs (Textiles) ---
+        // No explicit job_id: autoincrement continues from 9
+        // (3 base + 5 bakery = 8 already inserted → textile starts at 9).
+
+        // Order 7: Single Machine (seq 8)
         batch.insert('jobs', {
-          'job_id': 6,
           'sequence_id': 8,
-          'order_id': 4,
+          'order_id': 7,
           'amount': 100,
           'job_name': 'Camisetas Blancas Lote A',
           'due_date': '2024-10-25',
@@ -1512,9 +1291,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-20 06:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 7,
           'sequence_id': 8,
-          'order_id': 4,
+          'order_id': 7,
           'amount': 80,
           'job_name': 'Camisetas Negras Lote B',
           'due_date': '2024-10-25',
@@ -1522,11 +1300,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-20 06:30:00',
         });
 
-        // Order 5: PARALLEL MACHINES (2 jobs de seq 9)
+        // Order 8: Parallel Machines (seq 9)
         batch.insert('jobs', {
-          'job_id': 8,
           'sequence_id': 9,
-          'order_id': 5,
+          'order_id': 8,
           'amount': 60,
           'job_name': 'Corte Mezclilla Lote A',
           'due_date': '2024-10-24',
@@ -1534,9 +1311,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-20 07:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 9,
           'sequence_id': 9,
-          'order_id': 5,
+          'order_id': 8,
           'amount': 50,
           'job_name': 'Corte Algodón Lote B',
           'due_date': '2024-10-24',
@@ -1544,11 +1320,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-20 07:30:00',
         });
 
-        // Order 6: FLOW SHOP (2 jobs de seq 12)
+        // Order 9: Flow Shop (seq 12)
         batch.insert('jobs', {
-          'job_id': 10,
           'sequence_id': 12,
-          'order_id': 6,
+          'order_id': 9,
           'amount': 75,
           'job_name': 'Tintura Azul Marino',
           'due_date': '2024-10-26',
@@ -1556,9 +1331,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-22 06:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 11,
           'sequence_id': 12,
-          'order_id': 6,
+          'order_id': 9,
           'amount': 60,
           'job_name': 'Tintura Rojo Intenso',
           'due_date': '2024-10-26',
@@ -1566,11 +1340,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-22 06:30:00',
         });
 
-        // Order 7: FLEXIBLE FLOW SHOP (2 jobs de seq 11)
+        // Order 10: Flexible Flow Shop (seq 11)
         batch.insert('jobs', {
-          'job_id': 12,
           'sequence_id': 11,
-          'order_id': 7,
+          'order_id': 10,
           'amount': 40,
           'job_name': 'Camisas Blancas Premium',
           'due_date': '2024-10-27',
@@ -1578,9 +1351,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
           'available_date': '2024-10-23 08:00:00',
         });
         batch.insert('jobs', {
-          'job_id': 13,
           'sequence_id': 11,
-          'order_id': 7,
+          'order_id': 10,
           'amount': 35,
           'job_name': 'Camisas Azules Premium',
           'due_date': '2024-10-27',
@@ -1591,28 +1363,33 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
         await batch.commit(noResult: true);
       },
       onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        // NOTE: migrations run in order from oldVersion up to newVersion.
+        // Each block is idempotent (uses INSERT OR IGNORE / IF NOT EXISTS).
+
         if (oldVersion < 2) {
           await _createMachineInactivitiesTable(db);
         }
+
         if (oldVersion < 3) {
-          // Agregar environment y reglas de Open Shop
           await db.execute('''
-            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
-            
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
-            INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
+            INSERT OR IGNORE INTO environments (environment_id, name)
+            VALUES(7, 'OPEN SHOP');
+          ''');
+          await db.execute('''
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 4);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 5);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 11);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
           ''');
         }
+
         if (oldVersion < 5) {
-          // Crear tabla job_preemption
           await db.execute('''
-            CREATE TABLE job_preemption (
+            CREATE TABLE IF NOT EXISTS job_preemption (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_id INTEGER NOT NULL,
                 machine_id INTEGER NOT NULL,
@@ -1623,8 +1400,8 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             );
           ''');
         }
+
         if (oldVersion < 6) {
-          // Crear tabla setup_times
           await db.execute('''
             CREATE TABLE IF NOT EXISTS setup_times (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1639,27 +1416,105 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             );
           ''');
         }
+
         if (oldVersion < 7) {
-          // Asegurar que el environment OPEN SHOP existe
           await db.execute('''
-            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
+            INSERT OR IGNORE INTO environments (environment_id, name)
+            VALUES(7, 'OPEN SHOP');
           ''');
         }
+
+        if (oldVersion < 8) {
+          // Convert machine time columns to percentage columns
+          await db.execute('''
+            CREATE TABLE MACHINES_NEW (
+                machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_name VARCHAR(100) NOT NULL,
+                machine_type_id INTEGER NOT NULL,
+                status_id INTEGER NOT NULL,
+                processing_percentage REAL NOT NULL DEFAULT 100.0,
+                preparation_percentage REAL NOT NULL DEFAULT 100.0,
+                rest_percentage REAL NOT NULL DEFAULT 100.0,
+                availability_time DATETIME NOT NULL,
+                continue_capacity INTEGER,
+                FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
+                FOREIGN KEY (status_id) REFERENCES status(status_id)
+            );
+          ''');
+          await db.execute('''
+            INSERT INTO MACHINES_NEW (machine_id, machine_name, machine_type_id, status_id,
+                processing_percentage, preparation_percentage, rest_percentage,
+                availability_time, continue_capacity)
+            SELECT machine_id, machine_name, machine_type_id, status_id,
+                100.0, 100.0, 100.0,
+                availability_time, continue_capacity
+            FROM MACHINES;
+          ''');
+          await db.execute('DROP TABLE MACHINES;');
+          await db.execute('ALTER TABLE MACHINES_NEW RENAME TO MACHINES;');
+
+          await db.execute('''
+            CREATE TABLE job_task_machine_times_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                task_id INTEGER NOT NULL,
+                machine_id INTEGER NOT NULL,
+                processing_minutes INTEGER NOT NULL,
+                preparation_minutes INTEGER NOT NULL DEFAULT 0,
+                rest_minutes INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+                FOREIGN KEY (task_id) REFERENCES tasks(task_id),
+                FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
+                UNIQUE(job_id, task_id, machine_id)
+            );
+          ''');
+          await db.execute('''
+            INSERT INTO job_task_machine_times_new
+                (id, job_id, task_id, machine_id, processing_minutes, preparation_minutes, rest_minutes)
+            SELECT id, job_id, task_id, machine_id, duration_minutes, 0, 0
+            FROM job_task_machine_times;
+          ''');
+          await db.execute('DROP TABLE IF EXISTS job_task_machine_times;');
+          await db.execute(
+            'ALTER TABLE job_task_machine_times_new RENAME TO job_task_machine_times;',
+          );
+        }
+
+        if (oldVersion < 9) {
+          await db.execute(
+            'ALTER TABLE jobs ADD COLUMN job_name VARCHAR(100);',
+          );
+          try {
+            await db.execute(
+              'ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";',
+            );
+          } catch (_) {
+            // Column already exists or table not present yet — safe to ignore.
+          }
+        }
+
         if (oldVersion < 10) {
-          // Asegurar que los ambientes y reglas básicos existen en versiones anteriores
+          // Ensure all environments introduced after v3 exist
           await db.execute('''
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(5, 'JOB SHOP');
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(6, 'FLEXIBLE JOB SHOP');
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(7, 'OPEN SHOP');
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(8, 'FLEXIBLE OPEN SHOP');
+          ''');
 
+          // Ensure all dispatch rules introduced in later branches exist
+          await db.execute('''
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (11, 'MINSLACK');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (12, 'CR');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (13, 'ATCS');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (21, 'MS');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (23, 'JOHNSON');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (24, 'GENETICS');
+            INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (25, 'TABU');
+          ''');
 
+          // Job Shop
+          await db.execute('''
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 1);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 2);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 3);
@@ -1668,7 +1523,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 12);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 13);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (5, 24);
+          ''');
 
+          // Flexible Job Shop
+          await db.execute('''
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 1);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 2);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 3);
@@ -1678,7 +1536,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 13);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 21);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (6, 24);
+          ''');
 
+          // Open Shop
+          await db.execute('''
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 1);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 2);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 3);
@@ -1688,7 +1549,10 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 12);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 13);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
+          ''');
 
+          // Flexible Open Shop
+          await db.execute('''
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 1);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 2);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 3);
@@ -1699,94 +1563,18 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 13);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
           ''');
-        }
-        if (oldVersion < 8) {
-          // Migración a versión 8: convertir tiempos a porcentajes en MACHINES
-          // Crear nueva tabla con esquema actualizado
-          await db.execute('''
-          CREATE TABLE MACHINES_NEW (
-              machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              machine_name VARCHAR(100) NOT NULL,
-              machine_type_id INTEGER NOT NULL,
-              status_id INTEGER NOT NULL,
-              processing_percentage REAL NOT NULL DEFAULT 100.0,
-              preparation_percentage REAL NOT NULL DEFAULT 100.0,
-              rest_percentage REAL NOT NULL DEFAULT 100.0,
-              availability_time DATETIME NOT NULL,
-              continue_capacity INTEGER,
-              FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
-              FOREIGN KEY (status_id) REFERENCES status(status_id)
-          );
-        ''');
-          // Migrar datos existentes con porcentaje 100%
-          await db.execute('''
-          INSERT INTO MACHINES_NEW (machine_id, machine_name, machine_type_id, status_id, 
-              processing_percentage, preparation_percentage, rest_percentage, 
-              availability_time, continue_capacity)
-          SELECT machine_id, machine_name, machine_type_id, status_id, 
-              100.0, 100.0, 100.0, 
-              availability_time, continue_capacity
-          FROM MACHINES;
-        ''');
-          await db.execute('DROP TABLE MACHINES;');
-          await db.execute('ALTER TABLE MACHINES_NEW RENAME TO MACHINES;');
 
-          // Actualizar job_task_machine_times para tener 3 columnas de tiempo
+          // Single Machine: ensure TABU rule is linked (added in branch 1)
           await db.execute('''
-          CREATE TABLE job_task_machine_times_new (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              job_id INTEGER NOT NULL,
-              task_id INTEGER NOT NULL,
-              machine_id INTEGER NOT NULL,
-              processing_minutes INTEGER NOT NULL,
-              preparation_minutes INTEGER NOT NULL DEFAULT 0,
-              rest_minutes INTEGER NOT NULL DEFAULT 0,
-              FOREIGN KEY (job_id) REFERENCES jobs(job_id),
-              FOREIGN KEY (task_id) REFERENCES tasks(task_id),
-              FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
-              UNIQUE(job_id, task_id, machine_id)
-          );
-        ''');
-          await db.execute('''
-          INSERT INTO job_task_machine_times_new (id, job_id, task_id, machine_id, processing_minutes, preparation_minutes, rest_minutes)
-          SELECT id, job_id, task_id, machine_id, duration_minutes, 0, 0 FROM job_task_machine_times;
-        ''');
-          await db.execute('DROP TABLE IF EXISTS job_task_machine_times;');
-          await db.execute(
-            'ALTER TABLE job_task_machine_times_new RENAME TO job_task_machine_times;',
-          );
-        }
-        if (oldVersion < 9) {
-          await db
-              .execute('ALTER TABLE jobs ADD COLUMN job_name VARCHAR(100);');
-
-          // Ensure legacy order_setup_matrix tables are upgraded to include machine_name.
-          try {
-            await db.execute(
-                'ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
-          } catch (_) {
-            // Ignore if the column already exists or the table does not exist yet.
-          }
-        }
-        if (oldVersion < 10) {
-          await db.execute('''
-            INSERT OR IGNORE INTO environments (environment_id, name) VALUES(8, 'FLEXIBLE OPEN SHOP');
-          ''');
-          await db.execute('''
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 1);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 2);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 3);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 4);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 5);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 11);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 12);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 13);
-            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 25);
+            INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 25);
           ''');
         }
       },
     );
 
+    // Tables created outside the versioned onCreate/onUpgrade so they are
+    // always guaranteed to exist on every open() call.
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS job_machine_states (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1799,12 +1587,12 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
 
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS order_setup_matrix (
-          machine_name TEXT NOT NULL,
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          machine_name TEXT NOT NULL DEFAULT "",
           order_id INTEGER NOT NULL,
-          from_state TEXT NOT NULL,
-          to_state TEXT NOT NULL,
-          duration_minutes INTEGER NOT NULL,
+          from_state TEXT NOT NULL DEFAULT "",
+          to_state TEXT NOT NULL DEFAULT "",
+          duration_minutes INTEGER NOT NULL DEFAULT 0,
           FOREIGN KEY (order_id) REFERENCES orders(order_id)
       );
     ''');
@@ -1814,32 +1602,34 @@ INSERT INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (7, 24);
     return _database!;
   }
 
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /// Adds any columns that may be missing from [order_setup_matrix] due to
+  /// older schema versions being upgraded incrementally.
   static Future<void> _ensureOrderSetupMatrixSchema(Database db) async {
     final columns = await _getTableColumns(db, 'order_setup_matrix');
-    if (columns.isEmpty) {
-      return;
+    if (columns.isEmpty) return;
+
+    Future<void> addIfMissing(String col, String def) async {
+      if (!columns.contains(col)) {
+        await db.execute(
+          'ALTER TABLE order_setup_matrix ADD COLUMN $col $def;',
+        );
+      }
     }
 
-    if (!columns.contains('machine_name')) {
-      await db.execute(
-          'ALTER TABLE order_setup_matrix ADD COLUMN machine_name TEXT NOT NULL DEFAULT "";');
-    }
-    if (!columns.contains('from_state')) {
-      await db.execute(
-          'ALTER TABLE order_setup_matrix ADD COLUMN from_state TEXT NOT NULL DEFAULT "";');
-    }
-    if (!columns.contains('to_state')) {
-      await db.execute(
-          'ALTER TABLE order_setup_matrix ADD COLUMN to_state TEXT NOT NULL DEFAULT "";');
-    }
-    if (!columns.contains('duration_minutes')) {
-      await db.execute(
-          'ALTER TABLE order_setup_matrix ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 0;');
-    }
+    await addIfMissing('machine_name', 'TEXT NOT NULL DEFAULT ""');
+    await addIfMissing('from_state', 'TEXT NOT NULL DEFAULT ""');
+    await addIfMissing('to_state', 'TEXT NOT NULL DEFAULT ""');
+    await addIfMissing('duration_minutes', 'INTEGER NOT NULL DEFAULT 0');
   }
 
   static Future<List<String>> _getTableColumns(
-      Database db, String table) async {
+    Database db,
+    String table,
+  ) async {
     final info = await db.rawQuery('PRAGMA table_info($table);');
     return info.map((row) => row['name'] as String).toList();
   }

@@ -60,7 +60,15 @@ class MainPage extends StatelessWidget {
                 builder: (data) => SideMenuData(
                   header: Container(
                     margin: const EdgeInsets.symmetric(vertical: 16),
-                    child: Image.asset('assets/images/javeriana.png'),
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.matrix(<double>[
+                        -1.0, 0.0, 0.0, 0.0, 255.0, // R
+                        0.0, -1.0, 0.0, 0.0, 255.0, // G
+                        0.0, 0.0, -1.0, 0.0, 255.0, // B
+                        0.0, 0.0, 0.0, 1.0, 0.0, // A
+                      ]),
+                      child: Image.asset('assets/images/javeriana.png'),
+                    ),
                   ),
                   items: [
                     SideMenuItemDataTile(

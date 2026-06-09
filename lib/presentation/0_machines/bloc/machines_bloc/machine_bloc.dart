@@ -69,4 +69,35 @@ class MachineBloc extends Cubit<MachinesState> {
     emit(MachineTypeIdSet(state.machines, typeId));
 
   }
+   void editMachine(
+  int machineId,
+  double processingPercentage,
+  double preparationPercentage,
+  double restPercentage,
+  int continueCapacity,
+  String machineName,
+  String availabilityDateTimeStr,
+) async {
+  List<MachineEntity> machines = state.machines ?? [];
+  final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
+
+  final response = await service.editMachine(
+    machineId,
+    machineName,
+    processingPercentage,
+    preparationPercentage,
+    restPercentage,
+    continueCapacity,
+    availabilityDateTime,
+  );
+
+  response.fold(
+    (failure) => emit(MachinesRetrievingSuccess(machines, state.typeId)),
+    (updatedMachine) {
+      final index = machines.indexWhere((m) => m.id == machineId);
+      if (index != -1) machines[index] = updatedMachine;
+      emit(MachinesRetrievingSuccess(List.from(machines), state.typeId));
+    },
+  );
+}
 }

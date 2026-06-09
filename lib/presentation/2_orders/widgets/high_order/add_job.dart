@@ -103,7 +103,16 @@ class AddJobState extends State<AddJobWidget> {
 
   final Map<int, String> _machineFinalStates = {};
   final List<String> _letters = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J'
   ];
 
   // ── public getters used by the matrix dialog ──────────────────────────────
@@ -187,15 +196,21 @@ class AddJobState extends State<AddJobWidget> {
         if (label == 'Seleccione fecha de disponibilidad') {
           final currentHour = availableHour ?? widget.availableHour;
           widget.availableDate = DateTime(
-            picked.year, picked.month, picked.day,
-            currentHour?.hour ?? 0, currentHour?.minute ?? 0,
+            picked.year,
+            picked.month,
+            picked.day,
+            currentHour?.hour ?? 0,
+            currentHour?.minute ?? 0,
           );
           availableDate = widget.availableDate;
         } else {
           final currentHour = dueHour ?? widget.dueHour;
           widget.dueDate = DateTime(
-            picked.year, picked.month, picked.day,
-            currentHour?.hour ?? 0, currentHour?.minute ?? 0,
+            picked.year,
+            picked.month,
+            picked.day,
+            currentHour?.hour ?? 0,
+            currentHour?.minute ?? 0,
           );
           dueDate = widget.dueDate;
         }
@@ -248,9 +263,7 @@ class AddJobState extends State<AddJobWidget> {
         for (final entry in results) {
           final times = initialTimes[entry.value1];
           machinesMap[entry.value1] = times != null
-              ? entry.value2
-                  .map((m) => _applyStandardTimes(m, times))
-                  .toList()
+              ? entry.value2.map((m) => _applyStandardTimes(m, times)).toList()
               : entry.value2;
         }
 
@@ -268,13 +281,15 @@ class AddJobState extends State<AddJobWidget> {
               _selectedMachines[machineTypeId] = machine;
 
               final times = initialTimes[machineTypeId];
-              final baseProcessingMinutes = times?.processing.inMinutes ?? task.processingUnits.inMinutes;
+              final baseProcessingMinutes =
+                  times?.processing.inMinutes ?? task.processingUnits.inMinutes;
 
               final processingMinutes =
-                  (baseProcessingMinutes * machine.processingPercentage / 100).round();
+                  (baseProcessingMinutes * machine.processingPercentage / 100)
+                      .round();
               final preparationMinutes = 0; // comes from matrix — always 0 here
-              final restMinutes =
-                  times?.rest?.inMinutes ?? (60 * machine.restPercentage / 100).round();
+              final restMinutes = times?.rest?.inMinutes ??
+                  (60 * machine.restPercentage / 100).round();
 
               _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
               _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
@@ -316,8 +331,8 @@ class AddJobState extends State<AddJobWidget> {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                onPressed: () =>
-                    BlocProvider.of<NewOrderBloc>(context).removeJob(widget.index),
+                onPressed: () => BlocProvider.of<NewOrderBloc>(context)
+                    .removeJob(widget.index),
                 icon: Icon(Icons.delete, color: colorScheme.error),
               ),
             ),
@@ -460,8 +475,11 @@ class AddJobState extends State<AddJobWidget> {
               widget.availableHour = timeOfDay;
               if (availableDate != null) {
                 availableDate = DateTime(
-                  availableDate!.year, availableDate!.month, availableDate!.day,
-                  availableHour!.hour, availableHour!.minute,
+                  availableDate!.year,
+                  availableDate!.month,
+                  availableDate!.day,
+                  availableHour!.hour,
+                  availableHour!.minute,
                 );
                 widget.availableDate = availableDate;
               }
@@ -470,8 +488,11 @@ class AddJobState extends State<AddJobWidget> {
               widget.dueHour = timeOfDay;
               if (dueDate != null) {
                 dueDate = DateTime(
-                  dueDate!.year, dueDate!.month, dueDate!.day,
-                  dueHour!.hour, dueHour!.minute,
+                  dueDate!.year,
+                  dueDate!.month,
+                  dueDate!.day,
+                  dueHour!.hour,
+                  dueHour!.minute,
                 );
                 widget.dueDate = dueDate;
               }
@@ -481,8 +502,7 @@ class AddJobState extends State<AddJobWidget> {
       },
       child: hour == null
           ? const Text("Hora")
-          : Text(
-              "${hour.hour.toString().padLeft(2, '0')}:"
+          : Text("${hour.hour.toString().padLeft(2, '0')}:"
               "${hour.minute.toString().padLeft(2, '0')}"),
     );
   }
@@ -507,8 +527,7 @@ class AddJobState extends State<AddJobWidget> {
                 child: OutlinedButton(
                   onPressed: machineOptions.isEmpty
                       ? null
-                      : () =>
-                          _showMachineSelectionDialog(task, machineOptions),
+                      : () => _showMachineSelectionDialog(task, machineOptions),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                         vertical: 14, horizontal: 12),
@@ -582,8 +601,7 @@ class AddJobState extends State<AddJobWidget> {
         content: SizedBox(
           width: double.maxFinite,
           child: options.isEmpty
-              ? const Text(
-                  'No hay máquinas registradas para esta estación.')
+              ? const Text('No hay máquinas registradas para esta estación.')
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: options.length,
@@ -591,11 +609,9 @@ class AddJobState extends State<AddJobWidget> {
                     final machine = options[index];
                     return ListTile(
                       title: Text(machine.name),
-                      subtitle: Text(
-                          'Porcentaje: '
+                      subtitle: Text('Porcentaje: '
                           '${machine.processingPercentage.toStringAsFixed(0)}%'),
-                      onTap: () =>
-                          Navigator.of(dialogContext).pop(machine),
+                      onTap: () => Navigator.of(dialogContext).pop(machine),
                     );
                   },
                 ),
@@ -621,7 +637,8 @@ class AddJobState extends State<AddJobWidget> {
 
       // Update explicit times mapping for this task & machine
       final baseProcessingMinutes = updated.processing.inMinutes;
-      final restMinutes = updated.rest?.inMinutes ?? (60 * selected.restPercentage / 100).round();
+      final restMinutes = updated.rest?.inMinutes ??
+          (60 * selected.restPercentage / 100).round();
       _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
       _explicitTaskMachineMinutes[task.id!]!.clear();
       _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
@@ -707,8 +724,7 @@ class AddJobState extends State<AddJobWidget> {
                   controller: processingController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS',
-                      border: OutlineInputBorder()),
+                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
                   inputFormatters: [_HhMmSsTextInputFormatter()],
                 ),
                 const SizedBox(height: 16),
@@ -721,8 +737,7 @@ class AddJobState extends State<AddJobWidget> {
                   controller: restController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS',
-                      border: OutlineInputBorder()),
+                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
                   inputFormatters: [_HhMmSsTextInputFormatter()],
                 ),
 
@@ -737,16 +752,14 @@ class AddJobState extends State<AddJobWidget> {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: Colors.blue),
+                      Icon(Icons.info_outline, size: 16, color: Colors.blue),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           'El tiempo de alistamiento entre tipos de '
                           'job se configura en la matriz de tiempos '
                           'de alistamiento.',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.blue),
+                          style: TextStyle(fontSize: 11, color: Colors.blue),
                         ),
                       ),
                     ],
@@ -770,13 +783,13 @@ class AddJobState extends State<AddJobWidget> {
     );
 
     if (result == true) {
-      final processingMinutes =
-          _parseTimeToMinutes(processingController.text);
+      final processingMinutes = _parseTimeToMinutes(processingController.text);
       final restMinutes = _parseTimeToMinutes(restController.text);
 
       setState(() {
         if (selectedMachineId != null) {
-          final newSelMachine = machines.firstWhere((m) => m.id == selectedMachineId);
+          final newSelMachine =
+              machines.firstWhere((m) => m.id == selectedMachineId);
           _selectedMachines[machineTypeId] = newSelMachine;
 
           _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
@@ -826,8 +839,7 @@ class AddJobState extends State<AddJobWidget> {
           machines.map((m) => _applyStandardTimes(m, times)).toList();
       final selected = _selectedMachines[machineTypeId];
       if (selected != null) {
-        _selectedMachines[machineTypeId] =
-            _applyStandardTimes(selected, times);
+        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
       }
     });
   }
@@ -859,8 +871,7 @@ class AddJobState extends State<AddJobWidget> {
               onPressed: (index) =>
                   setState(() => _preemptionMatrix[machine.id!] = index),
               borderRadius: BorderRadius.circular(8),
-              constraints:
-                  const BoxConstraints(minWidth: 50, minHeight: 36),
+              constraints: const BoxConstraints(minWidth: 50, minHeight: 36),
               children: const [
                 Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
@@ -893,7 +904,6 @@ class _HhMmSsTextInputFormatter extends TextInputFormatter {
     }
     final text = buffer.toString();
     return TextEditingValue(
-        text: text,
-        selection: TextSelection.collapsed(offset: text.length));
+        text: text, selection: TextSelection.collapsed(offset: text.length));
   }
 }

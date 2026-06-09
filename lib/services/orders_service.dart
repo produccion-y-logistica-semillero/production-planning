@@ -26,8 +26,8 @@ class OrdersService {
 
   OrdersService(this.orderRepo, this.machineRepo, this.setupTimeService);
 
-  Future<Either<Failure, bool>> addOrder(
-      List<NewOrderRequestModel> model, {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+  Future<Either<Failure, bool>> addOrder(List<NewOrderRequestModel> model,
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
     final List<JobEntity> jobs = model.map((jobModel) {
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
       if (jobModel.taskMachineTimesMinutes != null) {
@@ -64,7 +64,8 @@ class OrdersService {
           'OrdersService.addOrder: sequence=${m.sequenceId} taskMachineTimesMinutes=${m.taskMachineTimesMinutes}');
     }
 
-    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs, setupTimeMatrix: setupTimeMatrix);
+    final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs,
+        setupTimeMatrix: setupTimeMatrix);
     try {
       return await orderRepo.createOrder(newOrder);
     } catch (error, stack) {
@@ -134,11 +135,15 @@ class OrdersService {
       print("La orden no tiene trabajos asociados");
       return Left(LocalStorageFailure());
     }
-    if (order.orderJobs!.any((job) =>
+    final emptyJob = order.orderJobs!.where((job) =>
         job.sequence == null ||
         job.sequence!.tasks == null ||
-        job.sequence!.tasks!.isEmpty)) {
-      print("Al menos un trabajo no tiene tareas asociadas");
+        job.sequence!.tasks!.isEmpty);
+    if (emptyJob.isNotEmpty) {
+      for (final job in emptyJob) {
+        print("El job ${job.jobId} (secuencia ${job.sequence?.id}) no tiene "
+            "tareas asociadas: la secuencia está vacía o no existe en la BD.");
+      }
       return Left(LocalStorageFailure());
     }
 
@@ -595,7 +600,9 @@ class OrdersService {
               machineRepository: machineRepo,
               orderRepository: orderRepo,
               setupTimeService: setupTimeService)
-          .openShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+          .openShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
       String() => Left(EnviromentNotCorrectFailure()),
     };
   }

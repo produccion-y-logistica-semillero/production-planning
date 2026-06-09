@@ -165,10 +165,9 @@ class FlowShop {
         return slackA.compareTo(slackB);
       });
 
-      FlowShopInput selectedJob = remainingJobs.first;
+      FlowShopInput selectedJob = remainingJobs.removeAt(0);
       _assignJobToMachines(selectedJob);
       totalProcessingTimeAccumulated += _totalProcessingTime(selectedJob);
-      remainingJobs.remove(selectedJob);
     }
   }
 
@@ -183,10 +182,9 @@ class FlowShop {
         return crA.compareTo(crB);
       });
 
-      FlowShopInput selectedJob = remainingJobs.first;
+      FlowShopInput selectedJob = remainingJobs.removeAt(0);
       _assignJobToMachines(selectedJob);
       totalProcessingTimeAccumulated += _totalProcessingTime(selectedJob);
-      remainingJobs.remove(selectedJob);
     }
   }
 
@@ -382,27 +380,34 @@ class FlowShop {
 
     DateTime current = start;
     Duration remaining = duration;
+    int maxIterations = 10000; // Seguridad contra loops infinitos
+    int iterations = 0;
 
-    while (remaining > Duration.zero) {
+    while (remaining > Duration.zero && iterations < maxIterations) {
+      iterations++;
+
       final DateTime dayStart = DateTime(current.year, current.month, current.day, workingStart.hour, workingStart.minute);
       final DateTime dayEnd = DateTime(current.year, current.month, current.day, workingEnd.hour, workingEnd.minute);
 
+      // Si current está antes del inicio del horario laboral, sáltalo al inicio
       if (current.isBefore(dayStart)) {
         current = dayStart;
-        continue;
       }
 
+      // Si current está en o después del fin del horario laboral, sáltalo al siguiente día
       if (!current.isBefore(dayEnd)) {
         current = DateTime(current.year, current.month, current.day + 1, workingStart.hour, workingStart.minute);
-        continue;
-      }
-
-      final Duration availableToday = dayEnd.difference(current);
-      if (remaining <= availableToday) {
-        return current.add(remaining);
       } else {
-        remaining -= availableToday;
-        current = DateTime(current.year, current.month, current.day + 1, workingStart.hour, workingStart.minute);
+        // current está dentro del horario laboral: descuenta el tiempo disponible hoy
+        final Duration availableToday = dayEnd.difference(current);
+        if (remaining <= availableToday) {
+          // El tiempo restante cabe en lo que queda de hoy
+          return current.add(remaining);
+        } else {
+          // El tiempo restante excede lo disponible hoy, descuenta y salta al siguiente
+          remaining -= availableToday;
+          current = DateTime(current.year, current.month, current.day + 1, workingStart.hour, workingStart.minute);
+        }
       }
     }
 
@@ -582,8 +587,9 @@ class FlowShop {
   void scheduleGeneticAlgorithm() {
     print("EJECUTANDO ALGORITMO GENÉTICO EN FLOW SHOP");
 
-    const int populationSize = 50;
-    const int generations = 100;
+    const int populationSize = 15;
+    const int maxGenerations = 25;
+    const int maxGenerationsNoImprovement = 5;
     const double mutationRate = 0.1;
 
     if (inputJobs.isEmpty) return;
@@ -592,8 +598,9 @@ class FlowShop {
 
     List<FlowShopInput> bestIndividual = List.from(inputJobs);
     int bestFitness = _evaluateFitnessFlowShop(bestIndividual);
+    int generationsNoImprovement = 0;
 
-    for (int generation = 0; generation < generations; generation++) {
+    for (int generation = 0; generation < maxGenerations; generation++) {
       List<Tuple2<List<FlowShopInput>, int>> evaluated = population.map((individual) {
         return Tuple2(individual, _evaluateFitnessFlowShop(individual));
       }).toList();
@@ -603,7 +610,15 @@ class FlowShop {
       if (evaluated.first.value2 < bestFitness) {
         bestFitness = evaluated.first.value2;
         bestIndividual = List.from(evaluated.first.value1);
+        generationsNoImprovement = 0;
         print("Generación $generation: Mejor makespan = $bestFitness minutos");
+      } else {
+        generationsNoImprovement++;
+        // Early stopping: si no hay mejora en N generaciones, termina
+        if (generationsNoImprovement >= maxGenerationsNoImprovement) {
+          print("Sin mejora en $maxGenerationsNoImprovement generaciones. Deteniendo búsqueda.");
+          break;
+        }
       }
 
       population = _generateNewPopulation(evaluated, populationSize, mutationRate);

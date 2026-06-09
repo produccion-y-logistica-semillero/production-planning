@@ -282,6 +282,31 @@ class OrderRepositoryImpl implements OrderRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, bool>> updateOrder(OrderEntity order) async {
+    try {
+      if (order.orderId == null) {
+        return Left(LocalStorageFailure());
+      }
+      
+      await jobDao.deleteJobsFromOrder(order.orderId!);
+      
+      if (order.orderJobs != null) {
+        for (var job in order.orderJobs!) {
+          await jobDao.insertJob(job, order.orderId!);
+        }
+      }
+      
+      return const Right(true);
+    } on Failure catch (error) {
+      return Left(error);
+    } catch (error, stack) {
+      print('OrderRepositoryImpl.updateOrder error: ' + error.toString());
+      print(stack.toString());
+      return Left(LocalStorageFailure());
+    }
+  }
+
 
   @override
   Future<Either<Failure, bool>> deleteOrder(int orderId) async {

@@ -14,5 +14,5 @@ class NewOrderRequestModel{
 
   NewOrderRequestModel(this.sequenceId, this.dueDate, this.availableDate,
       this.priority, this.amount, this.jobName,
-      {this.preemptionMatrix, this.taskMachineTimesMinutes, this.machineFinalStates});
+      {this.preemptionMatrix, this.taskMachineTimesMinutes});
 }

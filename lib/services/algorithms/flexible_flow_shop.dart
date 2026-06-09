@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -40,12 +41,27 @@ class FlexibleFlowShop {
   final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastJob = {};
 
+  // Machine inactivity support
+  final Map<int, List<MachineInactivityEntity>> machineInactivities;
+  final Map<int, int> machineContinueCapacity;
+  final Map<int, Duration?> machineRestTime;
+  Map<int, int> machineProcessedCount = {};
+
   FlexibleFlowShop(
     this.startDate,
     this.workingSchedule,
     this.inputJobs,
     this.machinesAvailability,
     String rule, {
+    this.machineInactivities = const {},
+    this.machineContinueCapacity = const {},
+    this.machineRestTime = const {},
+  }) {
+    // Inicializar contador de procesamiento por máquina
+    for (final machineId in machinesAvailability.keys) {
+      machineProcessedCount[machineId] = 0;
+    }
+    switch (rule) {
     this.stateSetupMatrix,
     this.jobStates,
   }) {
@@ -154,6 +170,23 @@ class FlexibleFlowShop {
           : machineAvailable;
 
       startTime = _adjustForWorkingSchedule(startTime);
+      final end = startTime.add(processingTime);
+      DateTime endTime = _adjustEndTimeWithInactivities(machineId, startTime, end);
+
+      // Aplicar descanso por continueCapacity
+      DateTime finalEnd = endTime;
+      final capacity = machineContinueCapacity[machineId] ?? 0;
+      final restTime = machineRestTime[machineId];
+
+      if (capacity > 0 && restTime != null) {
+        machineProcessedCount[machineId] =
+            (machineProcessedCount[machineId] ?? 0) + 1;
+
+        if (machineProcessedCount[machineId]! >= capacity) {
+          finalEnd = endTime.add(restTime);
+          machineProcessedCount[machineId] = 0;
+        }
+      }
 
       final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
       final Duration setupDuration = _getSetupDuration(
@@ -173,6 +206,8 @@ class FlexibleFlowShop {
       // Guarda el último tiempo de finalización
       finalEndTime = endTime;
 
+      scheduling[stationId] = Tuple2(machineId, Range(startTime, endTime));
+      machinesAvailability[machineId] = finalEnd;
       scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
       machinesAvailability[machineId] = endTime;
       _machineLastJob[machineId] = job.jobId;
@@ -298,6 +333,85 @@ class FlexibleFlowShop {
       ).add(remainingTime);
     }
     return end;
+  }
+
+  // Obtener las inactividades de una máquina para un día específico
+  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
+    final inactivities = machineInactivities[machineId] ?? [];
+    final weekday = day.weekday;
+    final List<Range> dayInactivities = [];
+
+    for (final inactivity in inactivities) {
+      final inactivityWeekdays =
+          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
+
+      if (inactivityWeekdays.contains(weekday)) {
+        final startHour = inactivity.startTime.inHours;
+        final startMinute = inactivity.startTime.inMinutes % 60;
+
+        final inactivityStart = DateTime(
+          day.year, day.month, day.day, startHour, startMinute,
+        );
+
+        final inactivityEnd = inactivityStart.add(inactivity.duration);
+        dayInactivities.add(Range(inactivityStart, inactivityEnd));
+      }
+    }
+
+    return dayInactivities;
+  }
+
+  // Ajustar el tiempo de finalización considerando inactividades programadas
+  DateTime _adjustEndTimeWithInactivities(
+      int machineId, DateTime start, DateTime end) {
+    DateTime current = start;
+    Duration remaining = end.difference(start);
+
+    while (remaining > Duration.zero) {
+      current = _adjustForWorkingSchedule(current);
+
+      final dayInactivities = _getInactivitiesForDay(machineId, current);
+
+      final dayEnd = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value2.hour, workingSchedule.value2.minute,
+      );
+
+      DateTime nextAvailable = current;
+      for (final inactivity in dayInactivities) {
+        if (nextAvailable.isBefore(inactivity.end) &&
+            inactivity.start.isBefore(dayEnd)) {
+          if (nextAvailable.isBefore(inactivity.start)) {
+            final availableBeforeInactivity =
+                inactivity.start.difference(nextAvailable);
+
+            if (remaining <= availableBeforeInactivity) {
+              return nextAvailable.add(remaining);
+            } else {
+              remaining -= availableBeforeInactivity;
+              nextAvailable = inactivity.end;
+            }
+          } else {
+            if (nextAvailable.isBefore(inactivity.end)) {
+              nextAvailable = inactivity.end;
+            }
+          }
+        }
+      }
+
+      final availableToday = dayEnd.difference(nextAvailable);
+
+      if (availableToday > Duration.zero && remaining <= availableToday) {
+        return nextAvailable.add(remaining);
+      } else {
+        if (availableToday > Duration.zero) {
+          remaining -= availableToday;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return current;
   }
 
   Duration _getSetupDuration(

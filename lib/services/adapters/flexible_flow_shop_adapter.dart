@@ -9,6 +9,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -139,16 +140,39 @@ class FlexibleFlowShopAdapter {
       return null;
     }
 
-    // ── 7. Build PlanningMachineEntity list ────────────────────────────────
-    final List<PlanningMachineEntity> planningMachines = [
-      for (final machine in machines)
-        PlanningMachineEntity(
-          machine.id!,
-          machine.name,
-          [],
-          scheduledInactivities: machine.scheduledInactivities,
-        ),
-    ];
+    // Crear mapa de inactividades por máquina
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      machineRestTimeMap[machine.id!] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
+    // Ejecutar el algoritmo Flexible Flow Shop
+    final output = FlexibleFlowShop(
+      order.regDate,
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
+      inputJobs,
+      machinesAvailability,
+      rule,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
+    ).output;
+
+    // Transformar la salida en PlanningMachineEntity
+    final List<PlanningMachineEntity> planningMachines = [];
+    for (final machine in machines) {
+      planningMachines.add(PlanningMachineEntity(
+        machine.id!,
+        machine.name,
+        [],
+        scheduledInactivities: machine.scheduledInactivities,
+      ));
+    }
 
     final Map<int, int> jobCounter = {};
     for (final out in output) {
@@ -164,6 +188,11 @@ class FlexibleFlowShopAdapter {
         final machineId = taskEntry.value.value1;
         final timeRange = taskEntry.value.value2;
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
+
+        final jobName = job.jobName ?? 'Job ${out.jobId}';
+        final displayName = current == 1
+            ? jobName
+            : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,

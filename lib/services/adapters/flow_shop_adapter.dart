@@ -11,6 +11,7 @@
 
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -131,22 +132,35 @@ class FlowShopAdapter {
       }
     }
 
-    // ── 5. Initial machine availability ───────────────────────────────────
-    final Map<int, DateTime> machinesAvailability = {
-      for (final m in machines)
-        if (m.id != null) m.id!: order.regDate,
-    };
+    //we create the sequence
+    final Map<int, DateTime> machinesAvailability = {};
+    for (final task in order.orderJobs!.first.sequence!.tasks!) {
+      machinesAvailability[task.machineTypeId] = DateTime.now();
+    }
 
-    // ── 6. Run algorithm ──────────────────────────────────────────────────
+    // Crear mapa de inactividades por máquina
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      final machineKey = machine.machineTypeId!;
+      machineInactivitiesMap[machineKey] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machineKey] = machine.continueCapacity;
+      machineRestTimeMap[machineKey] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
+    //we call the algorithm and receive the output
     final output = FlowShop(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
       machinesAvailability,
-      rule.toUpperCase(),
+      rule,
       changeoverMatrix: mergedMatrix,
-      stateSetupMatrix: stateSetupMatrix,
-      jobStates: jobStates,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
     ).output;
 
     // ── 7. Build PlanningMachineEntity list ────────────────────────────────
@@ -170,8 +184,9 @@ class FlowShopAdapter {
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
-
+      final displayName = current == 1
+          ? jobName
+          : '$jobName (${current - 1})';
       for (final machineScheduling in out.machinesScheduling.entries) {
         final planningMachineEntity = planningMachines
             .firstWhere((pm) => pm.machineId == machineScheduling.key);
@@ -202,12 +217,7 @@ class FlowShopAdapter {
     return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
   }
 
-  // ── helpers ───────────────────────────────────────────────────────────────
-
-  /// Returns a changeover matrix with Duration.zero for every transition.
-  /// Used as the base so that if no DB or state-based setup times are
-  /// configured, no spurious delay appears in the Gantt.
-  Map<int, Map<int?, Map<int, Duration>>> _buildZeroChangeoverMatrix(
+  Map<int, Map<int?, Map<int, Duration>>> _buildDefaultChangeoverMatrix(
     List<MachineEntity> machines,
     Set<int> sequenceIds,
   ) {

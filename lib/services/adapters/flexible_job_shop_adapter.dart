@@ -100,19 +100,14 @@ class FlexibleJobShopAdapter {
         taskSequence.add(Tuple2(task.id!, machineDurations));
       }
 
-      for (var i = 0; i < job.amount; i++) {
-        final uniqueJobId = job.jobId! * 1000 + i;
-        inputJobs.add(FlexibleJobInput(
-          uniqueJobId,
-          job.jobId!,
-          job.sequence!.id!,
-          job.dueDate,
-          job.priority,
-          job.availableDate,
-          taskSequence,
-          dependencies: job.sequence!.dependencies ?? [],
-        ));
-      }
+      inputJobs.add(FlexibleJobInput(
+        job.jobId!,
+        job.sequence!.id!,
+        job.dueDate,
+        job.priority,
+        job.availableDate,
+        taskSequence,
+      ));
     }
 
     // Crear la disponibilidad inicial de las máquinas
@@ -140,92 +135,17 @@ class FlexibleJobShopAdapter {
       }
     }
 
-    final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
-        buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
-    final Map<int, Map<int, String>> jobStates =
-        buildJobMachineStates(order.orderJobs!, machines);
-
-    // Ejecutar el algoritmo Flexible Job Shop en un isolate
-    final payload = <String, dynamic>{
-      'startDate': order.regDate.millisecondsSinceEpoch,
-      'workingStartHour': START_SCHEDULE.hour,
-      'workingStartMinute': START_SCHEDULE.minute,
-      'workingEndHour': END_SCHEDULE.hour,
-      'workingEndMinute': END_SCHEDULE.minute,
-      'rule': rule.toUpperCase(),
-      'inputJobs': inputJobs.map((job) {
-        return {
-          'jobId': job.jobId,
-          'dbJobId': job.dbJobId,
-          'sequenceId': job.sequenceId,
-          'dueDate': job.dueDate.millisecondsSinceEpoch,
-          'priority': job.priority,
-          'availableDate': job.availableDate.millisecondsSinceEpoch,
-          'taskSequence': job.taskSequence.map((task) {
-            return {
-              'taskId': task.value1,
-              'machineDurations': task.value2.map((machineId, duration) => MapEntry(machineId, duration.inMilliseconds)),
-            };
-          }).toList(),
-          'dependencies': job.dependencies
-              .map((dep) => {
-                    'predecessor_id': dep.predecessor_id,
-                    'successor_id': dep.successor_id,
-                    'sequenceId': dep.sequenceId,
-                  })
-              .toList(),
-        };
-      }).toList(),
-      'machinesAvailability': machinesAvailability.map((machineId, date) => MapEntry(machineId, date.millisecondsSinceEpoch)),
-      'machineInactivities': machineInactivitiesMap.map((machineId, inactivities) {
-        return MapEntry(machineId, inactivities.map((inactivity) {
-          return {
-            'machineId': inactivity.machineId,
-            'name': inactivity.name,
-            'weekdays': inactivity.weekdays.map((wd) => wd.index).toList(),
-            'startTimeMinutes': inactivity.startTime.inMinutes,
-            'durationMinutes': inactivity.duration.inMinutes,
-          };
-        }).toList());
-      }),
-      'machineContinueCapacity': machineContinueCapacityMap,
-      'machineRestTime': machineRestTimeMap.map((machineId, duration) => MapEntry(machineId, duration?.inMilliseconds)),
-      'stateSetupMatrix': stateSetupMatrix,
-      'jobStates': jobStates,
-    };
-
-    List<Map<String, dynamic>> rawOutput;
-    try {
-      rawOutput = await compute(flexibleJobShopSchedule, payload);
-    } catch (error, stack) {
-      print('FlexibleJobShopAdapter.flexibleJobShopAdapter compute error: ${error.toString()}');
-      print(stack.toString());
-      return null;
-    }
-
-    final List<FlexibleJobOutput> output = rawOutput.map((out) {
-      final schedulingMap = (out['scheduling'] as Map<dynamic, dynamic>).map((key, value) {
-        final entry = Map<String, dynamic>.from(value as Map);
-        return MapEntry(
-          int.parse(key as String),
-          Tuple2(
-            entry['machineId'] as int,
-            Range(
-              DateTime.fromMillisecondsSinceEpoch(entry['start'] as int),
-              DateTime.fromMillisecondsSinceEpoch(entry['end'] as int),
-            ),
-          ),
-        );
-      });
-      return FlexibleJobOutput(
-        out['jobId'] as int,
-        out['dbJobId'] as int,
-        DateTime.fromMillisecondsSinceEpoch(out['dueDate'] as int),
-        DateTime.fromMillisecondsSinceEpoch(out['startDate'] as int),
-        DateTime.fromMillisecondsSinceEpoch(out['endTime'] as int),
-        schedulingMap,
-      );
-    }).toList();
+    // Ejecutar el algoritmo Flexible Job Shop
+    final output = FlexibleJobShop(
+      order.regDate,
+      Tuple2(START_SCHEDULE, END_SCHEDULE),
+      inputJobs,
+      machinesAvailability,
+      rule,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
+    ).output;
 
     // Transformar la salida en PlanningMachineEntity
     final List<PlanningMachineEntity> planningMachines = [];
@@ -252,7 +172,7 @@ class FlexibleJobShopAdapter {
 
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
-        final jobName = job.jobName ?? 'Job ${out.dbJobId}';
+        final jobName = job.jobName ?? 'Job ${out.jobId}';
         final displayName = current == 1
             ? jobName
             : '$jobName (${current - 1})';
@@ -279,9 +199,9 @@ class FlexibleJobShopAdapter {
     // Calcular métricas
     final List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
-      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-      jobsDates.add(Tuple5(out.dbJobId, job.availableDate, out.endTime,
-          out.dueDate, job.priority));
+      final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
+      jobsDates
+          .add(Tuple4(out.startDate, out.endTime, out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(

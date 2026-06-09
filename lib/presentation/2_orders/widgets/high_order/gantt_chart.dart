@@ -183,7 +183,9 @@ class _GanttChartState extends State<GanttChart> {
       children: [
         DropdownButton<int>(
           value: _selectedRule,
-          items: widget.items.isNotEmpty ? widget.items : [DropdownMenuItem<int>(value: -1, child: Text('No hay reglas disponibles'))],
+          items: widget.items
+              .where((item) => item.value == _selectedRule)
+              .toList(),
           onChanged: (int? id) {
             if (id != null && id != -1) {
               setState(() {

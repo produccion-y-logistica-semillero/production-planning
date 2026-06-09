@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -106,18 +107,30 @@ class ParallelMachineAdapter {
       }
     }
 
-    // ── 5. Build empty machine slot map ───────────────────────────────────
-    final Map<int, List<Tuple2<DateTime, DateTime>>> machineSlots = {
-      for (final machine in machineEntities) machine.id!: [],
-    };
+    //we create an the empy input struct for machines
+    final Map<int, List<Tuple2<DateTime, DateTime>>> machines = {};
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machineEntities) {
+      machines[machine.id!] = [];
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      machineRestTimeMap[machine.id!] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
 
     // ── 6. Run algorithm ──────────────────────────────────────────────────
     final output = ParallelMachine(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
+      machines,
+      rule,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
       machineSlots,
-      rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix, // <── passed through
     ).output;
 
@@ -131,9 +144,10 @@ class ParallelMachineAdapter {
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
-
-      final planningTask = PlanningTaskEntity(
+      final displayName = current == 1
+          ? jobName
+          : '$jobName (${current - 1})';
+      final task = PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
         displayName: displayName,

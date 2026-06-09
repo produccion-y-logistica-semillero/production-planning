@@ -1,5 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
 class ParallelInput {
@@ -55,6 +57,11 @@ class ParallelMachine {
   Map<int, List<Tuple2<DateTime, DateTime>>> machines = {};
   List<ParallelOutput> output = [];
 
+  // Machine inactivity support
+  final Map<int, List<MachineInactivityEntity>> machineInactivities;
+  final Map<int, int> machineContinueCapacity;
+  final Map<int, Duration?> machineRestTime;
+  Map<int, int> machineProcessedCount = {};
   // ── Setup-time state ──────────────────────────────────────────────────────
   // stateSetupMatrix: machineId → fromState → toState → minutes
   // Mirrors the structure used by Flow Shop / Flexible Job Shop / Open Shop.
@@ -69,6 +76,15 @@ class ParallelMachine {
     this.inputJobs,
     this.machines,
     String rule, {
+    this.machineInactivities = const {},
+    this.machineContinueCapacity = const {},
+    this.machineRestTime = const {},
+  }) {
+    // Inicializar contador de procesamiento por máquina
+    for (final machineId in machines.keys) {
+      machineProcessedCount[machineId] = 0;
+    }
+    switch (rule) {
     this.stateSetupMatrix,
   }) {
     // Initialise cold-start tracking for every machine.
@@ -334,6 +350,77 @@ class ParallelMachine {
     return (1 / processing) * exp(-tardiness);
   }
 
+  void _assignJobsToMachines() {
+  Map<int, DateTime> machineAvailable = {
+    for (var id in machines.keys) id: startDate,
+  };
+
+  for (var job in inputJobs) {
+    int jobId = job.jobId;
+    DateTime dueDate = job.dueDate;
+    DateTime availableDate = job.availableDate;
+
+    int bestMachineId = -1;
+    DateTime bestStartTime = DateTime.now();
+    DateTime bestEndTime = DateTime.now();
+    Duration bestDelay = const Duration(days: 99999);
+
+    for (var entry in job.durationsInMachines.entries) {
+      int machineId = entry.key;
+      Duration processingTime = entry.value;
+      
+      DateTime machineStartTime =
+          availableDate.isAfter(machineAvailable[machineId]!)
+              ? availableDate
+              : machineAvailable[machineId]!;
+
+      machineStartTime = _adjustForWorkingSchedule(machineStartTime);
+      final rawEnd = machineStartTime.add(processingTime);
+      DateTime endTime = _adjustEndTimeWithInactivities(
+        machineId, machineStartTime, rawEnd);
+      Duration delay =
+          endTime.isAfter(dueDate)
+              ? endTime.difference(dueDate)
+              : Duration.zero;
+
+      if (delay < bestDelay ||
+          (delay == bestDelay && endTime.isBefore(bestEndTime))) {
+        bestMachineId = machineId;
+        bestStartTime = machineStartTime;
+        bestEndTime = endTime;
+        bestDelay = delay;
+      }
+    }
+
+    if (bestMachineId != -1) {
+      // Aplicar descanso por continueCapacity
+      DateTime finalEnd = bestEndTime;
+      final capacity = machineContinueCapacity[bestMachineId] ?? 0;
+      final restTime = machineRestTime[bestMachineId];
+
+      if (capacity > 0 && restTime != null) {
+        machineProcessedCount[bestMachineId] =
+            (machineProcessedCount[bestMachineId] ?? 0) + 1;
+
+        if (machineProcessedCount[bestMachineId]! >= capacity) {
+          finalEnd = bestEndTime.add(restTime);
+          machineProcessedCount[bestMachineId] = 0;
+        }
+      }
+
+      machineAvailable[bestMachineId] = finalEnd;
+      machines[bestMachineId]?.add(Tuple2(bestStartTime, bestEndTime));
+      output.add(
+        ParallelOutput(
+          jobId,
+          bestMachineId,
+          bestStartTime,
+          bestEndTime,
+          bestDelay,
+          dueDate,
+        ),
+      );
+    }
   double calculateWSPT(ParallelInput job) {
     final minMs = job.durationsInMachines.values
         .reduce((a, b) => a < b ? a : b)
@@ -364,6 +451,85 @@ class ParallelMachine {
       return DateTime(start.year, start.month, start.day + 1, ws.hour, ws.minute).add(remaining);
     }
     return endTime;
+  }
+
+  // Obtener las inactividades de una máquina para un día específico
+  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
+    final inactivities = machineInactivities[machineId] ?? [];
+    final weekday = day.weekday;
+    final List<Range> dayInactivities = [];
+
+    for (final inactivity in inactivities) {
+      final inactivityWeekdays =
+          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
+
+      if (inactivityWeekdays.contains(weekday)) {
+        final startHour = inactivity.startTime.inHours;
+        final startMinute = inactivity.startTime.inMinutes % 60;
+
+        final inactivityStart = DateTime(
+          day.year, day.month, day.day, startHour, startMinute,
+        );
+
+        final inactivityEnd = inactivityStart.add(inactivity.duration);
+        dayInactivities.add(Range(inactivityStart, inactivityEnd));
+      }
+    }
+
+    return dayInactivities;
+  }
+
+  // Ajustar el tiempo de finalización considerando inactividades programadas
+  DateTime _adjustEndTimeWithInactivities(
+      int machineId, DateTime start, DateTime end) {
+    DateTime current = start;
+    Duration remaining = end.difference(start);
+
+    while (remaining > Duration.zero) {
+      current = _adjustForWorkingSchedule(current);
+
+      final dayInactivities = _getInactivitiesForDay(machineId, current);
+
+      final dayEnd = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value2.hour, workingSchedule.value2.minute,
+      );
+
+      DateTime nextAvailable = current;
+      for (final inactivity in dayInactivities) {
+        if (nextAvailable.isBefore(inactivity.end) &&
+            inactivity.start.isBefore(dayEnd)) {
+          if (nextAvailable.isBefore(inactivity.start)) {
+            final availableBeforeInactivity =
+                inactivity.start.difference(nextAvailable);
+
+            if (remaining <= availableBeforeInactivity) {
+              return nextAvailable.add(remaining);
+            } else {
+              remaining -= availableBeforeInactivity;
+              nextAvailable = inactivity.end;
+            }
+          } else {
+            if (nextAvailable.isBefore(inactivity.end)) {
+              nextAvailable = inactivity.end;
+            }
+          }
+        }
+      }
+
+      final availableToday = dayEnd.difference(nextAvailable);
+
+      if (availableToday > Duration.zero && remaining <= availableToday) {
+        return nextAvailable.add(remaining);
+      } else {
+        if (availableToday > Duration.zero) {
+          remaining -= availableToday;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return current;
   }
 
   void printOutput() {

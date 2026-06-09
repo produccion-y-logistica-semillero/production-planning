@@ -25,6 +25,12 @@ class OrderBloc extends Cubit<OrdersState> {
         for (int i = 0; i < orders.length; i++) {
           print("DEBUG: Orden $i - ID: ${orders[i].orderId}, Fecha: ${orders[i].regDate}");
         }
+        // Sort orders by regDate descending, and then by orderId descending so duplicates stay together
+        orders.sort((a, b) {
+          int dateCompare = b.regDate.compareTo(a.regDate);
+          if (dateCompare != 0) return dateCompare;
+          return (b.orderId ?? 0).compareTo(a.orderId ?? 0);
+        });
         emit(OrdersLoadedState(orders));
         print("DEBUG: Estado cambiado a OrdersLoadedState");
 
@@ -52,6 +58,23 @@ class OrderBloc extends Cubit<OrdersState> {
         print("DEBUG: Lista actualizada: ${updatedOrders.length} órdenes");
 
         emit(OrdersLoadedState(updatedOrders));
+      },
+    );
+  }
+
+  Future<void> duplicateOrder(int orderId) async {
+    print("DEBUG: duplicateOrder($orderId) iniciado");
+    emit(OrdersLoadingState());
+    
+    final response = await service.duplicateOrder(orderId);
+    response.fold(
+      (failure) {
+        print("DEBUG: Error al duplicar orden: ${failure.toString()}");
+        emit(OrdersErrorState("Error al duplicar orden"));
+      },
+      (res) {
+        print("DEBUG: Orden duplicada exitosamente");
+        fetchOrders();
       },
     );
   }

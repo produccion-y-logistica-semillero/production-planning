@@ -50,8 +50,11 @@ class JobModel {
       });
     }
 
+    // Note: JobEntity.taskMachineTimes expects MachineTimes objects; conversion
+    // to MachineTimes is handled later in repository implementation where
+    // sequence/tasks are available.
     return JobEntity(jobId, null, amount, jobName, dueDate, priority, availableDate,
-        preemptionMatrix: preemptionMatrix, taskMachineTimes: taskTimes, machineFinalStates: machineFinalStates);
+        preemptionMatrix: preemptionMatrix, taskMachineTimes: null);
 
   }
 }

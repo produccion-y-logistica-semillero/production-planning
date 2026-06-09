@@ -1,8 +1,4 @@
 // lib/presentation/2_orders/pages/new_order_page.dart
-//
-// Fix (this version): DropdownMenuItem child used Expanded inside an
-// unbounded Row, which Flutter cannot lay out and throws an infinite
-// layout-error loop.  Replaced with mainAxisSize.min + plain Text.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,7 +8,9 @@ import 'package:production_planning/presentation/2_orders/widgets/high_order/add
 import 'package:production_planning/shared/functions/functions.dart';
 
 class NewOrderPage extends StatelessWidget {
-  const NewOrderPage({super.key});
+  final int? editOrderId;
+
+  const NewOrderPage({super.key, this.editOrderId});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +18,9 @@ class NewOrderPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crear Nuevo Programa de Produccion'),
+        title: Text(editOrderId != null
+            ? 'Editar Programa de Producción'
+            : 'Crear Nuevo Programa de Produccion'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
@@ -64,7 +64,11 @@ class NewOrderPage extends StatelessWidget {
               final bloc = BlocProvider.of<NewOrderBloc>(context);
 
               if (state is NewOrdersInitialState) {
-                bloc.retrieveSequences();
+                if (editOrderId != null) {
+                  bloc.loadOrderForEdit(editOrderId!);
+                } else {
+                  bloc.retrieveSequences();
+                }
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -74,6 +78,7 @@ class NewOrderPage extends StatelessWidget {
               return Center(
                 child: Column(
                   children: [
+                    // ── Info button ────────────────────────────────────────
                     Row(
                       children: [
                         IconButton(
@@ -95,11 +100,15 @@ class NewOrderPage extends StatelessWidget {
                         ),
                       ],
                     ),
+
+                    // ── Job list ───────────────────────────────────────────
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(children: jobWidgets),
                       ),
                     ),
+
+                    // ── Add Job ────────────────────────────────────────────
                     ElevatedButton(
                       onPressed: () => bloc.addJob(),
                       style: ElevatedButton.styleFrom(
@@ -113,6 +122,10 @@ class NewOrderPage extends StatelessWidget {
                       child: const Text('Agregar Job'),
                     ),
                     const SizedBox(height: 16),
+
+                    // ── Setup matrix ───────────────────────────────────────
+                    // Kept from ramagiosebas (present) + wired to the full
+                    // implementation that comes from main.
                     ElevatedButton(
                       onPressed: () =>
                           _showMatrixDialog(context, state, colorScheme),
@@ -126,12 +139,20 @@ class NewOrderPage extends StatelessWidget {
                           'Definir matriz de tiempos de alistamiento'),
                     ),
                     const SizedBox(height: 16),
+
+                    // ── Save / Update ──────────────────────────────────────
+                    // Validation logic from main; editOrderId support from
+                    // ramagiosebas.
                     ElevatedButton(
                       onPressed: () {
                         if (!_validateForm(state)) {
                           _showValidationDialog(context, colorScheme);
                         } else {
-                          bloc.saveOrder();
+                          if (editOrderId != null) {
+                            bloc.updateOrder(editOrderId!);
+                          } else {
+                            bloc.saveOrder();
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -142,7 +163,9 @@ class NewOrderPage extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
-                      child: const Text('Crear programa de produccion'),
+                      child: Text(editOrderId != null
+                          ? 'Guardar Cambios'
+                          : 'Crear programa de produccion'),
                     ),
                   ],
                 ),
@@ -155,7 +178,8 @@ class NewOrderPage extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // Matrix dialog
+  // Matrix dialog — full implementation from main, replaces the placeholder
+  // that existed in ramagiosebas.
   // ---------------------------------------------------------------------------
 
   void _showMatrixDialog(
@@ -184,7 +208,9 @@ class NewOrderPage extends StatelessWidget {
         : (stateSet.toList()..sort());
 
     final bloc = BlocProvider.of<NewOrderBloc>(context);
-    final existingMatrices = Map<String, Map<String, Map<String, int>>>.from(state.setupTimeMatrix ?? {});
+    final existingMatrices =
+        Map<String, Map<String, Map<String, int>>>.from(
+            state.setupTimeMatrix ?? {});
 
     String selectedMachine = machineNames.first;
     final controllers = <String, Map<String, TextEditingController>>{};
@@ -195,10 +221,12 @@ class NewOrderPage extends StatelessWidget {
         controllers[r] = {};
         for (final c in jobStates) {
           final val = matrix[r]?[c] ?? 0;
-          controllers[r]![c] = TextEditingController(text: val == 0 ? '' : val.toString());
+          controllers[r]![c] =
+              TextEditingController(text: val == 0 ? '' : val.toString());
         }
       }
     }
+
     buildControllers(selectedMachine);
 
     showDialog(
@@ -234,9 +262,11 @@ class NewOrderPage extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Machine selector
                     DropdownButtonFormField<String>(
                       value: selectedMachine,
-                      decoration: const InputDecoration(labelText: 'Máquina'),
+                      decoration:
+                          const InputDecoration(labelText: 'Máquina'),
                       isExpanded: true,
                       items: machineNames.map((m) {
                         final isSaved = existingMatrices.containsKey(m);
@@ -248,7 +278,8 @@ class NewOrderPage extends StatelessWidget {
                               Text(m),
                               if (isSaved) ...[
                                 const SizedBox(width: 6),
-                                const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                                const Icon(Icons.check_circle,
+                                    color: Colors.green, size: 16),
                               ],
                             ],
                           ),
@@ -259,11 +290,20 @@ class NewOrderPage extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 16),
+
+                    // Helper text
                     Text(
-                      'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                      'Tiempo en minutos para cambiar del estado (Fila) al '
+                      'estado (Columna). La diagonal (mismo estado '
+                      'fila/columna) también puede tener un valor propio.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 16),
+
+                    // Matrix table
                     Expanded(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -271,25 +311,38 @@ class NewOrderPage extends StatelessWidget {
                           scrollDirection: Axis.vertical,
                           child: DataTable(
                             columns: [
-                              const DataColumn(label: SizedBox(width: 24, child: Text(''))),
+                              const DataColumn(
+                                  label: SizedBox(
+                                      width: 24, child: Text(''))),
                               ...jobStates.map((label) => DataColumn(
-                                label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              )),
+                                    label: Text(label,
+                                        style: const TextStyle(
+                                            fontWeight:
+                                                FontWeight.bold)),
+                                  )),
                             ],
-                            rows: jobStates.map((r) => DataRow(
-                              cells: [
-                                DataCell(Text(r, style: const TextStyle(fontWeight: FontWeight.bold))),
-                                ...jobStates.map((c) {
-                                  return DataCell(
-                                    TextField(
-                                      controller: controllers[r]![c],
-                                      keyboardType: TextInputType.number,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  );
-                                }),
-                              ],
-                            )).toList(),
+                            rows: jobStates
+                                .map((r) => DataRow(
+                                      cells: [
+                                        DataCell(Text(r,
+                                            style: const TextStyle(
+                                                fontWeight:
+                                                    FontWeight.bold))),
+                                        ...jobStates.map((c) {
+                                          return DataCell(
+                                            TextField(
+                                              controller:
+                                                  controllers[r]![c],
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              textAlign:
+                                                  TextAlign.center,
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ))
+                                .toList(),
                           ),
                         ),
                       ),
@@ -307,14 +360,16 @@ class NewOrderPage extends StatelessWidget {
                     flushToModel();
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Matriz de alistamiento guardada para $selectedMachine')),
+                      SnackBar(
+                          content: Text(
+                              'Matriz de alistamiento guardada para $selectedMachine')),
                     );
                   },
                   child: const Text("Guardar"),
                 ),
               ],
             );
-          }
+          },
         );
       },
     );
@@ -338,7 +393,8 @@ class NewOrderPage extends StatelessWidget {
     return false;
   }
 
-  void _showValidationDialog(BuildContext context, ColorScheme colorScheme) {
+  void _showValidationDialog(
+      BuildContext context, ColorScheme colorScheme) {
     showDialog(
       context: context,
       builder: (subcontext) => AlertDialog(

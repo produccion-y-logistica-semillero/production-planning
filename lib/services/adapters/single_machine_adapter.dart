@@ -114,15 +114,13 @@ class SingleMachineAdapter {
 
     // ── 6. Run algorithm ──────────────────────────────────────────────────
     final output = SingleMachine(
-      machineEntity.id!,
-      order.regDate,
-      Tuple2(START_SCHEDULE, END_SCHEDULE),
-      inputJobs,
-      rule.toUpperCase(),
-      stateSetupMatrix: stateSetupMatrix,
-    ).output;
+            0, order.regDate, Tuple2(START_SCHEDULE, END_SCHEDULE), input, rule,
+            machineInactivities: machineEntity.scheduledInactivities,
+            continueCapacity: machineEntity.continueCapacity,
+            restTime: Duration(minutes: (60 * machineEntity.restPercentage / 100).round()),
+    )
+        .output;
 
-    // ── 7. Transform output into PlanningMachineEntity ────────────────────
     final Map<int, int> jobCounter = {};
     final tasks = output.map((out) {
       final jobSequence = order.orderJobs!
@@ -132,8 +130,9 @@ class SingleMachineAdapter {
       final current = (jobCounter[out.jobId] ?? 0) + 1;
       jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
-
+      final displayName = current == 1
+          ? jobName
+          : '$jobName (${current - 1})';
       return PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
@@ -148,13 +147,14 @@ class SingleMachineAdapter {
       );
     }).toList();
 
+    //since its single machine we know that there's only 1 planning machine
     final machinesResult = [
       PlanningMachineEntity(
         machineEntity.id!,
         machineTypeName,
         tasks,
         scheduledInactivities: machineEntity.scheduledInactivities,
-      ),
+      )
     ];
 
     // ── 8. Metrics ────────────────────────────────────────────────────────

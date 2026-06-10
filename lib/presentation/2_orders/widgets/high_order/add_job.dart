@@ -1,27 +1,67 @@
-// lib/presentation/2_orders/widgets/high_order/add_job.dart
-//
-// Changes from previous version:
-//   • _showStationTimeDialog no longer shows the "Tiempo de Alistamiento" field.
-//     That changeover cost now comes exclusively from the setup-time matrix.
-//   • The 'preparation' key is still stored (as 0) so downstream code that
-//     reads _explicitTaskMachineMinutes['preparation'] doesn't break.
-//   • getMachineNames() and getMachineFinalStates() public getters added
-//     (were already in the version provided, kept as-is).
-//   • Everything else is identical to the version provided by the user.
-
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
-import 'package:production_planning/entities/machine_entity.dart';
-import 'package:production_planning/entities/machine_standard_times.dart';
-import 'package:production_planning/entities/sequence_entity.dart';
-import 'package:production_planning/entities/task_entity.dart';
-import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
+// Helper widget for numeric input with max value validation
+class _MaxValueFormatter extends TextInputFormatter {
+  final int max;
+  _MaxValueFormatter(this.max);
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    final val = int.tryParse(newValue.text);
+    if (val != null && val > max) return oldValue;
+    return newValue;
+  }
+}
 
-// ignore: must_be_immutable
+class _HhMmSsTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.isEmpty) return newValue;
+
+    String result = '';
+    for (int i = 0; i < text.length && i < 6; i++) {
+      if (i == 2 || i == 4) result += ':';
+      result += text[i];
+    }
+
+    return TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(offset: result.length),
+    );
+  }
+}
+
+/// Helper to create numeric input fields for HH, MM, SS with max values
+Widget _bottomSheetSegment(
+    TextEditingController controller, String label, int max) {
+  return Expanded(
+    child: TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        counterText: '',
+      ),
+      keyboardType: TextInputType.number,
+      maxLength: 2,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(2),
+        _MaxValueFormatter(max),
+      ],
+      textAlign: TextAlign.center,
+    ),
+  );
+}
+
+/// Main widget for adding a new order job
 class AddJobWidget extends StatefulWidget {
   DateTime? availableDate;
   DateTime? dueDate;
@@ -33,7 +73,6 @@ class AddJobWidget extends StatefulWidget {
   final List<dartz.Tuple2<int, String>> sequences;
   final int index;
   int? selectedSequence;
-
   final GlobalKey<AddJobState> stateKey;
 
   AddJobWidget._({
@@ -104,7 +143,6 @@ class AddJobState extends State<AddJobWidget> {
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
   final Map<int, int> _preemptionMatrix =
       {}; // Map<machineId, canPreempt (0 o 1)>
-  
   final Map<int, String> _machineFinalStates = {}; // Map<machineTypeId, letra>
   final List<String> _letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
@@ -240,9 +278,9 @@ class AddJobState extends State<AddJobWidget> {
         final updated = current.copyWith(processing: processingTime);
         initialTimes[task.machineTypeId] = updated;
       }
-      initialTimes.forEach((key, value) {
-        bloc.updateStandardTimesForType(key, value);
-      });
+      for (final entry in initialTimes.entries) {
+        bloc.updateStandardTimesForType(entry.key, entry.value);
+      }
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
@@ -404,8 +442,7 @@ class AddJobState extends State<AddJobWidget> {
                 const Expanded(flex: 2, child: SizedBox()),
                 Expanded(
                   flex: 3,
-                  child: selectDate(
-                      'Seleccione fecha de entrega', dueDate, dueHour),
+                  child: selectDate('Seleccione fecha de entrega', dueDate, dueHour),
                 ),
               ],
             ),
@@ -447,7 +484,7 @@ class AddJobState extends State<AddJobWidget> {
     );
   }
 
-  // ── date/time row widgets (unchanged) ─────────────────────────────────────
+  // ── date/time row widgets ─────────────────────────────────────────────────
 
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -535,7 +572,7 @@ class AddJobState extends State<AddJobWidget> {
     final selectedMachine = _selectedMachines[machineTypeId];
     final defaultLabel = _stationLabel(task);
 
-        return Padding(
+    return Padding(
       padding: const EdgeInsets.only(top: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -628,8 +665,8 @@ class AddJobState extends State<AddJobWidget> {
                     final machine = options[index];
                     return ListTile(
                       title: Text(machine.name),
-                      subtitle: Text('Porcentaje: '
-                          '${machine.processingPercentage.toStringAsFixed(0)}%'),
+                      subtitle: Text(
+                          'Porcentaje: ${machine.processingPercentage.toStringAsFixed(0)}%'),
                       onTap: () => Navigator.of(dialogContext).pop(machine),
                     );
                   },
@@ -671,7 +708,7 @@ class AddJobState extends State<AddJobWidget> {
     });
   }
 
-  // ── station time dialog — SETUP TIME FIELD REMOVED ────────────────────────
+  // ── station time dialog — SETUP TIME FIELD REMOVED ───────────────────────
   //
   // The "Tiempo de Alistamiento" TextField has been removed from this dialog.
   // Changeover costs are now entered exclusively in the setup-time matrix
@@ -691,8 +728,7 @@ class AddJobState extends State<AddJobWidget> {
       existingTimes = existingForTask[existingMachineId];
     }
 
-    int? selectedMachineId =
-        existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
+    int? selectedMachineId = existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
 
     bool maintenancePreempt = selectedMachineId != null &&
         (_preemptionMatrix[selectedMachineId] ?? 1) == 1;
@@ -720,128 +756,126 @@ class AddJobState extends State<AddJobWidget> {
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return StatefulBuilder(builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text('Tiempos para ${task.machineName ?? 'Estación'}'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (machines.isNotEmpty)
-                    DropdownButton<int>(
-                      value: selectedMachineId,
-                      isExpanded: true,
-                      items: machines
-                          .map((m) => DropdownMenuItem<int>(
-                              value: m.id, child: Text(m.name)))
-                          .toList(),
-                      onChanged: (v) {
-                        setDialogState(() {
-                          selectedMachineId = v;
-                          maintenancePreempt = (selectedMachineId != null &&
-                                  (_preemptionMatrix[selectedMachineId] ?? 1) == 1);
-                          restPreempt = maintenancePreempt;
-                          endOfDayPreempt = maintenancePreempt;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-const Text('Tiempo de Procesamiento:',
-    style: TextStyle(fontWeight: FontWeight.bold)),
-const SizedBox(height: 4),
-GestureDetector(
-  onTap: () async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        final hhCtrl = TextEditingController(
-          text: processingController.text.isNotEmpty
-              ? processingController.text.split(':')[0]
-              : '00',
-        );
-        final mmCtrl = TextEditingController(
-          text: processingController.text.isNotEmpty
-              ? processingController.text.split(':')[1]
-              : '00',
-        );
-        final ssCtrl = TextEditingController(
-          text: processingController.text.isNotEmpty
-              ? processingController.text.split(':')[2]
-              : '00',
-        );
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            top: 24, left: 24, right: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Tiempo de Procesamiento',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
-                  ),
-                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
-                  ),
-                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
-                ],
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    final hh = hhCtrl.text.padLeft(2, '0');
-                    final mm = mmCtrl.text.padLeft(2, '0');
-                    final ss = ssCtrl.text.padLeft(2, '0');
-                    Navigator.of(ctx).pop('$hh:$mm:$ss');
-                  },
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+        return AlertDialog(
+          title: Text('Tiempos para ${task.machineName ?? 'Estación'}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (machines.isNotEmpty)
+                  DropdownButton<int>(
+                    value: selectedMachineId,
+                    isExpanded: true,
+                    items: machines
+                        .map((m) => DropdownMenuItem<int>(
+                            value: m.id, child: Text(m.name)))
+                        .toList(),
+                    onChanged: (v) {
+                      setState(() {
+                        selectedMachineId = v;
+                        maintenancePreempt = (selectedMachineId != null &&
+                                            (_preemptionMatrix[selectedMachineId] ?? 1) == 1);
+                        restPreempt = maintenancePreempt;
+                        endOfDayPreempt = maintenancePreempt;
+                      });
+                    },
                   ),
                 const SizedBox(height: 16),
-
-                // ── processing time ───────────────────────────────────────
                 const Text('Tiempo de Procesamiento:',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                TextField(
-                  controller: processingController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
-                  inputFormatters: [_HhMmSsTextInputFormatter()],
+                GestureDetector(
+                  onTap: () async {
+                    final timeResult = await showModalBottomSheet<String>(
+                      context: context,
+                      isScrollControlled: true,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                      ),
+                      builder: (ctx) {
+                        final hhCtrl = TextEditingController(
+                          text: processingController.text.isNotEmpty
+                              ? processingController.text.split(':')[0]
+                              : '00',
+                        );
+                        final mmCtrl = TextEditingController(
+                          text: processingController.text.isNotEmpty
+                              ? processingController.text.split(':')[1]
+                              : '00',
+                        );
+                        final ssCtrl = TextEditingController(
+                          text: processingController.text.isNotEmpty
+                              ? processingController.text.split(':')[2]
+                              : '00',
+                        );
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                            top: 24, left: 24, right: 24,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40, height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Tiempo de Procesamiento',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 24),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 12),
+                                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                                  ),
+                                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 12),
+                                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
+                                  ),
+                                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
+                                ],
+                              ),
+                              const SizedBox(height: 28),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton(
+                                  onPressed: () {
+                                    final hh = hhCtrl.text.padLeft(2, '0');
+                                    final mm = mmCtrl.text.padLeft(2, '0');
+                                    final ss = ssCtrl.text.padLeft(2, '0');
+                                    Navigator.of(ctx).pop('$hh:$mm:$ss');
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text('Confirmar'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                    if (timeResult != null) {
+                      processingController.text = timeResult;
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
-
                 // ── rest time ─────────────────────────────────────────────
                 const Text('Tiempo de Descanso:',
                     style: TextStyle(fontWeight: FontWeight.bold)),
@@ -853,6 +887,7 @@ GestureDetector(
                       hintText: 'HH:MM:SS', border: OutlineInputBorder()),
                   inputFormatters: [_HhMmSsTextInputFormatter()],
                 ),
+                const SizedBox(height: 16),
 
                 // ── info note ─────────────────────────────────────────────
                 const SizedBox(height: 12),
@@ -891,200 +926,22 @@ GestureDetector(
               child: const Text('Aceptar'),
             ),
           ],
-        ),
-      ),
-      builder: (ctx) {
-        final hhCtrl = TextEditingController(
-          text: restController.text.isNotEmpty
-              ? restController.text.split(':')[0]
-              : '00',
-        );
-        final mmCtrl = TextEditingController(
-          text: restController.text.isNotEmpty
-              ? restController.text.split(':')[1]
-              : '00',
-        );
-        final ssCtrl = TextEditingController(
-          text: restController.text.isNotEmpty
-              ? restController.text.split(':')[2]
-              : '00',
-        );
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            top: 24, left: 24, right: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Tiempo de Descanso',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _bottomSheetSegment(hhCtrl, 'Horas', 99),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
-                  ),
-                  _bottomSheetSegment(mmCtrl, 'Minutos', 59),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(':', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300)),
-                  ),
-                  _bottomSheetSegment(ssCtrl, 'Segundos', 59),
-                ],
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    final hh = hhCtrl.text.padLeft(2, '0');
-                    final mm = mmCtrl.text.padLeft(2, '0');
-                    final ss = ssCtrl.text.padLeft(2, '0');
-                    Navigator.of(ctx).pop('$hh:$mm:$ss');
-                  },
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Confirmar'),
-                ),
-              ),
-            ],
-          ),
         );
       },
     );
-    if (result != null) {
-      setDialogState(() {
-        restController.text = result;
-      });
-    }
-  },
-  child: Container(
-    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-    decoration: BoxDecoration(
-      border: Border.all(color: Theme.of(context).colorScheme.outline),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Row(
-      children: [
-        Icon(Icons.timer_outlined, size: 18,
-            color: Theme.of(context).colorScheme.onSurfaceVariant),
-        const SizedBox(width: 8),
-        Text(
-          restController.text.isEmpty
-              ? '00:00:00'
-              : restController.text,
-          style: TextStyle(
-            fontSize: 14,
-            color: restController.text.isEmpty
-                ? Theme.of(context).colorScheme.onSurfaceVariant
-                : Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-      ],
-    ),
-  ),
-),  
-*/       
-                    const SizedBox(height: 16),
-                    const Text('Permite Interrupciones (Preemption):',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    if (selectedMachineId != null)
-                      Column(
-                        children: [
-                          _buildPreemptionOptionRow(
-                            '¿Se puede interrumpir para mantenimiento?',
-                            maintenancePreempt,
-                            (value) {
-                              setDialogState(() {
-                                maintenancePreempt = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          _buildPreemptionOptionRow(
-                            '¿Se puede interrumpir para descanso?',
-                            restPreempt,
-                            (value) {
-                              setDialogState(() {
-                                restPreempt = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          _buildPreemptionOptionRow(
-                            '¿Se puede interrumpir por la finalización de la jornada de trabajo?',
-                            endOfDayPreempt,
-                            (value) {
-                              setDialogState(() {
-                                endOfDayPreempt = value;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancelar')),
-              ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Aceptar')),
-            ],
-          );
-        });
-      },
-    );
 
-    if (result == true) {
-      final processingMinutes = _parseTimeToMinutes(processingController.text);
-      final restMinutes = _parseTimeToMinutes(restController.text);
-
+    if (result == true && selectedMachineId != null) {
       setState(() {
-        if (selectedMachineId != null) {
-          _preemptionMatrix[selectedMachineId!] =
-              (maintenancePreempt || restPreempt || endOfDayPreempt)
-                  ? 1
-                  : 0;
-          _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-          _explicitTaskMachineMinutes[task.id!]!.clear();
-          _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
-            'processing': processingMinutes,
-            'preparation': 0, // comes from matrix — always 0 here
-            'rest': restMinutes,
-          };
-        }
-        _stationTimes[machineTypeId] = MachineStandardTimes(
-          processing: Duration(minutes: processingMinutes),
-          preparation: Duration.zero, // from matrix
-          rest: Duration(minutes: restMinutes),
-        );
+        final processingMinutes = _parseTimeToMinutes(processingController.text);
+        final restMinutes = _parseTimeToMinutes(restController.text);
+
+        _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+        _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
+          'processing': processingMinutes,
+          'preparation': 0,
+          'rest': restMinutes,
+        };
       });
-      bloc.updateStandardTimesForType(
-          machineTypeId, _stationTimes[machineTypeId]!);
-      _syncStandardTimesToMachines(
-          machineTypeId, _stationTimes[machineTypeId]!);
     }
   }
 
@@ -1139,8 +996,7 @@ GestureDetector(
         child: Row(
           children: [
             Expanded(
-                child:
-                    Text(machine.name, style: const TextStyle(fontSize: 14))),
+                child: Text(machine.name, style: const TextStyle(fontSize: 14))),
             ToggleButtons(
               isSelected: [currentValue == 0, currentValue == 1],
               onPressed: (index) =>
@@ -1160,25 +1016,5 @@ GestureDetector(
         ),
       );
     }).toList();
-  }
-}
-
-/// Formatter: digits only → auto-inserts colons as HH:MM:SS
-class _HhMmSsTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 6) digits = digits.substring(0, 6);
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      buffer.write(digits[i]);
-      if (i == 1 || i == 3) buffer.write(':');
-    }
-    final text = buffer.toString();
-    return TextEditingValue(
-        text: text, selection: TextSelection.collapsed(offset: text.length));
   }
 }

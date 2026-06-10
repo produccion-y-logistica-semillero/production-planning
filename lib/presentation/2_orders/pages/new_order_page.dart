@@ -72,6 +72,34 @@ class NewOrderPage extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
 
+              if (state is NewOrdersFailureState) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: colorScheme.error),
+                      const SizedBox(height: 16),
+                      Text('Error al cargar los datos',
+                          style: TextStyle(color: colorScheme.error, fontSize: 18)),
+                      const SizedBox(height: 8),
+                      Text('Verifique la conexión a la base de datos',
+                          style: TextStyle(color: colorScheme.onSurface)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (editOrderId != null) {
+                            bloc.loadOrderForEdit(editOrderId!);
+                          } else {
+                            bloc.retrieveSequences();
+                          }
+                        },
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
               final List<AddJobWidget> jobWidgets =
                   state is NewOrdersState ? state.jobs : [];
 

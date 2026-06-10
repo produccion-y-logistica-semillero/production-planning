@@ -29,16 +29,26 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   ) : super(NewOrdersInitialState());
 
   Future<void> retrieveSequences() async {
-    final response = await seqService.getSequences();
-    response.fold(
-      (failure) => emit(NewOrdersFailureState()),
-      (sequences) {
-        emit(NewOrdersState(
-          jobs: [],
-          sequences: sequences.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
-        ));
-      },
-    );
+    try {
+      final response = await seqService.getSequences();
+      response.fold(
+        (failure) {
+          print('NewOrderBloc: retrieveSequences failed - $failure');
+          emit(NewOrdersFailureState());
+        },
+        (sequences) {
+          print('NewOrderBloc: retrieved ${sequences.length} sequences');
+          emit(NewOrdersState(
+            jobs: [],
+            sequences: sequences.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
+          ));
+        },
+      );
+    } catch (e, stack) {
+      print('NewOrderBloc.retrieveSequences error: $e');
+      print('Stack trace: $stack');
+      emit(NewOrdersFailureState());
+    }
   }
 
   int _getNextJobId(List<AddJobWidget> jobs) {
@@ -347,39 +357,52 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   }
 
   Future<void> loadOrderForEdit(int orderId) async {
-    final seqResponse = await seqService.getSequences();
-    List<Tuple2<int, String>> sequences = [];
-    seqResponse.fold(
-      (failure) => null,
-      (seqs) => sequences = seqs.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
-    );
+    try {
+      final seqResponse = await seqService.getSequences();
+      List<Tuple2<int, String>> sequences = [];
+      seqResponse.fold(
+        (failure) {
+          print('NewOrderBloc.loadOrderForEdit: failed to load sequences - $failure');
+          return null;
+        },
+        (seqs) => sequences = seqs.map((s) => Tuple2<int, String>(s.id!, s.name)).toList(),
+      );
 
-    final response = await orderService.orderRepo.getFullOrder(orderId);
-    response.fold(
-      (failure) => emit(NewOrdersFailureState()),
-      (order) {
-        List<AddJobWidget> jobs = [];
-        if (order.orderJobs != null) {
-          int index = 1;
-          for (var job in order.orderJobs!) {
-            jobs.add(AddJobWidget(
-              availableDate: job.availableDate,
-              dueDate: job.dueDate,
-              availableHour: TimeOfDay.fromDateTime(job.availableDate ?? DateTime.now()),
-              dueHour: TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
-              priorityController: TextEditingController(text: job.priority.toString()),
-              quantityController: TextEditingController(text: job.amount.toString()),
-              idController: TextEditingController(text: job.jobId?.toString() ?? ''),
-              index: index,
-              sequences: sequences,
-              selectedSequence: job.sequence?.id,
-            ));
-            index++;
+      final response = await orderService.orderRepo.getFullOrder(orderId);
+      response.fold(
+        (failure) {
+          print('NewOrderBloc.loadOrderForEdit: failed to load order - $failure');
+          emit(NewOrdersFailureState());
+        },
+        (order) {
+          print('NewOrderBloc: loaded order with ${order.orderJobs?.length ?? 0} jobs');
+          List<AddJobWidget> jobs = [];
+          if (order.orderJobs != null) {
+            int index = 1;
+            for (var job in order.orderJobs!) {
+              jobs.add(AddJobWidget(
+                availableDate: job.availableDate,
+                dueDate: job.dueDate,
+                availableHour: TimeOfDay.fromDateTime(job.availableDate ?? DateTime.now()),
+                dueHour: TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
+                priorityController: TextEditingController(text: job.priority.toString()),
+                quantityController: TextEditingController(text: job.amount.toString()),
+                idController: TextEditingController(text: job.jobId?.toString() ?? ''),
+                index: index,
+                sequences: sequences,
+                selectedSequence: job.sequence?.id,
+              ));
+              index++;
+            }
           }
-        }
-        emit(NewOrdersState(jobs, sequences));
-      },
-    );
+          emit(NewOrdersState(jobs, sequences));
+        },
+      );
+    } catch (e, stack) {
+      print('NewOrderBloc.loadOrderForEdit error: $e');
+      print('Stack trace: $stack');
+      emit(NewOrdersFailureState());
+    }
   }
 
   void newOrder() {

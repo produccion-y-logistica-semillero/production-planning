@@ -1,14 +1,3 @@
-// lib/services/adapters/flow_shop_Adapter.dart
-//
-// Changes from merged version:
-//   • Accepts SetupTimeService and uses OrdersService helper to load the
-//     order WITH the in-memory setup matrices attached.
-//   • buildMachineStateSetupMatrix / buildJobMachineStates are imported from
-//     shared/functions/functions.dart (where they now live).
-//   • _buildDefaultChangeoverMatrix now produces ZERO durations so it no
-//     longer corrupts the Gantt when no sequence-based setup times are stored
-//     in the DB.  The state-based matrix takes precedence via _getSetupDuration.
-
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';

@@ -1574,8 +1574,6 @@ class SQLLiteDatabaseProvider {
       },
     );
 
-    // Tables created outside the versioned onCreate/onUpgrade so they are
-    // always guaranteed to exist on every open() call.
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS job_machine_states (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1586,40 +1584,6 @@ class SQLLiteDatabaseProvider {
       );
     ''');
 
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS orders (
-          order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-          reg_date DATE NOT NULL
-      );
-    ''');
-
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS jobs (
-          job_id INTEGER PRIMARY KEY AUTOINCREMENT,
-          sequence_id INTEGER NOT NULL,
-          order_id INTEGER NOT NULL,
-          amount INTEGER NOT NULL,
-          job_name VARCHAR(100),
-          due_date DATE NOT NULL,
-          available_date DATE NOT NULL,
-          priority INTEGER NOT NULL,
-          FOREIGN KEY (sequence_id) REFERENCES sequences(sequence_id),
-          FOREIGN KEY (order_id) REFERENCES orders(order_id)
-      );
-    ''');
-
-    await _database!.execute('''
-      CREATE TABLE IF NOT EXISTS job_preemption (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          job_id INTEGER NOT NULL,
-          machine_id INTEGER NOT NULL,
-          can_preempt INTEGER NOT NULL CHECK (can_preempt IN (0, 1)),
-          FOREIGN KEY (job_id) REFERENCES jobs(job_id),
-          FOREIGN KEY (machine_id) REFERENCES MACHINES(machine_id),
-          UNIQUE(job_id, machine_id)
-      );
-    ''');
-    
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS order_setup_matrix (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1632,41 +1596,7 @@ class SQLLiteDatabaseProvider {
       );
     ''');
 
-    await _ensureOrderSetupMatrixSchema(_database!);
-
     return _database!;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  /// Adds any columns that may be missing from [order_setup_matrix] due to
-  /// older schema versions being upgraded incrementally.
-  static Future<void> _ensureOrderSetupMatrixSchema(Database db) async {
-    final columns = await _getTableColumns(db, 'order_setup_matrix');
-    if (columns.isEmpty) return;
-
-    Future<void> addIfMissing(String col, String def) async {
-      if (!columns.contains(col)) {
-        await db.execute(
-          'ALTER TABLE order_setup_matrix ADD COLUMN $col $def;',
-        );
-      }
-    }
-
-    await addIfMissing('machine_name', 'TEXT NOT NULL DEFAULT ""');
-    await addIfMissing('from_state', 'TEXT NOT NULL DEFAULT ""');
-    await addIfMissing('to_state', 'TEXT NOT NULL DEFAULT ""');
-    await addIfMissing('duration_minutes', 'INTEGER NOT NULL DEFAULT 0');
-  }
-
-  static Future<List<String>> _getTableColumns(
-    Database db,
-    String table,
-  ) async {
-    final info = await db.rawQuery('PRAGMA table_info($table);');
-    return info.map((row) => row['name'] as String).toList();
   }
 
   static Future<void> closeDatabaseConnection() async {

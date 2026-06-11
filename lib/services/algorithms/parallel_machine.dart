@@ -489,8 +489,8 @@ class ParallelMachine {
   void geneticsRule() {
     print("EJECUTANDO ALGORITMO GENÉTICO EN PARALLEL MACHINES");
 
-    const int populationSize = 50;
-    const int generations = 100;
+    const int populationSize = 10;
+    const int generations = 25;
     const double mutationRate = 0.1;
 
     List<List<ParallelInput>> population = _initializePopulation(populationSize);

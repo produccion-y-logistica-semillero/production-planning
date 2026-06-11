@@ -426,54 +426,69 @@ class ParallelMachine {
   // Ajustar el tiempo de finalización considerando inactividades programadas
   DateTime _adjustEndTimeWithInactivities(
       int machineId, DateTime start, DateTime end) {
+    // Si no hay inactividades configuradas, devolver el end time directamente
+    if (machineInactivities.isEmpty || (machineInactivities[machineId]?.isEmpty ?? true)) {
+      return end;
+    }
+
     DateTime current = start;
     Duration remaining = end.difference(start);
+    int maxIterations = 365; // Máximo de días a iterar
+    int iterations = 0;
 
-    while (remaining > Duration.zero) {
+    while (remaining > Duration.zero && iterations < maxIterations) {
+      iterations++;
       current = _adjustForWorkingSchedule(current);
 
       final dayInactivities = _getInactivitiesForDay(machineId, current);
+      dayInactivities.sort((a, b) => a.startDate.compareTo(b.startDate));
 
+      final dayStart = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value1.hour, workingSchedule.value1.minute,
+      );
       final dayEnd = DateTime(
         current.year, current.month, current.day,
         workingSchedule.value2.hour, workingSchedule.value2.minute,
       );
 
-      DateTime nextAvailable = current;
+      DateTime nextAvailable = current.isBefore(dayStart) ? dayStart : current;
+
+      // Si estamos después del final del día, ir al siguiente
+      if (nextAvailable.isAfter(dayEnd) || nextAvailable.isAtSameMomentAs(dayEnd)) {
+        current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
+        continue;
+      }
+
+      // Procesar inactividades ordenadas
       for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          if (nextAvailable.isBefore(inactivity.start)) {
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              return nextAvailable.add(remaining);
-            } else {
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
+        if (nextAvailable.isBefore(inactivity.startDate)) {
+          final availableBeforeInactivity = inactivity.startDate.difference(nextAvailable);
+          if (remaining <= availableBeforeInactivity) {
+            return nextAvailable.add(remaining);
           }
+          remaining -= availableBeforeInactivity;
+          nextAvailable = inactivity.endDate;
+        } else if (nextAvailable.isBefore(inactivity.endDate)) {
+          nextAvailable = inactivity.endDate;
         }
       }
 
+      // Tiempo disponible hoy después de inactividades
       final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
+      if (availableToday > Duration.zero) {
+        if (remaining <= availableToday) {
+          return nextAvailable.add(remaining);
         }
-        current = current.add(const Duration(days: 1));
+        remaining -= availableToday;
       }
+
+      // Ir al siguiente día
+      current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
     }
 
-    return current;
+    // Si no hay tiempo suficiente después de iterar, devolver end time
+    return end;
   }
 
   void printOutput() {
@@ -489,8 +504,8 @@ class ParallelMachine {
   void geneticsRule() {
     print("EJECUTANDO ALGORITMO GENÉTICO EN PARALLEL MACHINES");
 
-    const int populationSize = 10;
-    const int generations = 25;
+    const int populationSize = 5; // Reduced from 10
+    const int generations = 10; // Reduced from 25
     const double mutationRate = 0.1;
 
     List<List<ParallelInput>> population = _initializePopulation(populationSize);
@@ -662,10 +677,10 @@ class ParallelMachine {
       return;
     }
 
-    const int maxIterations = 1000;
-    const int tabuTenure = 10;
-    const int maxNoImprove = 50;
-    const int vecinosPorIteracion = 8;
+    const int maxIterations = 200; // Reduced from 1000
+    const int tabuTenure = 5; // Reduced from 10
+    const int maxNoImprove = 20; // Reduced from 50
+    const int vecinosPorIteracion = 5; // Reduced from 8
 
     final random = Random();
 
@@ -754,6 +769,4 @@ class ParallelMachine {
 
     print("Tiempo del tabu parallel: $bestFitness");
   }
-
-  }
-
+}

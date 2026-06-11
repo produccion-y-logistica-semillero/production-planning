@@ -1,16 +1,24 @@
-
 import 'dart:math';
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:intl/intl.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
+import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/widgets/high_order/metrics_page.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_dialog.dart';
+
+enum GanttViewMode { byMachine, byJob }
+
+class _GanttRow {
+  final String name;
+  final List<PlanningTaskEntity> tasks;
+
+  const _GanttRow({required this.name, required this.tasks});
+}
 
 class GanttChart extends StatefulWidget {
   final List<PlanningMachineEntity> machines;
@@ -39,9 +47,11 @@ class _GanttChartState extends State<GanttChart> {
   final ScrollController _verticalMachineScrollController = ScrollController();
   final ScrollController _verticalTasksScrollController = ScrollController();
 
-  //zoom factors
+  GanttViewMode _currentMode = GanttViewMode.byMachine;
+  List<_GanttRow> _rows = [];
+
+  //zoom factor
   double _horizontalZoom = 1.4;
-  double _verticalZoom = 1.0;
 
   late DateTime _startDate;
   late DateTime _endDate;
@@ -61,20 +71,25 @@ class _GanttChartState extends State<GanttChart> {
     super.initState();
     _selectedRule = widget.selectedRule;
     _calculateChartDateRange();
+    _updateRows();
 
     initialHour = widget.schedule.value1.hour;
     endingHour = widget.schedule.value2.hour;
 
     //keep the two vertical scrolls in sync (machine list & tasks)
     _verticalMachineScrollController.addListener(() {
-      _verticalTasksScrollController.jumpTo(
-        _verticalMachineScrollController.offset,
-      );
+      if (_verticalTasksScrollController.hasClients) {
+        _verticalTasksScrollController.jumpTo(
+          _verticalMachineScrollController.offset,
+        );
+      }
     });
     _verticalTasksScrollController.addListener(() {
-      _verticalMachineScrollController.jumpTo(
-        _verticalTasksScrollController.offset,
-      );
+      if (_verticalMachineScrollController.hasClients) {
+        _verticalMachineScrollController.jumpTo(
+          _verticalTasksScrollController.offset,
+        );
+      }
     });
   }
 
@@ -85,7 +100,7 @@ class _GanttChartState extends State<GanttChart> {
 
     for (final machine in widget.machines) {
       for (final task in machine.tasks) {
-        if(earliest == null){
+        if (earliest == null) {
           earliest = task.startDate;
           latest = earliest.add(const Duration(days: 1));
         }
@@ -98,7 +113,7 @@ class _GanttChartState extends State<GanttChart> {
         }
       }
     }
-    if(earliest == null){
+    if (earliest == null) {
       earliest = DateTime.now();
       latest = earliest.add(const Duration(days: 1));
     }
@@ -111,8 +126,8 @@ class _GanttChartState extends State<GanttChart> {
 
     _startDate = DateTime(earliest.year, earliest.month, earliest.day);
     _endDate = latest!;
-    _totalDays = _endDate.difference(_startDate).inDays+1;
-    if(_totalDays > 20){
+    _totalDays = _endDate.difference(_startDate).inDays + 1;
+    if (_totalDays > 20) {
       _totalDays = 20;
       _endDate = _startDate.add(const Duration(days: 20));
     }
@@ -122,53 +137,74 @@ class _GanttChartState extends State<GanttChart> {
     }
   }
 
+  void _updateRows() {
+    if (_currentMode == GanttViewMode.byMachine) {
+      _rows = widget.machines.map((machine) {
+        final machineTasks = List<PlanningTaskEntity>.from(machine.tasks)
+          ..sort((a, b) => a.startDate.compareTo(b.startDate));
+        return _GanttRow(name: machine.machineName, tasks: machineTasks);
+      }).toList();
+    } else {
+      final jobMap = <int, List<PlanningTaskEntity>>{};
+      for (final machine in widget.machines) {
+        for (final task in machine.tasks) {
+          jobMap.putIfAbsent(task.jobId, () => []).add(task);
+        }
+      }
+      _rows = jobMap.entries.map((entry) {
+        final tasks = List<PlanningTaskEntity>.from(entry.value)
+          ..sort((a, b) => a.startDate.compareTo(b.startDate));
+        final label = _baseTaskName(tasks.first.displayName);
+        return _GanttRow(name: 'Job ${entry.key} – $label', tasks: tasks);
+      }).toList();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    const machineListWidth = 140.0;
+    const double rowLabelWidth = 220.0;
+    const double rowHeight = 48.0;
+    const double rowSpacing = 8.0;
+    const double rowHeaderHeight = 60.0;
 
-    final chartContainerWidth = max((screenWidth - 220) * 0.8, 300);
+    final double rowSlotHeight = rowHeight + rowSpacing;
+    final double chartContainerWidth = max(screenWidth - rowLabelWidth - 72, 620).toDouble();
+   final double chartTotalHeight = max(_rows.length * rowSlotHeight, 280.0).toDouble();
+    final double chartRowsVisibleHeight = max(min(chartTotalHeight, screenHeight * 0.72).toDouble(), 320.0).toDouble();
 
-    final chartContainerHeight = max((screenHeight - 300) * 0.9, 300);
+    // total (virtual) width of the chart (with zoom)
+    final chartTotalWidth = max(chartContainerWidth * _horizontalZoom, chartContainerWidth);
 
-    //total (virtual) width of the chart (with zoom)
-    final chartTotalWidth = (chartContainerWidth * _horizontalZoom) / widget.number;
+    // total (virtual) height for the tasks area
+    final chartBodyHeight = chartTotalHeight;
 
-    //total (virtual) height for the tasks area
-    final chartTotalHeight = (widget.machines.length * (40.0 * _verticalZoom))
-        + (5 * (widget.machines.length - 1));
-
-
-    final dayWidth = chartTotalWidth / _totalDays;
-    _hourWidth = dayWidth / (endingHour-initialHour);
+    final dayWidth = chartTotalWidth / max(1, _totalDays);
+    _hourWidth = dayWidth / max(1, endingHour - initialHour);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildTopControls(),
-        const SizedBox(height: 8),
-        _buildHorizontalZoomSlider(),
-        const SizedBox(height: 8),
-
+        const SizedBox(height: 16),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildVerticalZoomSlider(chartContainerHeight.toDouble()),
-
             SizedBox(
-              width: machineListWidth,
-              height: chartContainerHeight.toDouble(),
-              child: _buildMachineListArea(chartTotalHeight),
+              width: rowLabelWidth,
+              height: chartRowsVisibleHeight + rowHeaderHeight,
+              child: _buildRowLabelPanel(chartTotalHeight, rowHeaderHeight, rowHeight, chartRowsVisibleHeight),
             ),
-
             Expanded(
               child: _buildChartArea(
-                chartContainerWidth: chartContainerWidth.toDouble(),
-                chartContainerHeight: chartContainerHeight.toDouble(),
+                chartContainerWidth: chartContainerWidth,
+                chartVisibleHeight: chartRowsVisibleHeight,
                 chartTotalWidth: chartTotalWidth,
-                chartTotalHeight: chartTotalHeight,
+                chartTotalHeight: chartBodyHeight,
+                headerHeight: rowHeaderHeight,
+                rowHeight: rowHeight,
               ),
             ),
           ],
@@ -179,130 +215,144 @@ class _GanttChartState extends State<GanttChart> {
 
   Widget _buildTopControls() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        DropdownButton<int>(
-          value: _selectedRule,
-          items: widget.items.where((item) => item.value == _selectedRule).toList(),
-          onChanged: (int? id) {
-            if (id != null) {
-              setState(() {
-                _selectedRule = id;
-              });
-              BlocProvider.of<GanttBloc>(context).selectRule(id);
-            }
+        Expanded(
+          child: Row(
+            children: [
+              const Text('Algoritmo: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<int>(
+                value: _selectedRule,
+                hint: const Text('Seleccionar algoritmo'),
+                items: widget.items,
+                onChanged: (int? id) {
+                  if (id != null) {
+                    setState(() {
+                      _selectedRule = id;
+                    });
+                    BlocProvider.of<GanttBloc>(context).selectRule(id);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        SegmentedButton<GanttViewMode>(
+          segments: const [
+            ButtonSegment(value: GanttViewMode.byMachine, label: Text('Por Máquina')),
+            ButtonSegment(value: GanttViewMode.byJob, label: Text('Por Job')),
+          ],
+          selected: {_currentMode},
+          onSelectionChanged: (newSelection) {
+            setState(() {
+              _currentMode = newSelection.first;
+              _updateRows();
+            });
           },
         ),
-
-        const SizedBox(width: 16),
-        Text('Inicio: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
-        const SizedBox(width: 16),
-        Text('Final: ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
-        const SizedBox(width: 16),
-        Text('Días: $_totalDays'),
-        const SizedBox(width: 16),
-        ElevatedButton(
-          onPressed: () => _selectDateRange(context),
-          child: const Text('Rango de fechas'),
+        const SizedBox(width: 24),
+        const Text('Zoom:', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 180,
+          child: Slider(
+            value: _horizontalZoom,
+            min: 0.8,
+            max: 4.0,
+            divisions: 32,
+            label: _horizontalZoom.toStringAsFixed(1),
+            onChanged: (val) {
+              setState(() {
+                _horizontalZoom = val;
+              });
+            },
+          ),
         ),
-        const SizedBox(width: 16),
-        //TextButton(
-        // onPressed: () => _showMetrics(widget.metrics, context),
-        //  child: const Text('Métricas'),
-        // ),
       ],
     );
   }
 
-  Widget _buildHorizontalZoomSlider() {
-    return Slider(
-      value: _horizontalZoom,
-      min: 1.4,
-      max: 10,
-      divisions: 40,
-      label: _horizontalZoom.toStringAsFixed(1),
-      onChanged: (val) {
-        setState(() {
-          _horizontalZoom = val;
-        });
-      },
-    );
-  }
 
-  Widget _buildVerticalZoomSlider(double chartContainerHeight) {
-    return SizedBox(
-      height: chartContainerHeight,
-      child: RotatedBox(
-        quarterTurns: 1,
-        child: Slider(
-          value: _verticalZoom,
-          min: 1,
-          max: 10,
-          divisions: 40,
-          label: _verticalZoom.toStringAsFixed(1),
-          onChanged: (val) {
-            setState(() {
-              _verticalZoom = val;
-            });
-          },
-        ),
-      ),
-    );
-  }
 
-  Widget _buildMachineListArea(double chartTotalHeight) {
-    return Container(
-      margin: const EdgeInsets.only(top: 55), //this is impportant, because this margin aligns the machines with the tasks
-      color: Theme.of(context).colorScheme.surface,
-      child: SingleChildScrollView(
-        controller: _verticalMachineScrollController,
-        scrollDirection: Axis.vertical,
-        child: SizedBox(
-          height: chartTotalHeight,
-          child: Stack(
-            children: _machineNameWidgets(),
+ Widget _buildRowLabelPanel(double chartTotalHeight, double headerHeight, double rowHeight, double visibleHeight) {
+  final double rowSpacing = 8.0;
+  final double rowSlotHeight = rowHeight + rowSpacing;
+
+  return Column(
+    children: [
+      // Header fijo al mismo nivel que las fechas
+      Container(
+        height: headerHeight,
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+        alignment: Alignment.center,
+        child: Text(
+          _currentMode == GanttViewMode.byMachine ? 'MÁQUINAS' : 'JOBS',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
       ),
-    );
-  }
+      // Lista de máquinas/jobs
+      Expanded(
+        child: SingleChildScrollView(
+          controller: _verticalMachineScrollController,
+          scrollDirection: Axis.vertical,
+          child: SizedBox(
+            height: chartTotalHeight,
+            child: Column(
+              children: _rowNameWidgets(rowHeight, rowSlotHeight),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
 
-  List<Widget> _machineNameWidgets() {
-    final List<Widget> widgets = [];
-    for (int i = 0; i < widget.machines.length; i++) {
-      final topPos = (i * (40.0 * _verticalZoom)) + (5 * i);
-      widgets.add(
-        Positioned(
-          top: topPos,
-          left: 5,
+  List<Widget> _rowNameWidgets(double rowHeight, double rowSlotHeight) {
+  final List<Widget> widgets = [];
+  for (int i = 0; i < _rows.length; i++) {
+    widgets.add(
+      SizedBox(
+        height: rowSlotHeight,
+        child: Center(
           child: Container(
-            height: 40.0 * _verticalZoom,
-            width: 130,
-            padding: const EdgeInsets.all(8),
+            height: rowHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.tertiaryContainer,
-              borderRadius: BorderRadius.circular(5),
+              color: i.isEven
+                  ? Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.14)
+                  : Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.12), width: 1),
             ),
-            child: FittedBox(
-              alignment: Alignment.centerLeft,
-              fit: BoxFit.scaleDown,
-              child: Text(
-                widget.machines[i].machineName,
-                style: const TextStyle(color: Colors.white),
+            child: Text(
+              _rows[i].name,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
-      );
-    }
-    return widgets;
+      ),
+    );
   }
+  return widgets;
+}
 
   Widget _buildChartArea({
     required double chartContainerWidth,
-    required double chartContainerHeight,
+    required double chartVisibleHeight,
     required double chartTotalWidth,
     required double chartTotalHeight,
+    required double headerHeight,
+    required double rowHeight,
   }) {
     return GestureDetector(
       onPanUpdate: (details) {
@@ -315,7 +365,7 @@ class _GanttChartState extends State<GanttChart> {
       },
       child: Container(
         width: chartContainerWidth,
-        height: chartContainerHeight,
+        height: chartVisibleHeight + headerHeight,
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
@@ -325,12 +375,13 @@ class _GanttChartState extends State<GanttChart> {
           controller: _horizontalScrollController,
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            width: chartTotalWidth + 60,
+            width: chartTotalWidth + 80,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildChartHeaders(chartTotalWidth),
-                Expanded(
+                _buildChartHeaders(chartTotalWidth, headerHeight),
+                SizedBox(
+                  height: chartVisibleHeight,
                   child: SingleChildScrollView(
                     controller: _verticalTasksScrollController,
                     scrollDirection: Axis.vertical,
@@ -338,7 +389,10 @@ class _GanttChartState extends State<GanttChart> {
                       height: chartTotalHeight,
                       width: chartTotalWidth,
                       child: Stack(
-                        children: _buildTaskBars(chartTotalWidth),
+                        children: [
+                          ..._buildRowBackgrounds(chartTotalWidth, chartTotalHeight, rowHeight),
+                          ..._buildTaskBars(chartTotalWidth, rowHeight),
+                        ],
                       ),
                     ),
                   ),
@@ -351,7 +405,7 @@ class _GanttChartState extends State<GanttChart> {
     );
   }
 
-  Widget _buildChartHeaders(double chartWidth) {
+  Widget _buildChartHeaders(double chartWidth, double headerHeight) {
     final totalDays = max(1, _totalDays);
     final List<Widget> dayWidgets = [];
     final dayWidth = chartWidth / totalDays;
@@ -360,7 +414,7 @@ class _GanttChartState extends State<GanttChart> {
       final currentDate = _startDate.add(Duration(days: i));
       final dayLabel = Text(
         '${currentDate.day}/${currentDate.month}',
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
       );
 
       final List<Widget> hourTicks = [];
@@ -371,14 +425,17 @@ class _GanttChartState extends State<GanttChart> {
             child: VerticalDivider(
               thickness: (hour == initialHour) ? 2 : 1,
               width: 1,
-              color: Colors.grey.shade700,
+              color: Colors.grey.shade400,
             ),
           ),
         ];
 
         if (dayWidth > 800 && hour > initialHour) {
           children.add(
-            Text('$hour:00', style: const TextStyle(fontSize: 10)),
+            Text(
+              '$hour:00',
+              style: const TextStyle(fontSize: 10, color: Colors.white70),
+            ),
           );
         }
 
@@ -397,40 +454,85 @@ class _GanttChartState extends State<GanttChart> {
         SizedBox(
           width: dayWidth,
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              dayLabel,
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: dayLabel,
+              ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: hourTicks,
               ),
-              const Divider(height: 1),
+              const Divider(height: 1, color: Colors.white24),
             ],
           ),
         ),
       );
     }
 
-    return Row(children: dayWidgets);
+    return Container(
+      height: headerHeight,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2433),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade700, width: 0.8),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: dayWidgets,
+      ),
+    );
   }
 
-  List<Widget> _buildTaskBars(double chartWidth) {
+  List<Widget> _buildRowBackgrounds(double chartWidth, double chartHeight, double rowHeight) {
+    final double rowSpacing = 8.0;
+    final double rowSlotHeight = rowHeight + rowSpacing;
+    final List<Widget> backgrounds = [];
+    for (var i = 0; i < _rows.length; i++) {
+  backgrounds.add(Positioned(
+    top: i * rowSlotHeight,
+    left: 0,
+    child: Container(
+      width: chartWidth,
+      height: rowSlotHeight,
+      decoration: BoxDecoration(
+        color: i.isEven ? Colors.white : Colors.grey.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade300.withOpacity(0.3), width: 0.8),
+        ),
+      ),
+    ),
+  ));
+}
+    return backgrounds;
+  }
+
+  List<Widget> _buildTaskBars(double chartWidth, double rowHeight) {
+    final double rowSpacing = 8.0;
+    final double rowSlotHeight = rowHeight + rowSpacing;
     final bars = <Widget>[];
 
-    for (int i = 0; i < widget.machines.length; i++) {
-      final machine = widget.machines[i];
-      for (final task in machine.tasks) {
+    for (int i = 0; i < _rows.length; i++) {
+      final row = _rows[i];
+      for (final task in row.tasks) {
+        final rowIndex = i;
         if (!_jobColor.containsKey(task.jobId)) {
           final random = Random();
           _jobColor[task.jobId] = Color.fromARGB(
             255,
-            random.nextInt(256),
-            random.nextInt(256),
-            random.nextInt(256),
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
           );
         }
         final color = _jobColor[task.jobId]!;
 
-        final top = (i * (40.0 * _verticalZoom)) + (5 * i);
+        final top = (rowIndex * rowSlotHeight) + (rowSpacing / 2);
         final left = _calculateTaskLeft(task.startDate, chartWidth);
         final right = _calculateTaskLeft(task.endDate, chartWidth);
         final width = (right - left).clamp(1, chartWidth);
@@ -443,18 +545,19 @@ class _GanttChartState extends State<GanttChart> {
               onDoubleTap: () => _openTaskDialog(task),
               child: Container(
                 width: width.toDouble(),
-                height: 40.0 * _verticalZoom,
+                height: 48,
                 decoration: BoxDecoration(
                   color: color,
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(1, 1))],
                 ),
-                alignment: Alignment.center,
-                child: FittedBox(
-                  //Agregar id del job y el id de la secuencia
-                  child: Text(
-                    '${task.sequenceName} (Job: ${task.jobId})',
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  task.displayName,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -466,11 +569,12 @@ class _GanttChartState extends State<GanttChart> {
   }
 
   double _calculateTaskLeft(DateTime date, double chartWidth) {
-    final hoursPerDay = endingHour - initialHour;
+    final hoursPerDay = max(1, endingHour - initialHour);
     final totalDisplayedMinutes = _totalDays * hoursPerDay * 60;
 
     final dayIndex = date.difference(_startDate).inDays;
-    final clampedDayIndex = dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
+    final clampedDayIndex =
+        dayIndex < 0 ? 0 : (dayIndex >= _totalDays ? _totalDays - 1 : dayIndex);
 
     final hour = date.hour;
     final clampedHour = (hour < initialHour)
@@ -481,14 +585,21 @@ class _GanttChartState extends State<GanttChart> {
     if (hour < initialHour || hour >= endingHour) {
       minutePart = 0;
     }
-    final displayedMinutesSoFar = (clampedDayIndex * hoursPerDay * 60)
-        + ((clampedHour - initialHour) * 60)
-        + minutePart;
-    final fraction = (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
-    return (fraction * chartWidth) + (_hourWidth/2);
+    final displayedMinutesSoFar = (clampedDayIndex * hoursPerDay * 60) +
+        ((clampedHour - initialHour) * 60) +
+        minutePart;
+    final fraction =
+        (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
+    return (fraction * chartWidth).clamp(0.0, chartWidth);
   }
 
-
+  String _baseTaskName(String displayName) {
+    final index = displayName.indexOf(' · Unidad ');
+    if (index >= 0) {
+      return displayName.substring(0, index);
+    }
+    return displayName;
+  }
 
   Future<void> _selectDateRange(BuildContext context) async {
     final result = await showDateRangePicker(
@@ -512,7 +623,7 @@ class _GanttChartState extends State<GanttChart> {
           59,
           59,
         );
-        _totalDays = max(1, _endDate.difference(_startDate).inDays);
+        _totalDays = max(1, _endDate.difference(_startDate).inDays + 1);
       });
     }
   }

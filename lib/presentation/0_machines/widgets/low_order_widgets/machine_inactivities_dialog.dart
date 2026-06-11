@@ -15,7 +15,8 @@ class MachineInactivitiesDialog extends StatefulWidget {
       _MachineInactivitiesDialogState();
 }
 
-class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
+class _MachineInactivitiesDialogState
+    extends State<MachineInactivitiesDialog> {
   late final TextEditingController _continueCapacityController;
   late final TextEditingController _restMinutesController;
   final TextEditingController _scheduledNameController =
@@ -44,6 +45,8 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     _scheduledDurationController.dispose();
     super.dispose();
   }
+
+  // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -123,19 +126,25 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     );
   }
 
+  // ─── Automatic pause section ───────────────────────────────────────────────
+
   Widget _buildAutomaticSection(
       MachineInactivitiesState state, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Título y descripción del archivo 7: más alineados con la
+        // terminología usada en AddMachineDialog y MachineBloc.
         Text(
-          'Pausa automática por límite de procesamientos',
+          'Tiempo máximo de procesamiento continuo',
           style: theme.textTheme.titleMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cada cuántos procesos la máquina debe tomar un descanso y la duración en minutos de esa pausa.',
+          'Define el tiempo máximo de procesamiento continuo que la máquina '
+          'puede realizar antes de tomar un descanso y la duración en minutos '
+          'de esa pausa.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
@@ -146,7 +155,8 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                 controller: _continueCapacityController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Procesamientos continuos',
+                  // Label descriptivo del archivo 7.
+                  labelText: 'Tiempo máximo de procesamiento continuo',
                   hintText: 'Ej. 4',
                 ),
               ),
@@ -176,12 +186,16 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save),
-            label: const Text('Guardar pausa automática'),
+            // Etiqueta descriptiva del archivo 7.
+            label: const Text(
+                'Guardar tiempo máximo de procesamiento continuo'),
           ),
         ),
       ],
     );
   }
+
+  // ─── Scheduled section ─────────────────────────────────────────────────────
 
   Widget _buildScheduledSection(
       MachineInactivitiesState state, ThemeData theme) {
@@ -233,11 +247,13 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
           },
           borderRadius: BorderRadius.circular(12),
           children: Weekday.values
-              .map((day) => Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text(day.shortLabel),
-                  ))
+              .map(
+                (day) => Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  child: Text(day.shortLabel),
+                ),
+              )
               .toList(),
         ),
         const SizedBox(height: 16),
@@ -248,17 +264,20 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                 onPressed: () async {
                   final picked = await showTimePicker(
                     context: context,
-                    initialTime:
-                        _scheduledStart ?? const TimeOfDay(hour: 8, minute: 0),
+                    initialTime: _scheduledStart ??
+                        const TimeOfDay(hour: 8, minute: 0),
                   );
                   if (picked != null) {
                     setState(() => _scheduledStart = picked);
                   }
                 },
                 icon: const Icon(Icons.access_time),
-                label: Text(_scheduledStart == null
-                    ? 'Hora de inicio'
-                    : '${_scheduledStart!.hour.toString().padLeft(2, '0')}:${_scheduledStart!.minute.toString().padLeft(2, '0')}'),
+                label: Text(
+                  _scheduledStart == null
+                      ? 'Hora de inicio'
+                      : '${_scheduledStart!.hour.toString().padLeft(2, '0')}:'
+                          '${_scheduledStart!.minute.toString().padLeft(2, '0')}',
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -285,15 +304,19 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
+                // Icons.add del archivo 8: semánticamente correcto para
+                // una acción de agregar (no de guardar).
                 : const Icon(Icons.add),
-            label: const Text('Agregar'),
+            // Etiqueta descriptiva del archivo 7.
+            label: const Text('Guardar programación recurrente'),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildScheduledList(MachineInactivitiesState state, ThemeData theme) {
+  Widget _buildScheduledList(
+      MachineInactivitiesState state, ThemeData theme) {
     if (state.scheduled.isEmpty) {
       return Text(
         'No hay inactividades programadas.',
@@ -309,7 +332,9 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
               child: ListTile(
                 title: Text(inactivity.name),
                 subtitle: Text(
-                  '${_formatWeekdays(inactivity.weekdays)} • ${inactivity.formattedStartTime()} • ${inactivity.duration.inMinutes} min',
+                  '${_formatWeekdays(inactivity.weekdays)} • '
+                  '${inactivity.formattedStartTime()} • '
+                  '${inactivity.duration.inMinutes} min',
                 ),
                 trailing: IconButton(
                   onPressed: () => _onDeleteScheduled(inactivity),
@@ -323,12 +348,17 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     );
   }
 
+  // ─── Event handlers ────────────────────────────────────────────────────────
+
   void _onSaveAutomatic() {
     final continueCapacity =
         int.tryParse(_continueCapacityController.text.trim());
     if (continueCapacity == null || continueCapacity <= 0) {
-      _showSnack('Ingresa un número válido de procesamientos continuos.',
-          isError: true);
+      // Mensaje más descriptivo del archivo 7.
+      _showSnack(
+        'Ingresa un número válido para el tiempo máximo de procesamiento continuo.',
+        isError: true,
+      );
       return;
     }
 
@@ -342,11 +372,10 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
       _showSnack('Ingresa una duración en minutos válida.', isError: true);
       return;
     }
-    final restDuration = Duration(minutes: restMinutes);
 
     context.read<MachineInactivitiesCubit>().saveAutomatic(
           continueCapacity: continueCapacity,
-          restTime: restDuration,
+          restTime: Duration(minutes: restMinutes),
         );
   }
 
@@ -378,15 +407,13 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
       return;
     }
 
-    final startDuration = Duration(
-      hours: _scheduledStart!.hour,
-      minutes: _scheduledStart!.minute,
-    );
-
     context.read<MachineInactivitiesCubit>().addScheduled(
           name: name,
           weekdays: selectedDays,
-          startTime: startDuration,
+          startTime: Duration(
+            hours: _scheduledStart!.hour,
+            minutes: _scheduledStart!.minute,
+          ),
           duration: Duration(minutes: durationMinutes),
         );
   }
@@ -400,10 +427,11 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
     context.read<MachineInactivitiesCubit>().removeScheduled(id);
   }
 
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
   void _syncAutomaticFieldsFromState(MachineInactivitiesState state) {
-    _continueCapacityController.text = state.continueCapacity > 0
-        ? state.continueCapacity.toString()
-        : '';
+    _continueCapacityController.text =
+        state.continueCapacity > 0 ? state.continueCapacity.toString() : '';
     _restMinutesController.text =
         state.restTime != null && state.restTime!.inMinutes > 0
             ? state.restTime!.inMinutes.toString()
@@ -421,15 +449,12 @@ class _MachineInactivitiesDialogState extends State<MachineInactivitiesDialog> {
   }
 
   String _formatWeekdays(Set<Weekday> weekdays) {
-    if (weekdays.length == Weekday.values.length) {
-      return 'Todos los días';
-    }
+    if (weekdays.length == Weekday.values.length) return 'Todos los días';
     return weekdays.map((day) => day.shortLabel).join(', ');
   }
 
   void _showSnack(String message, {bool isError = false}) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger?.showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.redAccent : null,

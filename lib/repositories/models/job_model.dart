@@ -33,7 +33,9 @@ class JobModel {
         jobState: json['job_state'] as String?);
   }
   JobEntity toEntity() {
-    // convert minutes map to MachineTimes map
+    // Convert minutes map to MachineTimes map.
+    // taskMachineTimesMinutes stores time durations as minutes (integers)
+    // and must be converted to MachineTimes objects with Duration instances.
     Map<int, Map<int, MachineTimes>>? taskTimes;
     if (taskMachineTimesMinutes != null) {
       taskTimes = {};

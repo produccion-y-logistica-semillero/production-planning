@@ -70,7 +70,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               builder: (context) => BlocProvider<NewOrderBloc>(
                                 create: (context) =>
                                     GetIt.instance.get<NewOrderBloc>(),
-                                child: const NewOrderPage(),
+                                child: const NewOrderPage(editOrderId: null),
                               ),
                             ),
                           );
@@ -167,6 +167,22 @@ class _OrdersPageState extends State<OrdersPage> {
                                     ),
                                     IconButton(
                                       icon: Icon(
+                                        Icons.edit,
+                                        color: colorScheme.secondary,
+                                      ),
+                                      onPressed: () =>
+                                          _editOrder(context, state.orders[index].orderId!),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.copy,
+                                        color: colorScheme.primary,
+                                      ),
+                                      onPressed: () =>
+                                          _orderBloc.duplicateOrder(state.orders[index].orderId!),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
                                         Icons.delete,
                                         color: colorScheme.error,
                                       ),
@@ -236,6 +252,20 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _editOrder(BuildContext context, int id) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BlocProvider<NewOrderBloc>(
+          create: (context) => GetIt.instance.get<NewOrderBloc>(),
+          child: NewOrderPage(editOrderId: id),
+        ),
+      ),
+    );
+    if (result == true && context.mounted) {
+      _orderBloc.fetchOrders();
     }
   }
 }

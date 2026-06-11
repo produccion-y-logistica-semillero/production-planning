@@ -9,13 +9,11 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
 
-
 // Changed to StatefulWidget to manage list expanded state
-
 class MachinesListView extends StatefulWidget {
   final List<MachineTypeEntity> machineTypes;
   const MachinesListView({super.key, required this.machineTypes});
-  // Creates the mutable state for MachinesListView
+
   @override
   State<MachinesListView> createState() => _MachinesListViewState();
 }
@@ -28,11 +26,8 @@ class _MachinesListViewState extends State<MachinesListView> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView.builder(
-      // Accessing machineTypes through widget since it is atate class
       itemCount: widget.machineTypes.length,
       itemBuilder: (context, index) {
-
-        // Get the current machine type from the widget's machineTypes list
         final machineType = widget.machineTypes[index];
 
         return Container(
@@ -57,24 +52,25 @@ class _MachinesListViewState extends State<MachinesListView> {
             child: BlocBuilder<MachineBloc, MachinesState>(
               builder: (context, state) {
                 List<Widget> children = [];
+
                 if (state is MachinesRetrieving) {
                   children = [const ListTile(title: Text("Loading..."))];
                 } else if (state is MachinesRetrievingError) {
                   children = [const ListTile(title: Text("Error loading"))];
-
                 } else if (state is MachinesRetrievingSuccess ||
                     state is MachineDeletionSuccess ||
                     state is MachineDeletionError) {
                   children = state.machines!
                       .map(
                         (machine) => MachineDisplayTile(
-                           machine,
-                          () => _deleteMachine(context, machine.id!, machineType.id!),
-                          () => _editMachine(context, machine, machineType.id!),
-                        ), 
+                          machine,
+                          () => _deleteMachine(
+                              context, machine.id!, machineType.id!),
+                          () => _editMachine(
+                              context, machine, machineType.id!),
+                        ),
                       )
                       .toList();
-
                 } else {
                   children = [const ListTile(title: Text(""))];
                 }
@@ -110,11 +106,9 @@ class _MachinesListViewState extends State<MachinesListView> {
                               colorScheme.surfaceContainerLow,
                           backgroundColor: colorScheme.surfaceContainerHigh,
                           onExpansionChanged: (value) {
-                            // Used setState with expandedTypes to handle UI expansion and trigger BLoC actions
                             setState(() {
                               if (value) {
                                 expandedTypes.add(machineType.id!);
-
                                 BlocProvider.of<MachineBloc>(context)
                                     .retrieveMachines(machineType.id!);
                               } else {
@@ -149,10 +143,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                             ),
                             icon: Icon(Icons.delete, color: colorScheme.error),
                           ),
-                           
                         ],
-                        
-
                       ),
                     ),
                   ],
@@ -164,6 +155,8 @@ class _MachinesListViewState extends State<MachinesListView> {
       },
     );
   }
+
+  // ─── Dialogs ───────────────────────────────────────────────────────────────
 
   void _deleteMachineType(
       BuildContext context, int machineId, int index) async {
@@ -182,7 +175,6 @@ class _MachinesListViewState extends State<MachinesListView> {
             ),
             TextButton(
               onPressed: () {
-
                 BlocProvider.of<MachineTypesBloc>(context)
                     .deleteMachineType(machineId, index);
                 Navigator.of(dialogContext).pop();
@@ -197,7 +189,6 @@ class _MachinesListViewState extends State<MachinesListView> {
 
   void _deleteMachine(
       BuildContext context, int machineId, int machineTypeId) async {
-    // Show confirmation dialog before deleting
     await showDialog(
       context: context,
       builder: (dialogContext) {
@@ -205,28 +196,18 @@ class _MachinesListViewState extends State<MachinesListView> {
           icon: const Icon(Icons.dangerous, color: Colors.red),
           title: const Text("Are you sure you want to delete this machine?"),
           actions: [
-            // Cancel button (closes the dialog)
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text("Cancel"),
             ),
-
-            // Confirm button – deletes the machine and refreshes the list
             TextButton(
               onPressed: () async {
-                // Delete the machine
-
                 BlocProvider.of<MachineBloc>(context).deleteMachine(machineId);
-
-                // Close the confirmation dialog
                 Navigator.of(dialogContext).pop();
 
-                // Wait a short moment to ensure deletion completes before refreshing
                 await Future.delayed(const Duration(milliseconds: 200));
 
-                // If the machine type is currently expanded, refresh its machine list
                 if (expandedTypes.contains(machineTypeId)) {
-
                   BlocProvider.of<MachineBloc>(context)
                       .retrieveMachines(machineTypeId);
                 }
@@ -239,35 +220,23 @@ class _MachinesListViewState extends State<MachinesListView> {
     );
   }
 
-
   void _addNewMachine(
       BuildContext context, int machineId, String machineTypeName) async {
-
-    // Create field controllers
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController controllerCapacity = TextEditingController(text: "100.0");
-    final TextEditingController controllerPreparation = TextEditingController(text: "100.0");
-    final TextEditingController controllerRestTime = TextEditingController(text: "100.0");
-    final TextEditingController controllerContinue = TextEditingController(text: "1");
-
-
-
-
-
-
-    final TextEditingController availabilityDateTimeController =
-        TextEditingController();
-    final TextEditingController quantityController =
-        TextEditingController(text: "1"); // default 1
+    final nameController = TextEditingController();
+    final controllerCapacity = TextEditingController(text: "100.0");
+    final controllerPreparation = TextEditingController(text: "100.0");
+    // Rest time is expressed in minutes (more intuitive for the user).
+    // It is converted to a percentage internally before calling the BLoC.
+    final controllerRestTime = TextEditingController(text: "60");
+    final controllerContinue = TextEditingController(text: "1");
+    final availabilityDateTimeController = TextEditingController();
+    final quantityController = TextEditingController(text: "1");
 
     double? parsePercentage(String text) {
       final normalized = text.replaceAll(',', '.').trim();
-      if (normalized.isEmpty) {
-        return null;
-      }
+      if (normalized.isEmpty) return null;
       return double.tryParse(normalized);
     }
-
 
     await showDialog(
       context: context,
@@ -281,12 +250,19 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: controllerContinue,
           availabilityDateTimeController: availabilityDateTimeController,
           quantityController: quantityController,
-          addMachineHandle: () async {
-            final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
-            final processingPercent = parsePercentage(controllerCapacity.text);
+          // scheduledInactivities is passed from the dialog to the BLoC.
+          addMachineHandle: (scheduledInactivities) async {
+            final quantity =
+                int.tryParse(quantityController.text.trim()) ?? 0;
+            final processingPercent =
+                parsePercentage(controllerCapacity.text);
             final preparationPercent =
                 parsePercentage(controllerPreparation.text);
-            final restPercent = parsePercentage(controllerRestTime.text);
+            // Convert minutes → percentage: (minutes * 100) / 60
+            final restMinutes =
+                int.tryParse(controllerRestTime.text.trim());
+            final restPercent =
+                restMinutes != null ? (restMinutes * 100) / 60 : null;
             final continueCapacity =
                 int.tryParse(controllerContinue.text.trim());
 
@@ -303,7 +279,6 @@ class _MachinesListViewState extends State<MachinesListView> {
                 quantity <= 0;
 
             if (hasInvalidFields) {
-              // If they are not complete, display a warning dialog box
               await showDialog(
                 context: dialogContext,
                 builder: (subDialogContext) {
@@ -317,32 +292,31 @@ class _MachinesListViewState extends State<MachinesListView> {
               return;
             }
 
-            // getStandardTimesForType is no longer needed since we pass percentages directly
-
-            //Get existing machines from the current state
             final state = context.read<MachineBloc>().state;
-            final existingMachines =
-                state is MachinesRetrievingSuccess ? state.machines ?? [] : [];
-            final existingNames = existingMachines.map((m) => m.name).toList();
+            final existingMachines = state is MachinesRetrievingSuccess
+                ? state.machines ?? []
+                : [];
+            final existingNames =
+                existingMachines.map((m) => m.name).toList();
 
-            // Determine the starting index for auto-generated names
             final baseName = nameController.text.trim();
-            final regex = RegExp('^${RegExp.escape(baseName)}(?: (\\d+))?\$');
+            final regex =
+                RegExp('^${RegExp.escape(baseName)}(?: (\\d+))?\$');
             int maxIndex = 0;
 
-            // Find the highest existing suffix number for machines with the same base name
             for (final name in existingNames) {
               final match = regex.firstMatch(name);
               if (match != null) {
                 final group = match.group(1);
-                final index = group != null ? int.tryParse(group) ?? 1 : 1;
-                if (index > maxIndex) maxIndex = index;
+                final idx =
+                    group != null ? int.tryParse(group) ?? 1 : 1;
+                if (idx > maxIndex) maxIndex = idx;
               }
             }
 
-            // Add new machines with auto-generated names
             for (int i = 1; i <= quantity; i++) {
-              final suffix = (maxIndex + i) == 1 ? '' : ' ${maxIndex + i}';
+              final suffix =
+                  (maxIndex + i) == 1 ? '' : ' ${maxIndex + i}';
               final newName = '$baseName$suffix';
 
               BlocProvider.of<MachineBloc>(context).addNewMachine(
@@ -353,35 +327,36 @@ class _MachinesListViewState extends State<MachinesListView> {
                 newName,
                 machineId,
                 availabilityDateTimeController.text,
+                scheduledInactivities,
               );
             }
 
-            // Close the dialog after adding machines
             Navigator.of(dialogContext).pop();
 
-            // Wait and refresh list
             await Future.delayed(const Duration(milliseconds: 300));
             if (expandedTypes.contains(machineId)) {
-              BlocProvider.of<MachineBloc>(context).retrieveMachines(machineId);
+              BlocProvider.of<MachineBloc>(context)
+                  .retrieveMachines(machineId);
             } else {
-              setState(() {
-                expandedTypes.add(machineId);
-              });
+              setState(() => expandedTypes.add(machineId));
             }
           },
-
         );
       },
     );
   }
- void _editMachine(BuildContext context, dynamic machine, int machineTypeId) async {
+
+  void _editMachine(
+      BuildContext context, dynamic machine, int machineTypeId) async {
     final nameController = TextEditingController(text: machine.name);
     final capacityController = TextEditingController(
         text: machine.processingPercentage.toStringAsFixed(1));
     final preparationController = TextEditingController(
         text: machine.preparationPercentage.toStringAsFixed(1));
-    final restController = TextEditingController(
-        text: machine.restPercentage.toStringAsFixed(1));
+    // Convert stored percentage back to minutes for display.
+    final restMinutes = (60 * machine.restPercentage / 100).round();
+    final restController =
+        TextEditingController(text: restMinutes.toString());
     final continueController = TextEditingController(
         text: machine.continueCapacity.toString());
     final availabilityController = TextEditingController(
@@ -403,12 +378,15 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: continueController,
           availabilityDateTimeController: availabilityController,
           quantityController: quantityController,
-          addMachineHandle: () async {
+          isEditing: true,
+          // Inactivities are not re-submitted on edit; _ discards the parameter.
+          addMachineHandle: (_) async {
             BlocProvider.of<MachineBloc>(context).editMachine(
               machine.id!,
               double.tryParse(capacityController.text) ?? 100.0,
               double.tryParse(preparationController.text) ?? 100.0,
-              double.tryParse(restController.text) ?? 100.0,
+              // Convert minutes → percentage before sending to BLoC.
+              ((int.tryParse(restController.text) ?? 60) * 100) / 60,
               int.tryParse(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),
@@ -416,7 +394,8 @@ class _MachinesListViewState extends State<MachinesListView> {
             Navigator.of(dialogContext).pop();
             await Future.delayed(const Duration(milliseconds: 300));
             if (expandedTypes.contains(machineTypeId)) {
-              BlocProvider.of<MachineBloc>(context).retrieveMachines(machineTypeId);
+              BlocProvider.of<MachineBloc>(context)
+                  .retrieveMachines(machineTypeId);
             }
           },
         );

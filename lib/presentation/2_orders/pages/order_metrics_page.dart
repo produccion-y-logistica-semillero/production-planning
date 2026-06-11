@@ -27,6 +27,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
   late MetricsBloc _metricsBloc;
   late GanttBloc _ganttBloc;
   List<int> _visibleToOriginalIndex = const [];
+  final ScrollController _horizontalScrollController = ScrollController();
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -265,348 +267,354 @@ class _OrderMetricsState extends State<OrderMetrics> {
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainer,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: colorScheme.outlineVariant,
+                          child: Scrollbar(
+                            controller: _horizontalScrollController,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _horizontalScrollController,
+                              scrollDirection: Axis.horizontal,
+                              child: Container(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainer,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: colorScheme.outlineVariant,
+                                  ),
                                 ),
-                              ),
-                              child: DataTable(
-                                headingRowColor: WidgetStateProperty.all(
-                                  colorScheme.surfaceContainerHighest,
-                                ),
-                                dataRowMinHeight: 56,
-                                dataRowMaxHeight: 72,
-                                columns: [
-                                  DataColumn(
-                                    label: Text(
-                                      'Algoritmo',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                child: DataTable(
+                                  headingRowColor: WidgetStateProperty.all(
+                                    colorScheme.surfaceContainerHighest,
+                                  ),
+                                  dataRowMinHeight: 56,
+                                  dataRowMaxHeight: 72,
+                                  columns: [
+                                    DataColumn(
+                                      label: Text(
+                                        'Algoritmo',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: Text(
-                                      'Ociosidad',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Ociosidad',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: Text(
-                                      'Trabajos',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Trabajos',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Tardanza\nprom',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                    DataColumn(
+                                      label: Text(
+                                        'Tardanza\nprom',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Retardo\nprom',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                    DataColumn(
+                                      label: Text(
+                                        'Retardo\nprom',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Retrasados',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
+                                    DataColumn(
+                                      label: Text(
+                                        'Retrasados',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataColumn(
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Makespan',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Flujo Total',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Tardanza\ntotal',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      numeric: true,
+                                      label: Text(
+                                        'Retardo\nponderado',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'Visualización',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  rows: List<DataRow>.generate(
+                                    filteredMetrics.length,
+                                    (index) {
+                                      final m = filteredMetrics[index];
+                                      final isEvenRow = index % 2 == 0;
 
-                                    numeric: true,
-                                    label: Text(
-                                      'Makespan',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: Text(
-                                      'Flujo Total',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: Text(
-                                      'Tardanza\ntotal',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: Text(
-                                      'Retardo\nponderado',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'Visualización',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                rows: List<DataRow>.generate(
-                                  filteredMetrics.length,
-                                  (index) {
-                                    final m = filteredMetrics[index];
-                                    final isEvenRow = index % 2 == 0;
-
-                                    return DataRow(
-                                      color: WidgetStateProperty.all(
-                                        isEvenRow
-                                            ? colorScheme.surface
-                                                .withOpacity(0.5)
-                                            : Colors.transparent,
-                                      ),
-                                      cells: [
-                                        DataCell(
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  colorScheme.tertiaryContainer,
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              filteredRuleNames[index],
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                                color: colorScheme
-                                                    .onTertiaryContainer,
-                                                fontSize: 12,
+                                      return DataRow(
+                                        color: WidgetStateProperty.all(
+                                          isEvenRow
+                                              ? colorScheme.surface
+                                                  .withOpacity(0.5)
+                                              : Colors.transparent,
+                                        ),
+                                        cells: [
+                                          DataCell(
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 6,
                                               ),
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.idle}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.totalJobs}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            _fmtAverageDelay(m),
-                                            style: TextStyle(
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            _fmtAverageLateness(m),
-                                            style: TextStyle(
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                '${m.delayedJobs}',
-                                                style: TextStyle(
-                                                  color: m.delayedJobs > 0
-                                                      ? colorScheme.error
-                                                      : colorScheme.onSurface,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    colorScheme.tertiaryContainer,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
                                               ),
-                                              Text(
-                                                '(${m.percentageDelayedJobs.toStringAsFixed(1)}%)',
+                                              child: Text(
+                                                filteredRuleNames[index],
                                                 style: TextStyle(
+                                                  fontWeight: FontWeight.w500,
                                                   color: colorScheme
-                                                      .onSurfaceVariant,
-                                                  fontSize: 11,
+                                                      .onTertiaryContainer,
+                                                  fontSize: 12,
                                                 ),
                                               ),
-                                            ],
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.makespan}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.totalFlow}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
+                                          DataCell(
+                                            Text(
+                                              '${m.idle}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.totalTardiness}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
+                                          DataCell(
+                                            Text(
+                                              '${m.totalJobs}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${m.totalWeightedTardiness}',
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
+                                          DataCell(
+                                            Text(
+                                              _fmtAverageDelay(m),
+                                              style: TextStyle(
+                                                color:
+                                                    colorScheme.onSurfaceVariant,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        DataCell(
-                                          Builder(
-                                            builder: (context) {
-                                              final originalIndex =
-                                                  _visibleToOriginalIndex[
-                                                      index];
+                                          DataCell(
+                                            Text(
+                                              _fmtAverageLateness(m),
+                                              style: TextStyle(
+                                                color:
+                                                    colorScheme.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${m.delayedJobs}',
+                                                  style: TextStyle(
+                                                    color: m.delayedJobs > 0
+                                                        ? colorScheme.error
+                                                        : colorScheme.onSurface,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '(${m.percentageDelayedJobs.toStringAsFixed(1)}%)',
+                                                  style: TextStyle(
+                                                    color: colorScheme
+                                                        .onSurfaceVariant,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              '${m.makespan}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              '${m.totalFlow}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              '${m.totalTardiness}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              '${m.totalWeightedTardiness}',
+                                              style: TextStyle(
+                                                color: colorScheme.onSurface,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Builder(
+                                              builder: (context) {
+                                                final originalIndex =
+                                                    _visibleToOriginalIndex[
+                                                        index];
 
-                                              return Wrap(
-                                                spacing: 4,
-                                                runSpacing: 4,
-                                                children: [
-                                                  FilledButton.icon(
-                                                    onPressed: () =>
-                                                        _navigateToGantt(
-                                                            originalIndex),
-                                                    icon: const Icon(
-                                                        Icons.bar_chart,
-                                                        size: 16),
-                                                    label: const Text('Gantt'),
-                                                    style:
-                                                        FilledButton.styleFrom(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 6,
-                                                      ),
-                                                      backgroundColor:
-                                                          colorScheme.tertiary,
-                                                      foregroundColor:
-                                                          colorScheme
-                                                              .onTertiary,
-                                                      textStyle:
-                                                          const TextStyle(
-                                                              fontSize: 12),
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  FilledButton.icon(
-                                                    onPressed: () =>
-                                                        _navigateToGanttData(
-                                                            originalIndex),
-                                                    icon: const Icon(
-                                                        Icons.table_chart,
-                                                        size: 16),
-                                                    label:
-                                                        const Text('Detalle'),
-                                                    style:
-                                                        FilledButton.styleFrom(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 6,
-                                                      ),
-                                                      backgroundColor:
-                                                          colorScheme
-                                                              .primaryContainer,
-                                                      foregroundColor: colorScheme
-                                                          .onPrimaryContainer,
-                                                      textStyle:
-                                                          const TextStyle(
-                                                              fontSize: 12),
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(8),
+                                                return Wrap(
+                                                  spacing: 4,
+                                                  runSpacing: 4,
+                                                  children: [
+                                                    FilledButton.icon(
+                                                      onPressed: () =>
+                                                          _navigateToGantt(
+                                                              originalIndex),
+                                                      icon: const Icon(
+                                                          Icons.bar_chart,
+                                                          size: 16),
+                                                      label: const Text('Gantt'),
+                                                      style:
+                                                          FilledButton.styleFrom(
+                                                        padding: const EdgeInsets
+                                                            .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 6,
+                                                        ),
+                                                        backgroundColor:
+                                                            colorScheme.tertiary,
+                                                        foregroundColor:
+                                                            colorScheme
+                                                                .onTertiary,
+                                                        textStyle:
+                                                            const TextStyle(
+                                                                fontSize: 12),
+                                                        shape:
+                                                            RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(8),
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
-                                                ],
-                                              );
-                                            },
+                                                    FilledButton.icon(
+                                                      onPressed: () =>
+                                                          _navigateToGanttData(
+                                                              originalIndex),
+                                                      icon: const Icon(
+                                                          Icons.table_chart,
+                                                          size: 16),
+                                                      label:
+                                                          const Text('Detalle'),
+                                                      style:
+                                                          FilledButton.styleFrom(
+                                                        padding: const EdgeInsets
+                                                            .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 6,
+                                                        ),
+                                                        backgroundColor:
+                                                            colorScheme
+                                                                .primaryContainer,
+                                                        foregroundColor: colorScheme
+                                                            .onPrimaryContainer,
+                                                        textStyle:
+                                                            const TextStyle(
+                                                                fontSize: 12),
+                                                        shape:
+                                                            RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(8),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    );
-                                  },
+                                        ],
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                             ),

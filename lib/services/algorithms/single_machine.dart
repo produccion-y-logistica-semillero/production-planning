@@ -1,5 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
 class SingleMachineInput {
@@ -60,6 +62,12 @@ class SingleMachine {
   // Starts as null (cold start → no setup cost for the first job).
   String? _lastJobState;
 
+  // Machine inactivity support
+  final List<MachineInactivityEntity> machineInactivities;
+  final int continueCapacity;
+  final Duration? restTime;
+  int processedCount = 0;
+
   SingleMachine(
     this.machineId,
     this.startDate,
@@ -67,6 +75,9 @@ class SingleMachine {
     this.input,
     String rule, {
     this.stateSetupMatrix,
+    this.machineInactivities = const [],
+    this.continueCapacity = 0,
+    this.restTime,
   }) {
     switch (rule) {
       //case "JHONSON":jhonsonRule();break;
@@ -146,7 +157,8 @@ class SingleMachine {
 
     // 3. Schedule processing after setup.
     processStart = _getAvailableStartTime(processStart, job.machineDuration);
-    final DateTime end = processStart.add(job.machineDuration);
+    final rawEnd = processStart.add(job.machineDuration);
+    final DateTime end = _adjustEndTimeWithInactivities(processStart, rawEnd);
     final Duration delay = end.isAfter(job.dueDate)
         ? end.difference(job.dueDate)
         : Duration.zero;
@@ -158,7 +170,7 @@ class SingleMachine {
     // 4. Remember this job's state for the next iteration.
     _lastJobState = job.jobState;
 
-    return end;
+    return _applyRestIfNeeded(end);
   }
 
   /// Pushes [dt] to the start of the next working day if it falls outside
@@ -172,6 +184,95 @@ class SingleMachine {
           workingSchedule.value1.hour, workingSchedule.value1.minute);
     }
     return dt;
+  }
+
+  // Obtener las inactividades para un día específico
+  List<Range> _getInactivitiesForDay(DateTime day) {
+    final weekday = day.weekday;
+    final List<Range> dayInactivities = [];
+
+    for (final inactivity in machineInactivities) {
+      final inactivityWeekdays =
+          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
+
+      if (inactivityWeekdays.contains(weekday)) {
+        final startHour = inactivity.startTime.inHours;
+        final startMinute = inactivity.startTime.inMinutes % 60;
+
+        final inactivityStart = DateTime(
+          day.year, day.month, day.day, startHour, startMinute,
+        );
+
+        final inactivityEnd = inactivityStart.add(inactivity.duration);
+        dayInactivities.add(Range(inactivityStart, inactivityEnd));
+      }
+    }
+
+    return dayInactivities;
+  }
+
+  // Ajustar el tiempo de finalización considerando inactividades programadas
+  DateTime _adjustEndTimeWithInactivities(DateTime start, DateTime end) {
+    DateTime current = start;
+    Duration remaining = end.difference(start);
+
+    while (remaining > Duration.zero) {
+      current = _getStartTime(current);
+
+      final dayInactivities = _getInactivitiesForDay(current);
+
+      final dayEnd = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value2.hour, workingSchedule.value2.minute,
+      );
+
+      DateTime nextAvailable = current;
+      for (final inactivity in dayInactivities) {
+        if (nextAvailable.isBefore(inactivity.end) &&
+            inactivity.start.isBefore(dayEnd)) {
+          if (nextAvailable.isBefore(inactivity.start)) {
+            final availableBeforeInactivity =
+                inactivity.start.difference(nextAvailable);
+
+            if (remaining <= availableBeforeInactivity) {
+              return nextAvailable.add(remaining);
+            } else {
+              remaining -= availableBeforeInactivity;
+              nextAvailable = inactivity.end;
+            }
+          } else {
+            if (nextAvailable.isBefore(inactivity.end)) {
+              nextAvailable = inactivity.end;
+            }
+          }
+        }
+      }
+
+      final availableToday = dayEnd.difference(nextAvailable);
+
+      if (availableToday > Duration.zero && remaining <= availableToday) {
+        return nextAvailable.add(remaining);
+      } else {
+        if (availableToday > Duration.zero) {
+          remaining -= availableToday;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return current;
+  }
+
+  // Aplicar descanso por continueCapacity y devolver el end time ajustado
+  DateTime _applyRestIfNeeded(DateTime endTime) {
+    if (continueCapacity > 0 && restTime != null) {
+      processedCount++;
+      if (processedCount >= continueCapacity) {
+        processedCount = 0;
+        return endTime.add(restTime!);
+      }
+    }
+    return endTime;
   }
 
   // ── Dispatching rules ─────────────────────────────────────────────────────
@@ -395,218 +496,145 @@ class SingleMachine {
     individual[j] = tmp;
     return individual;
   }
+
   Duration calcularMakespanTabuSingle(List<SingleMachineInput> jobSequence) {
-  DateTime current = _getStartTime(jobSequence.first.availableDate);
+    DateTime current = _getStartTime(jobSequence.first.availableDate);
 
-  for (var job in jobSequence) {
-    current = _getAvailableStartTime(current, job.machineDuration);
-    current = current.add(job.machineDuration);
+    for (var job in jobSequence) {
+      current = _getAvailableStartTime(current, job.machineDuration);
+      current = current.add(job.machineDuration);
+    }
+
+    return current.difference(_getStartTime(jobSequence.first.availableDate));
   }
 
-  return current.difference(_getStartTime(jobSequence.first.availableDate));
-}
+  Duration evaluateFlujoTotal(List<SingleMachineInput> seq) {
+    DateTime current = _getStartTime(seq.first.availableDate);
+    DateTime origin = current;
 
-Duration evaluateFlujoTotal(List<SingleMachineInput> seq) {
-
-  DateTime current = _getStartTime(seq.first.availableDate);
-  DateTime origin  = current; 
-
-  Duration sumCompletions = Duration.zero;
-  for (var job in seq) {
-    current = _getAvailableStartTime(current, job.machineDuration);
-    current = current.add(job.machineDuration);
-    sumCompletions += current.difference(origin); // ← origin en vez de startDate
+    Duration sumCompletions = Duration.zero;
+    for (var job in seq) {
+      current = _getAvailableStartTime(current, job.machineDuration);
+      current = current.add(job.machineDuration);
+      sumCompletions += current.difference(origin);
+    }
+    return sumCompletions;
   }
-  return sumCompletions;
-}
 
+  void _generateOutput(List<SingleMachineInput> solution) {
+    output.clear();
+    var time = evaluateFlujoTotal(solution);
+    print("Tiempo del tabu: $time");
 
-void _generateOutput(List<SingleMachineInput> solution) {
-  output.clear();
-  var time = evaluateFlujoTotal(solution);
-  print("Tiempo del tabu: $time");
+    if (solution.isEmpty) return;
 
-  if (solution.isEmpty) return;
+    DateTime scheduleTime = _getStartTime(solution.first.availableDate);
 
-  DateTime scheduleTime = _getStartTime(solution.first.availableDate);
+    for (var job in solution) {
+      print("job ${job.jobId} → duración: ${job.machineDuration} | available: ${job.availableDate} | due: ${job.dueDate}");
 
-  for (var job in solution) {
-    print("job ${job.jobId} → duración: ${job.machineDuration} | available: ${job.availableDate} | due: ${job.dueDate}");
+      DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
+      DateTime end = start.add(job.machineDuration);
+      Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
 
-    DateTime start = _getAvailableStartTime(scheduleTime, job.machineDuration);
-    DateTime end = start.add(job.machineDuration);
-    Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate) : Duration.zero;
+      output.add(
+        SingleMachineOutput(
+          job.jobId,
+          job.machineDuration,
+          start,
+          end,
+          job.dueDate,
+          delay,
+        ),
+      );
 
-    output.add(
-      SingleMachineOutput(
-        job.jobId,
-        job.machineDuration,
-        start,
-        end,
-        job.dueDate,
-        delay,
-      ),
-    );
-
-    scheduleTime = end;
+      scheduleTime = end;
+    }
   }
-}
 
+  void scheduleTabuSearch() {
+    if (input.length < 2) {
+      _generateOutput(input);
+      return;
+    }
+    const int maxIterations = 200;
+    const int tabuTenure = 10;
+    const int maxNoImprove = 20;
+    const int vecinosPorIteracion = 7;
 
-void scheduleTabuSearch() { 
+    // Solución inicial aleatoria
+    List<SingleMachineInput> currentSolution = List.from(input)..shuffle();
 
-  if (input.length < 2) {
+    Duration currentFitness = evaluateFlujoTotal(currentSolution);
+    List<SingleMachineInput> bestSolution = List.from(currentSolution);
+
+    Duration bestFitness = currentFitness;
+    Map<String, int> tabuMap = {};
+
+    int sinMejora = 0;
+    final random = Random();
+    int n = currentSolution.length;
+
+    for (int iter = 0; iter < maxIterations; iter++) {
+      tabuMap.removeWhere((_, exp) => exp <= iter);
+
+      List<SingleMachineInput>? bestNeighbor;
+      Duration bestNeighborFitness = const Duration(days: 9999);
+      int bestI = -1;
+      int bestJ = -1;
+
+      for (int k = 0; k < vecinosPorIteracion; k++) {
+        int i = random.nextInt(n);
+        int j = random.nextInt(n);
+
+        while (i == j) {
+          j = random.nextInt(n);
+        }
+
+        List<SingleMachineInput> neighbor = List.from(currentSolution);
+        final temp = neighbor[i];
+        neighbor[i] = neighbor[j];
+        neighbor[j] = temp;
+
+        Duration neighborFitness = evaluateFlujoTotal(neighbor);
+        String key = '${i}_$j';
+        bool isTabu = tabuMap.containsKey(key);
+        bool aspiration = isTabu && neighborFitness < bestFitness;
+
+        if ((!isTabu || aspiration) && neighborFitness < bestNeighborFitness) {
+          bestNeighborFitness = neighborFitness;
+          bestNeighbor = neighbor;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+
+      if (bestNeighbor == null) {
+        continue;
+      }
+
+      currentSolution = bestNeighbor;
+      currentFitness = bestNeighborFitness;
+      tabuMap['${bestI}_$bestJ'] = iter + tabuTenure + random.nextInt(6) - 2;
+
+      if (currentFitness < bestFitness) {
+        bestFitness = currentFitness;
+        bestSolution = List.from(currentSolution);
+        sinMejora = 0;
+      } else {
+        sinMejora++;
+      }
+
+      if (sinMejora >= maxNoImprove) {
+        currentSolution = List.from(bestSolution)..shuffle();
+        currentFitness = evaluateFlujoTotal(currentSolution);
+        tabuMap.clear();
+        sinMejora = 0;
+      }
+    }
+
+    input = bestSolution;
     _generateOutput(input);
-    return;
   }
-const int maxIterations       = 200;  // maximas iteraciones 
-const int tabuTenure          = 10;   // cuántas iteraciones permanece prohibido un movimiento.
-const int maxNoImprove        = 20;  //  Numero de maximo de iteraciones sin mejora 
-const int vecinosPorIteracion = 7;   // Cantidad  de swaps por iteracion 
-
-  // Solución inicial aleatoria
-  List<SingleMachineInput> currentSolution =List.from(input)..shuffle();
-
-  Duration currentFitness =evaluateFlujoTotal(currentSolution);
-  // Guarda la mejor en una lista independiente 
-  List<SingleMachineInput> bestSolution =List.from(currentSolution);
-
-  Duration bestFitness = currentFitness;
-  // movimiento prohibidos
-  Map<String, int> tabuMap = {};
-
-  int sinMejora = 0;
-
-  final random = Random();
-
-  int n = currentSolution.length;
-  // ciclo de revison 
-  for (int iter = 0; iter < maxIterations; iter++) {
-
-
-    // Limpiar movimientos tabú vencidos
-    tabuMap.removeWhere((_, exp) => exp <= iter);
-
-    List<SingleMachineInput>? bestNeighbor; // Lista de Maquinas 
-
-    Duration bestNeighborFitness = const Duration(days: 9999); // Inicializacion del flujo 
-
-    int bestI = -1; // Asegura los indices 
-    int bestJ = -1;
-
-    // Explorar solo algunos vecinos aleatorios
-    for (int k = 0; k < vecinosPorIteracion; k++) {
-
-      int i = random.nextInt(n); // dos posiciones al azar 
-      int j = random.nextInt(n);
-
-      while (i == j) {
-        j = random.nextInt(n);
-      }
-      // Copia de la lista 
-      List<SingleMachineInput> neighbor = List.from(currentSolution);
-      // swap 
-      final temp = neighbor[i];
-      neighbor[i] = neighbor[j];
-      neighbor[j] = temp;
-
-      Duration neighborFitness =evaluateFlujoTotal(neighbor); // Evalua al vecino 
-
-      String key = '${i}_$j';
-
-      bool isTabu =tabuMap.containsKey(key); // revisa si esta prohibido 
-
-      // Criterio de aspiración
-      bool aspiracion = isTabu && neighborFitness < bestFitness;
-      // Actualizar la mejor solución
-      if ((!isTabu || aspiracion) && neighborFitness <bestNeighborFitness) {
-
-        bestNeighborFitness = neighborFitness;
-
-        bestNeighbor = neighbor;
-
-        bestI = i;
-        bestJ = j;
-      }
-    }
-
-    if (bestNeighbor == null) {
-      continue;
-    }
-
-    // Moverse al mejor vecino(el mejor swap) encontrado y seguir 
-    currentSolution = bestNeighbor;
-    currentFitness = bestNeighborFitness;
-
-    // Registrar movimiento tabú
-    tabuMap['${bestI}_$bestJ'] = iter + tabuTenure +random.nextInt(6) -2;
-
-    // Actualizar mejor global
-    if (currentFitness < bestFitness) {
-
-      bestFitness = currentFitness;
-
-      bestSolution =  List.from(currentSolution);
-
-      sinMejora = 0;
-
-    } else {
-
-      sinMejora++;
-
-    }
-
-
-    // Diversificación (Escapar de optimos locales)
-    if (sinMejora >= maxNoImprove) {
-
-      currentSolution =List.from(bestSolution)..shuffle();
-
-      currentFitness = evaluateFlujoTotal(currentSolution);
-
-      tabuMap.clear();
-
-      sinMejora = 0;
-    }
-  }
-
-  // Mejor solución encontrada
-  input = bestSolution; // mejor secuencia 
-  // Falta esto :
-  output.clear();
-
-  var time = evaluateFlujoTotal(bestSolution) ;
-
-
-  print("Tiempo del tabu: $time");
-
-
-  DateTime scheduleTime = _getStartTime(input.first.availableDate);
-
-  for (var job in input) {
-
-     print("job ${job.jobId} → duración: ${job.machineDuration} | available: ${job.availableDate} | due: ${job.dueDate}");
-
-
-    DateTime start = _getAvailableStartTime(scheduleTime,job.machineDuration);
-
-    DateTime end =start.add(job.machineDuration);
-
-    Duration delay = end.isAfter(job.dueDate) ? end.difference(job.dueDate): Duration.zero;
-
-    output.add(
-      SingleMachineOutput(
-        job.jobId,
-        job.machineDuration,
-        start,
-        end,
-        job.dueDate,
-        delay,
-      ),
-    );
-
-    scheduleTime = end;
-  }
-}
 
 }

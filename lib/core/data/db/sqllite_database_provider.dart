@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -32,7 +30,6 @@ class SQLLiteDatabaseProvider {
     final databasePath = docsDir.path;
     final path = join(databasePath, '${workspace.replaceAll(' ', '')}_v3.db');
 
-    // Log the database path for debugging purposes
     print('Database path: $path');
 
     _database = await openDatabase(
@@ -171,6 +168,8 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
+        // job_name is included from the start (v2 improvement; v1 added it via
+        // migration v9 — having it here avoids the ALTER TABLE on fresh installs).
         batch.execute('''
           CREATE TABLE jobs (
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,6 +185,9 @@ class SQLLiteDatabaseProvider {
           );
         ''');
 
+        // No IF NOT EXISTS here: inside onCreate the DB is brand-new, so the
+        // guard is unnecessary.  Migrations (oldVersion < 5) still use IF NOT
+        // EXISTS because they run on existing databases.
         batch.execute('''
           CREATE TABLE job_preemption (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -306,8 +308,7 @@ class SQLLiteDatabaseProvider {
           'environment_id': 2,
           'name': 'PARALLEL MACHINES',
         });
-        batch
-            .insert('environments', {'environment_id': 3, 'name': 'FLOW SHOP'});
+        batch.insert('environments', {'environment_id': 3, 'name': 'FLOW SHOP'});
         batch.insert('environments', {
           'environment_id': 4,
           'name': 'FLEXIBLE FLOW SHOP',
@@ -317,8 +318,7 @@ class SQLLiteDatabaseProvider {
           'environment_id': 6,
           'name': 'FLEXIBLE JOB SHOP',
         });
-        batch
-            .insert('environments', {'environment_id': 7, 'name': 'OPEN SHOP'});
+        batch.insert('environments', {'environment_id': 7, 'name': 'OPEN SHOP'});
         batch.insert('environments', {
           'environment_id': 8,
           'name': 'FLEXIBLE OPEN SHOP',
@@ -356,8 +356,7 @@ class SQLLiteDatabaseProvider {
           'name': 'MINSLACK',
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 12, 'name': 'CR'});
-        batch
-            .insert('dispatch_rules', {'dispatch_rule_id': 13, 'name': 'ATCS'});
+        batch.insert('dispatch_rules', {'dispatch_rule_id': 13, 'name': 'ATCS'});
 
         // Parallel (IDs 14-22)
         batch.insert('dispatch_rules', {
@@ -386,8 +385,7 @@ class SQLLiteDatabaseProvider {
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 20, 'name': 'CR'});
         batch.insert('dispatch_rules', {'dispatch_rule_id': 21, 'name': 'MS'});
-        batch
-            .insert('dispatch_rules', {'dispatch_rule_id': 22, 'name': 'ATCS'});
+        batch.insert('dispatch_rules', {'dispatch_rule_id': 22, 'name': 'ATCS'});
 
         // Flow Shop (ID 23)
         batch.insert('dispatch_rules', {
@@ -420,26 +418,8 @@ class SQLLiteDatabaseProvider {
 
         // 2: Parallel Machines
         for (final r in [
-          2,
-          3,
-          1,
-          14,
-          11,
-          12,
-          5,
-          6,
-          7,
-          10,
-          15,
-          16,
-          17,
-          18,
-          19,
-          20,
-          21,
-          22,
-          24,
-          25,
+          2, 3, 1, 14, 11, 12, 5, 6, 7, 10,
+          15, 16, 17, 18, 19, 20, 21, 22, 24, 25,
         ]) {
           addRule(2, r);
         }
@@ -800,14 +780,12 @@ class SQLLiteDatabaseProvider {
           'allow_preemption': 0,
         });
 
-        // --- Orders (Panadería, IDs 4-6 reutilizando las existentes del branch 1 sería conflicto;
-        //     aquí van los IDs correctos del branch 2) ---
+        // --- Orders (Panadería, IDs 4-6) ---
         batch.insert('orders', {'order_id': 4, 'reg_date': '2024-10-14'});
         batch.insert('orders', {'order_id': 5, 'reg_date': '2024-10-15'});
         batch.insert('orders', {'order_id': 6, 'reg_date': '2024-10-16'});
 
-        // --- Jobs (Panadería) ---
-        // No explicit job_id: autoincrement continues from 4 after the 3 base jobs.
+        // --- Jobs (Panadería, IDs 4-8) ---
         batch.insert('jobs', {
           'sequence_id': 4,
           'order_id': 4,
@@ -903,7 +881,7 @@ class SQLLiteDatabaseProvider {
         });
 
         // --- Job Preemption (Panadería) ---
-        // Base jobs take IDs 1-3; bakery jobs take 4-8 in insertion order:
+        // Base jobs: IDs 1-3; bakery jobs: 4-8 in insertion order:
         //   4=Pan Integral, 5=Croissants, 6=Pastel, 7=Galletas, 8=Pan Corporativo
         batch.insert('job_preemption', {
           'job_id': 6, // Pastel Cumpleaños → mesa de decorado
@@ -1276,9 +1254,8 @@ class SQLLiteDatabaseProvider {
         batch.insert('orders', {'order_id': 9, 'reg_date': '2024-10-22'});
         batch.insert('orders', {'order_id': 10, 'reg_date': '2024-10-23'});
 
-        // --- Jobs (Textiles) ---
-        // No explicit job_id: autoincrement continues from 9
-        // (3 base + 5 bakery = 8 already inserted → textile starts at 9).
+        // --- Jobs (Textiles, IDs 9-16) ---
+        // 3 base + 5 bakery = 8 already inserted → textile starts at 9.
 
         // Order 7: Single Machine (seq 8)
         batch.insert('jobs', {
@@ -1425,7 +1402,7 @@ class SQLLiteDatabaseProvider {
         }
 
         if (oldVersion < 8) {
-          // Convert machine time columns to percentage columns
+          // Convert machine time columns to percentage columns.
           await db.execute('''
             CREATE TABLE MACHINES_NEW (
                 machine_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1494,7 +1471,7 @@ class SQLLiteDatabaseProvider {
         }
 
         if (oldVersion < 10) {
-          // Ensure all environments introduced after v3 exist
+          // Ensure all environments introduced after v3 exist.
           await db.execute('''
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(5, 'JOB SHOP');
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(6, 'FLEXIBLE JOB SHOP');
@@ -1502,7 +1479,7 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO environments (environment_id, name) VALUES(8, 'FLEXIBLE OPEN SHOP');
           ''');
 
-          // Ensure all dispatch rules introduced in later branches exist
+          // Ensure all dispatch rules introduced in later branches exist.
           await db.execute('''
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (11, 'MINSLACK');
             INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) VALUES (12, 'CR');
@@ -1564,7 +1541,7 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (8, 24);
           ''');
 
-          // Single Machine: ensure TABU rule is linked (added in branch 1)
+          // Single Machine & Parallel Machines: ensure TABU rule is linked.
           await db.execute('''
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (1, 25);
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 25);
@@ -1573,8 +1550,11 @@ class SQLLiteDatabaseProvider {
       },
     );
 
-    // Tables created outside the versioned onCreate/onUpgrade so they are
-    // always guaranteed to exist on every open() call.
+    // ─── Post-open guarantees ───────────────────────────────────────────────
+    // These tables are created outside the versioned onCreate/onUpgrade so they
+    // are always guaranteed to exist on every open() call, regardless of which
+    // migration path was taken.
+
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS job_machine_states (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1618,7 +1598,7 @@ class SQLLiteDatabaseProvider {
           UNIQUE(job_id, machine_id)
       );
     ''');
-    
+
     await _database!.execute('''
       CREATE TABLE IF NOT EXISTS order_setup_matrix (
           id INTEGER PRIMARY KEY AUTOINCREMENT,

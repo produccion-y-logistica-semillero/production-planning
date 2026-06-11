@@ -58,6 +58,12 @@ class FlowShop {
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
 
+  // Machine inactivity support
+  final Map<int, List<dynamic>> machineInactivities;
+  final Map<int, int> machineContinueCapacity;
+  final Map<int, Duration?> machineRestTime;
+  Map<int, int> machineProcessedCount = {};
+
   FlowShop(
     this.startDate,
     this.workingSchedule,
@@ -67,7 +73,15 @@ class FlowShop {
     Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
     this.stateSetupMatrix,
     this.jobStates,
+    this.machineInactivities = const {},
+    this.machineContinueCapacity = const {},
+    this.machineRestTime = const {},
   }) : changeoverMatrix = changeoverMatrix ?? {} {
+    _initializeMachineLastSequence();
+    // Inicializar contador de procesamiento por máquina
+    for (final machineId in machinesAvailability.keys) {
+      machineProcessedCount[machineId] = 0;
+    }
     final r = rule.toUpperCase();
     switch (r) {
       case "EDD":
@@ -268,11 +282,29 @@ class FlowShop {
       );
       final Duration totalDuration = duration + setupDuration;
 
+      final end = startTime.add(totalDuration);
+      final adjustedEnd = _adjustEndTimeWithInactivities(machineId, startTime, end);
+
+      // Aplicar descanso por continueCapacity
+      DateTime finalEnd = adjustedEnd;
+      final capacity = machineContinueCapacity[machineId] ?? 0;
+      final restTime = machineRestTime[machineId];
+
+      if (capacity > 0 && restTime != null) {
+        machineProcessedCount[machineId] =
+            (machineProcessedCount[machineId] ?? 0) + 1;
+
+        if (machineProcessedCount[machineId]! >= capacity) {
+          finalEnd = adjustedEnd.add(restTime);
+          machineProcessedCount[machineId] = 0;
+        }
+      }
+
       DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
       actualStartTime ??= startTime;
 
-      scheduling[machineId] = Tuple2(taskId, Range(startTime, endTime));
-      machinesAvailability[machineId] = endTime;
+      scheduling[machineId] = Tuple2(taskId, Range(startTime, adjustedEnd));
+      machinesAvailability[machineId] = finalEnd;
       _machineLastSequence[machineId] = job.sequenceId;
       _machineLastJob[machineId] = job.jobId;
       jobStartTime = endTime;
@@ -342,6 +374,13 @@ class FlowShop {
     return job.taskTimesInMachines.values.fold(0, (sum, duration) => sum + duration.inMinutes);
   }
 
+  void _initializeMachineLastSequence() {
+    for (final machineId in machinesAvailability.keys) {
+      _machineLastSequence[machineId] = null;
+      _machineLastJob[machineId] = null;
+    }
+  }
+
   DateTime _adjustForWorkingSchedule(DateTime start) {
     TimeOfDay workingStart = workingSchedule.value1;
     TimeOfDay workingEnd = workingSchedule.value2;
@@ -352,6 +391,114 @@ class FlowShop {
       return DateTime(start.year, start.month, start.day + 1, workingStart.hour, workingStart.minute);
     }
     return start;
+  }
+
+  // Obtener las inactividades de una máquina para un día específico
+  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
+    final inactivities = machineInactivities[machineId] ?? [];
+    final weekday = day.weekday; // 1=Monday, 7=Sunday
+    final List<Range> dayInactivities = [];
+
+    for (final inactivity in inactivities) {
+      // Cast to MachineInactivityEntity or extract properties dynamically
+      final inactivityWeekdays = _getWeekdays(inactivity);
+
+      if (inactivityWeekdays.contains(weekday)) {
+        final startTime = _getStartTime(inactivity);
+        final duration = _getDuration(inactivity);
+
+        final startHour = startTime.inHours;
+        final startMinute = startTime.inMinutes % 60;
+
+        final inactivityStart = DateTime(
+          day.year, day.month, day.day, startHour, startMinute,
+        );
+
+        final inactivityEnd = inactivityStart.add(duration);
+        dayInactivities.add(Range(inactivityStart, inactivityEnd));
+      }
+    }
+
+    return dayInactivities;
+  }
+
+  Set<int> _getWeekdays(dynamic inactivity) {
+    try {
+      return (inactivity.weekdays as List)
+          .map<int>((wd) => wd.index + 1)
+          .toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Duration _getStartTime(dynamic inactivity) {
+    try {
+      return inactivity.startTime as Duration;
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
+
+  Duration _getDuration(dynamic inactivity) {
+    try {
+      return inactivity.duration as Duration;
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
+
+  // Ajustar el tiempo de finalización considerando inactividades programadas
+  DateTime _adjustEndTimeWithInactivities(
+      int machineId, DateTime start, DateTime end) {
+    DateTime current = start;
+    Duration remaining = end.difference(start);
+
+    while (remaining > Duration.zero) {
+      current = _adjustForWorkingSchedule(current);
+
+      final dayInactivities = _getInactivitiesForDay(machineId, current);
+
+      final dayEnd = DateTime(
+        current.year, current.month, current.day,
+        workingSchedule.value2.hour, workingSchedule.value2.minute,
+      );
+
+      DateTime nextAvailable = current;
+      for (final inactivity in dayInactivities) {
+        if (nextAvailable.isBefore(inactivity.end) &&
+            inactivity.start.isBefore(dayEnd)) {
+          if (nextAvailable.isBefore(inactivity.start)) {
+            final availableBeforeInactivity =
+                inactivity.start.difference(nextAvailable);
+
+            if (remaining <= availableBeforeInactivity) {
+              return nextAvailable.add(remaining);
+            } else {
+              remaining -= availableBeforeInactivity;
+              nextAvailable = inactivity.end;
+            }
+          } else {
+            if (nextAvailable.isBefore(inactivity.end)) {
+              nextAvailable = inactivity.end;
+            }
+          }
+        }
+      }
+
+      final availableToday = dayEnd.difference(nextAvailable);
+
+      if (availableToday > Duration.zero && remaining <= availableToday) {
+        return nextAvailable.add(remaining);
+      } else {
+        if (availableToday > Duration.zero) {
+          remaining -= availableToday;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return current;
   }
 
   DateTime _calculateEndWithSchedule(DateTime start, Duration duration) {

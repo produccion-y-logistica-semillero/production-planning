@@ -1,8 +1,4 @@
 // lib/presentation/2_orders/pages/new_order_page.dart
-//
-// Fix (this version): DropdownMenuItem child used Expanded inside an
-// unbounded Row, which Flutter cannot lay out and throws an infinite
-// layout-error loop.  Replaced with mainAxisSize.min + plain Text.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,7 +8,9 @@ import 'package:production_planning/presentation/2_orders/widgets/high_order/add
 import 'package:production_planning/shared/functions/functions.dart';
 
 class NewOrderPage extends StatelessWidget {
-  const NewOrderPage({super.key});
+  final int? editOrderId;
+
+  const NewOrderPage({super.key, this.editOrderId});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +18,9 @@ class NewOrderPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crear Nuevo Programa de Produccion'),
+        title: Text(editOrderId != null
+            ? 'Editar Programa de Producción'
+            : 'Crear Nuevo Programa de Produccion'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
@@ -64,8 +64,40 @@ class NewOrderPage extends StatelessWidget {
               final bloc = BlocProvider.of<NewOrderBloc>(context);
 
               if (state is NewOrdersInitialState) {
-                bloc.retrieveSequences();
+                if (editOrderId != null) {
+                  bloc.loadOrderForEdit(editOrderId!);
+                } else {
+                  bloc.retrieveSequences();
+                }
                 return const Center(child: CircularProgressIndicator());
+              }
+
+              if (state is NewOrdersFailureState) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: colorScheme.error),
+                      const SizedBox(height: 16),
+                      Text('Error al cargar los datos',
+                          style: TextStyle(color: colorScheme.error, fontSize: 18)),
+                      const SizedBox(height: 8),
+                      Text('Verifique la conexión a la base de datos',
+                          style: TextStyle(color: colorScheme.onSurface)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (editOrderId != null) {
+                            bloc.loadOrderForEdit(editOrderId!);
+                          } else {
+                            bloc.retrieveSequences();
+                          }
+                        },
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                );
               }
 
               final List<AddJobWidget> jobWidgets =
@@ -131,7 +163,11 @@ class NewOrderPage extends StatelessWidget {
                         if (!_validateForm(state)) {
                           _showValidationDialog(context, colorScheme);
                         } else {
-                          bloc.saveOrder();
+                          if (editOrderId != null) {
+                            bloc.updateOrder(editOrderId!);
+                          } else {
+                            bloc.saveOrder();
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -142,7 +178,9 @@ class NewOrderPage extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
-                      child: const Text('Crear programa de produccion'),
+                      child: Text(editOrderId != null
+                          ? 'Guardar Cambios'
+                          : 'Crear programa de produccion'),
                     ),
                   ],
                 ),

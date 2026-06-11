@@ -21,6 +21,63 @@ import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 
+// Helper widget for numeric input with max value validation
+class _MaxValueFormatter extends TextInputFormatter {
+  final int max;
+  _MaxValueFormatter(this.max);
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    final val = int.tryParse(newValue.text);
+    if (val != null && val > max) return oldValue;
+    return newValue;
+  }
+}
+
+class _HhMmSsTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.isEmpty) return newValue;
+
+    String result = '';
+    for (int i = 0; i < text.length && i < 6; i++) {
+      if (i == 2 || i == 4) result += ':';
+      result += text[i];
+    }
+
+    return TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(offset: result.length),
+    );
+  }
+}
+
+/// Helper to create numeric input fields for HH, MM, SS with max values
+Widget _bottomSheetSegment(
+    TextEditingController controller, String label, int max) {
+  return Expanded(
+    child: TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        counterText: '',
+      ),
+      keyboardType: TextInputType.number,
+      maxLength: 2,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(2),
+        _MaxValueFormatter(max),
+      ],
+      textAlign: TextAlign.center,
+    ),
+  );
+}
+
 // ignore: must_be_immutable
 class AddJobWidget extends StatefulWidget {
   DateTime? availableDate;
@@ -47,6 +104,7 @@ class AddJobWidget extends StatefulWidget {
     required this.idController,
     required this.index,
     required this.sequences,
+    this.selectedSequence,
   }) : super(key: stateKey);
 
   factory AddJobWidget({
@@ -59,6 +117,7 @@ class AddJobWidget extends StatefulWidget {
     required TextEditingController? idController,
     required int index,
     required List<dartz.Tuple2<int, String>> sequences,
+    int? selectedSequence,
     GlobalKey<AddJobState>? stateKey,
   }) {
     final key = stateKey ?? GlobalKey<AddJobState>();
@@ -73,6 +132,7 @@ class AddJobWidget extends StatefulWidget {
       idController: idController,
       index: index,
       sequences: sequences,
+      selectedSequence: selectedSequence,
     );
   }
 
@@ -328,13 +388,26 @@ class AddJobState extends State<AddJobWidget> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                onPressed: () => BlocProvider.of<NewOrderBloc>(context)
-                    .removeJob(widget.index),
-                icon: Icon(Icons.delete, color: colorScheme.error),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    BlocProvider.of<NewOrderBloc>(context)
+                        .duplicateJob(widget.index);
+                  },
+                  icon: Icon(Icons.copy_all, color: colorScheme.primary),
+                  tooltip: 'Duplicar job',
+                ),
+                IconButton(
+                  onPressed: () {
+                    BlocProvider.of<NewOrderBloc>(context)
+                        .removeJob(widget.index);
+                  },
+                  icon: Icon(Icons.delete, color: colorScheme.error),
+                  tooltip: 'Eliminar job',
+                ),
+              ],
             ),
             TextFormField(
               controller: widget.idController,
@@ -885,25 +958,5 @@ class AddJobState extends State<AddJobWidget> {
         ),
       );
     }).toList();
-  }
-}
-
-/// Formatter: digits only → auto-inserts colons as HH:MM:SS
-class _HhMmSsTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 6) digits = digits.substring(0, 6);
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      buffer.write(digits[i]);
-      if (i == 1 || i == 3) buffer.write(':');
-    }
-    final text = buffer.toString();
-    return TextEditingValue(
-        text: text, selection: TextSelection.collapsed(offset: text.length));
   }
 }

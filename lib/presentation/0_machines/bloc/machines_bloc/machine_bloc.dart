@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/services/machines_service.dart';
 
@@ -8,13 +9,17 @@ class MachineBloc extends Cubit<MachinesState> {
   MachineBloc(this.service) : super(MachinesStateInitial(null, null));
 
   void retrieveMachines(int typeId) async {
-    //emit so it shows loading
     emit(MachinesRetrieving(null, state.typeId));
     final response = await service.getMachines(typeId);
-    response.fold((f) => emit(MachinesRetrievingError(null, state.typeId)),
-        (machines) => emit(MachinesRetrievingSuccess(machines, state.typeId)));
+    response.fold(
+      (f) => emit(MachinesRetrievingError(null, state.typeId)),
+      (machines) => emit(MachinesRetrievingSuccess(machines, state.typeId)),
+    );
   }
 
+  // scheduledInactivities: lista de inactividades programadas para la máquina
+  // nueva. Se persiste una a una tras crear la máquina (archivo 1). El archivo
+  // 2 no tenía este parámetro; en caso de no necesitarse, se puede pasar [].
   void addNewMachine(
     double processingPercentage,
     double preparationPercentage,
@@ -23,42 +28,52 @@ class MachineBloc extends Cubit<MachinesState> {
     String machineName,
     int typeId,
     String availabilityDateTimeStr,
+    List<MachineInactivityEntity> scheduledInactivities,
   ) async {
     List<MachineEntity> machines = [];
 
     if (state is MachinesRetrievingSuccess) machines = state.machines ?? [];
     final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
-    //here we should call domain and get as response the machine entity to ad
 
     final response = await service.addMachine(
-        typeId,
-        machineName,
-        null,
-        processingPercentage,
-        preparationPercentage,
-        restPercentage,
-        continueCapacity,
-        availabilityDateTime);
+      typeId,
+      machineName,
+      null,
+      processingPercentage,
+      preparationPercentage,
+      restPercentage,
+      continueCapacity,
+      availabilityDateTime,
+    );
 
-    response.fold((f) => MachinesRetrievingSuccess(machines, state.typeId),
-        (mac) {
-      //NEED TO CHECK BECAUSE WHEN ADDING THE NEW MACHINE IT SAYS ID IS NULL EVEN TOUGH IS NOT
-      emit(MachinesRetrievingSuccess(machines, state.typeId));
-    });
+    response.fold(
+      (f) => MachinesRetrievingSuccess(machines, state.typeId),
+      (mac) async {
+        // Persiste cada inactividad vinculada a la nueva máquina.
+        // TODO: verificar que mac.id no sea null en tiempo de ejecución.
+        for (final inactivity in scheduledInactivities) {
+          await service.addMachineInactivity(
+            inactivity.copyWith(machineId: mac.id),
+          );
+        }
+        emit(MachinesRetrievingSuccess(machines, state.typeId));
+      },
+    );
   }
 
   void deleteMachine(int machineID) async {
     List<MachineEntity> machines = state.machines ?? [];
 
     final response = await service.deleteMachine(machineID);
-    response
-        .fold((failure) => emit(MachineDeletionError(machines, state.typeId)),
-            (boolean) {
-      if (boolean) {
-        machines.removeWhere((machine) => machine.id == machineID);
-        emit(MachineDeletionSuccess(machines, state.typeId));
-      }
-    });
+    response.fold(
+      (failure) => emit(MachineDeletionError(machines, state.typeId)),
+      (boolean) {
+        if (boolean) {
+          machines.removeWhere((machine) => machine.id == machineID);
+          emit(MachineDeletionSuccess(machines, state.typeId));
+        }
+      },
+    );
   }
 
   void machinesExpansionCollapses() async {
@@ -67,37 +82,37 @@ class MachineBloc extends Cubit<MachinesState> {
 
   void machineSetType(int typeId) async {
     emit(MachineTypeIdSet(state.machines, typeId));
-
   }
-   void editMachine(
-  int machineId,
-  double processingPercentage,
-  double preparationPercentage,
-  double restPercentage,
-  int continueCapacity,
-  String machineName,
-  String availabilityDateTimeStr,
-) async {
-  List<MachineEntity> machines = state.machines ?? [];
-  final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
 
-  final response = await service.editMachine(
-    machineId,
-    machineName,
-    processingPercentage,
-    preparationPercentage,
-    restPercentage,
-    continueCapacity,
-    availabilityDateTime,
-  );
+  void editMachine(
+    int machineId,
+    double processingPercentage,
+    double preparationPercentage,
+    double restPercentage,
+    int continueCapacity,
+    String machineName,
+    String availabilityDateTimeStr,
+  ) async {
+    List<MachineEntity> machines = state.machines ?? [];
+    final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
 
-  response.fold(
-    (failure) => emit(MachinesRetrievingSuccess(machines, state.typeId)),
-    (updatedMachine) {
-      final index = machines.indexWhere((m) => m.id == machineId);
-      if (index != -1) machines[index] = updatedMachine;
-      emit(MachinesRetrievingSuccess(List.from(machines), state.typeId));
-    },
-  );
-}
+    final response = await service.editMachine(
+      machineId,
+      machineName,
+      processingPercentage,
+      preparationPercentage,
+      restPercentage,
+      continueCapacity,
+      availabilityDateTime,
+    );
+
+    response.fold(
+      (failure) => emit(MachinesRetrievingSuccess(machines, state.typeId)),
+      (updatedMachine) {
+        final index = machines.indexWhere((m) => m.id == machineId);
+        if (index != -1) machines[index] = updatedMachine;
+        emit(MachinesRetrievingSuccess(List.from(machines), state.typeId));
+      },
+    );
+  }
 }

@@ -1,14 +1,14 @@
 // lib/services/adapters/flexible_flow_shop_adapter.dart
 //
-// Changes from merged version:
-//   • Accepts SetupTimeService and attaches the in-memory matrix cache to the
-//     OrderEntity before calling the algorithm.
-//   • buildMachineStateSetupMatrix / buildJobMachineStates imported from
-//     shared/functions/functions.dart.
+// buildMachineStateSetupMatrix / buildJobMachineStates (imported from
+// shared/utils/task_time_utils.dart) build the sequence-dependent,
+// state-based setup matrix directly from the order's persisted
+// setupTimeMatrix (see OrderEntity / order_setup_matrix table).
 
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -17,19 +17,16 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
-import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
-  final SetupTimeService setupTimeService; // <── added
 
   FlexibleFlowShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
-    required this.setupTimeService,
   });
 
   int toInt(dynamic value) {
@@ -41,24 +38,10 @@ class FlexibleFlowShopAdapter {
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(
       int orderId, String rule) async {
-    // ── 1. Load order and attach setup matrices ────────────────────────────
+    // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? baseOrder = responseOrder.fold((f) => null, (o) => o);
-    if (baseOrder == null || baseOrder.orderJobs == null) return null;
-
-    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
-    if (baseOrder.setupTimeMatrix != null) {
-      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
-    }
-    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
-
-    final OrderEntity order = OrderEntity(
-      baseOrder.orderId,
-      baseOrder.regDate,
-      baseOrder.orderJobs,
-      setupTimeMatrix:
-          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
-    );
+    OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
+    if (order == null || order.orderJobs == null) return null;
 
     // ── 2. Resolve machines ────────────────────────────────────────────────
     final List<int> machineTypeIds = order.orderJobs!
@@ -84,6 +67,7 @@ class FlexibleFlowShopAdapter {
     final List<FlexibleFlowInput> inputJobs = [];
     for (final job in order.orderJobs!) {
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
+      final Map<int, bool> interruptibleByTask = {};
       for (final task in job.sequence!.tasks!) {
         final Map<int, Duration> machineDurations = {};
         for (final machine
@@ -104,16 +88,21 @@ class FlexibleFlowShopAdapter {
           }
         }
         taskSequence.add(Tuple2(task.id!, machineDurations));
+        // A stage can have several candidate machines; use the first
+        // candidate's preemption-matrix override if one applies, falling
+        // back to the task's own default.
+        interruptibleByTask[task.id!] = machineDurations.keys.isEmpty
+            ? task.allowPreemption
+            : resolveInterruptible(job, task, machineDurations.keys.first);
       }
-      for (var i = 0; i < job.amount; i++) {
-        inputJobs.add(FlexibleFlowInput(
-          job.jobId!,
-          job.dueDate,
-          job.priority,
-          job.availableDate,
-          taskSequence,
-        ));
-      }
+      inputJobs.add(FlexibleFlowInput(
+        job.jobId!,
+        job.dueDate,
+        job.priority,
+        job.availableDate,
+        taskSequence,
+        interruptibleByTask: interruptibleByTask,
+      ));
     }
 
     // ── 5. Initial machine availability ───────────────────────────────────
@@ -122,6 +111,18 @@ class FlexibleFlowShopAdapter {
     };
 
     // ── 6. Run algorithm ──────────────────────────────────────────────────
+    // continueCapacity is interpreted as minutes of continuous processing
+    // before a mandatory rest (see PreemptionEngine), not a job count.
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machines) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
+      machineRestTimeMap[machine.id!] =
+          Duration(minutes: (60 * machine.restPercentage / 100).round());
+    }
+
     List<FlexibleFlowOutput> output;
     try {
       output = FlexibleFlowShop(
@@ -132,6 +133,9 @@ class FlexibleFlowShopAdapter {
         rule.toUpperCase(),
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
+        machineInactivities: machineInactivitiesMap,
+        machineContinueCapacity: machineContinueCapacityMap,
+        machineRestTime: machineRestTimeMap,
       ).output;
     } catch (error, stack) {
       print('FlexibleFlowShopAdapter error: $error');
@@ -150,14 +154,10 @@ class FlexibleFlowShopAdapter {
         ),
     ];
 
-    final Map<int, int> jobCounter = {};
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final sequence = job.sequence!;
-      final current = (jobCounter[out.jobId] ?? 0) + 1;
-      jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
 
       for (final taskEntry in out.scheduling.entries) {
         final taskId = taskEntry.key;
@@ -168,7 +168,7 @@ class FlexibleFlowShopAdapter {
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
           sequenceName: sequence.name,
-          displayName: displayName,
+          displayName: jobName,
           taskId: task.id!,
           numberProcess: taskId,
           startDate: timeRange.startDate,
@@ -176,6 +176,7 @@ class FlexibleFlowShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.endDate),
           jobId: job.jobId!,
           orderId: orderId,
+          segments: out.segmentsByStation[taskId],
         );
 
         planningMachines

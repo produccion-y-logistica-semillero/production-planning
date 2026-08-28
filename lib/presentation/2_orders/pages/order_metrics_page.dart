@@ -53,12 +53,13 @@ class _OrderMetricsState extends State<OrderMetrics> {
     return _durationToString(d);
   }
 
-  String _fmtAverageLateness(Metrics m) {
-    final d = m.avarageLatenessTime;
+  String _fmtAverageEarliness(Metrics m) {
+    final d = m.avarageEarlinessTime;
     return _durationToString(d);
   }
 
-  String _durationToString(Duration d) {
+  String _durationToString(Duration duration) {
+    final d = duration.isNegative ? duration.abs() : duration;
     if (d == Duration.zero) return '0:00:00';
     final hours = d.inHours;
     final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -330,7 +331,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                     ),
                                     DataColumn(
                                       label: Text(
-                                        'Retardo\nprom',
+                                        'Adelanto\nprom',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w600,
                                           color: colorScheme.primary,
@@ -462,7 +463,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                           ),
                                           DataCell(
                                             Text(
-                                              _fmtAverageLateness(m),
+                                              _fmtAverageEarliness(m),
                                               style: TextStyle(
                                                 color:
                                                     colorScheme.onSurfaceVariant,

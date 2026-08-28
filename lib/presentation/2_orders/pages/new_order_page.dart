@@ -127,6 +127,8 @@ class NewOrderPage extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (state is NewOrdersState)
+                      _buildDateModeToggle(context, bloc, state, colorScheme),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(children: jobWidgets),
@@ -188,6 +190,66 @@ class NewOrderPage extends StatelessWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Date-registration mode toggle
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDateModeToggle(
+    BuildContext context,
+    NewOrderBloc bloc,
+    NewOrdersState state,
+    ColorScheme colorScheme,
+  ) {
+    final leadTimeController =
+        TextEditingController(text: state.leadTimeDays.toString());
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          SegmentedButton<DateRegistrationMode>(
+            segments: const [
+              ButtonSegment(
+                value: DateRegistrationMode.manual,
+                label: Text('Manual'),
+                icon: Icon(Icons.edit_calendar_rounded, size: 16),
+              ),
+              ButtonSegment(
+                value: DateRegistrationMode.automatic,
+                label: Text('Automático'),
+                icon: Icon(Icons.auto_awesome_rounded, size: 16),
+              ),
+            ],
+            selected: {state.dateMode},
+            onSelectionChanged: (selection) =>
+                bloc.setDateMode(selection.first),
+          ),
+          if (state.dateMode == DateRegistrationMode.automatic) ...[
+            const SizedBox(width: 12),
+            const Text('Plazo (días):'),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 60,
+              child: TextField(
+                controller: leadTimeController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(isDense: true),
+                onSubmitted: (value) {
+                  final days = int.tryParse(value.trim());
+                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
+                },
+                onEditingComplete: () {
+                  final days = int.tryParse(leadTimeController.text.trim());
+                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -364,11 +426,11 @@ class NewOrderPage extends StatelessWidget {
 
   bool _validateForm(NewOrderState state) {
     if (state is NewOrdersState && state.jobs.isNotEmpty) {
+      final datesAreManual = state.dateMode == DateRegistrationMode.manual;
       for (final job in state.jobs) {
         if (job.priorityController?.text.isEmpty ?? true) return false;
-        if (job.quantityController?.text.isEmpty ?? true) return false;
-        if (job.availableDate == null) return false;
-        if (job.dueDate == null) return false;
+        if (datesAreManual && job.availableDate == null) return false;
+        if (datesAreManual && job.dueDate == null) return false;
         if (job.selectedSequence == null) return false;
       }
       return true;

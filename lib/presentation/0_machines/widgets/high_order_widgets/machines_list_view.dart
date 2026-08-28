@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
+import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
@@ -231,6 +232,8 @@ class _MachinesListViewState extends State<MachinesListView> {
     final controllerContinue = TextEditingController(text: "1");
     final availabilityDateTimeController = TextEditingController();
     final quantityController = TextEditingController(text: "1");
+    final startModeNotifier =
+        ValueNotifier<MachineStartMode>(MachineStartMode.specificDate);
 
     double? parsePercentage(String text) {
       final normalized = text.replaceAll(',', '.').trim();
@@ -250,6 +253,7 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: controllerContinue,
           availabilityDateTimeController: availabilityDateTimeController,
           quantityController: quantityController,
+          startModeNotifier: startModeNotifier,
           // scheduledInactivities is passed from the dialog to the BLoC.
           addMachineHandle: (scheduledInactivities) async {
             final quantity =
@@ -265,6 +269,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                 restMinutes != null ? (restMinutes * 100) / 60 : null;
             final continueCapacity =
                 int.tryParse(controllerContinue.text.trim());
+            final startMode = startModeNotifier.value;
 
             final hasInvalidFields = processingPercent == null ||
                 processingPercent <= 0 ||
@@ -275,7 +280,8 @@ class _MachinesListViewState extends State<MachinesListView> {
                 nameController.text.trim().isEmpty ||
                 continueCapacity == null ||
                 continueCapacity <= 0 ||
-                availabilityDateTimeController.text.trim().isEmpty ||
+                (startMode == MachineStartMode.specificDate &&
+                    availabilityDateTimeController.text.trim().isEmpty) ||
                 quantity <= 0;
 
             if (hasInvalidFields) {
@@ -328,6 +334,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                 machineId,
                 availabilityDateTimeController.text,
                 scheduledInactivities,
+                startMode: startMode,
               );
             }
 
@@ -365,6 +372,9 @@ class _MachinesListViewState extends State<MachinesListView> {
           : '',
     );
     final quantityController = TextEditingController(text: '1');
+    final startModeNotifier = ValueNotifier<MachineStartMode>(
+      machine.startMode ?? MachineStartMode.specificDate,
+    );
 
     await showDialog(
       context: context,
@@ -378,6 +388,7 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: continueController,
           availabilityDateTimeController: availabilityController,
           quantityController: quantityController,
+          startModeNotifier: startModeNotifier,
           isEditing: true,
           // Inactivities are not re-submitted on edit; _ discards the parameter.
           addMachineHandle: (_) async {
@@ -390,6 +401,7 @@ class _MachinesListViewState extends State<MachinesListView> {
               int.tryParse(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),
+              startMode: startModeNotifier.value,
             );
             Navigator.of(dialogContext).pop();
             await Future.delayed(const Duration(milliseconds: 300));

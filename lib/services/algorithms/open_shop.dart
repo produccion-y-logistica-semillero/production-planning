@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -16,6 +17,11 @@ class OpenShopInput {
   final List<Tuple2<int, Map<int, Duration>>> operations;
   final List<TaskDependencyEntity> dependencies;
 
+  /// Whether each task (keyed by task id) may be split by a work-shift
+  /// boundary, the continuous-use rest cap, or a maintenance window.
+  /// Missing entries default to interruptible.
+  final Map<int, bool> interruptibleByTask;
+
   OpenShopInput(
     this.jobId,
     this.dbJobId,
@@ -25,8 +31,11 @@ class OpenShopInput {
     this.availableDate,
     this.operations, {
     this.dependencies = const [],
+    this.interruptibleByTask = const {},
   }
   );
+
+  bool isTaskInterruptible(int taskId) => interruptibleByTask[taskId] ?? true;
 }
 
 class OpenShopOutput {
@@ -38,14 +47,22 @@ class OpenShopOutput {
   // Scheduling: taskId -> (machineId, Range)
   final Map<int, Tuple2<int, Range>> scheduling;
 
+  /// Processing segments per task (taskId → segments), for tasks that were
+  /// preempted mid-processing.
+  final Map<int, List<ProcessingSegment>> segmentsByTask;
+
   OpenShopOutput(
     this.jobId,
     this.dbJobId,
     this.dueDate,
     this.startDate,
     this.endTime,
-    this.scheduling,
-  );
+    this.scheduling, {
+    Map<int, List<ProcessingSegment>>? segmentsByTask,
+  }) : segmentsByTask = segmentsByTask ??
+            scheduling.map((taskId, entry) => MapEntry(
+                taskId,
+                [ProcessingSegment(entry.value2.start, entry.value2.end)]));
 }
 
 class OpenShop {
@@ -54,10 +71,29 @@ class OpenShop {
   List<OpenShopInput> inputJobs = [];
   Map<int, DateTime> machinesAvailability;
   Map<int, List<MachineInactivityEntity>> machineInactivities;
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count.
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
-  final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
+
+  PreemptionEngine _engineFor(int machineId) {
+    return _engineByMachine.putIfAbsent(machineId, () {
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      return PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap: capacityMinutes > 0
+            ? Duration(minutes: capacityMinutes)
+            : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
+    });
+  }
+
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
@@ -73,14 +109,9 @@ class OpenShop {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
-    this.changeoverMatrix = const {},
     this.stateSetupMatrix,
     this.jobStates,
   }) {
-    // Inicializar contador de procesamiento por máquina
-    for (final machineId in machinesAvailability.keys) {
-      machineProcessedCount[machineId] = 0;
-    }
     _initializeMachineLastSequence();
     final r = rule.toUpperCase();
     print('OpenShop: starting scheduling rule=$r for ${inputJobs.length} jobs');
@@ -137,33 +168,6 @@ class OpenShop {
       _machineLastSequence.putIfAbsent(machineId, () => null);
       _machineLastJob.putIfAbsent(machineId, () => null);
     }
-    for (final machineId in changeoverMatrix.keys) {
-      _machineLastSequence.putIfAbsent(machineId, () => null);
-      _machineLastJob.putIfAbsent(machineId, () => null);
-    }
-  }
-
-  Duration _getSetupDuration(
-    int machineId,
-    int currentSequenceId,
-    int? previousSequenceId,
-  ) {
-    final machineMatrix = changeoverMatrix[machineId];
-    if (machineMatrix == null) return Duration.zero;
-
-    final previousDurations = machineMatrix[previousSequenceId];
-    if (previousDurations != null &&
-        previousDurations.containsKey(currentSequenceId)) {
-      return previousDurations[currentSequenceId]!;
-    }
-
-    final defaultDurations = machineMatrix[null];
-    if (defaultDurations != null &&
-        defaultDurations.containsKey(currentSequenceId)) {
-      return defaultDurations[currentSequenceId]!;
-    }
-
-    return Duration.zero;
   }
 
   DateTime _adjustForWorkingSchedule(DateTime dt) {
@@ -194,124 +198,6 @@ class OpenShop {
       );
     }
     return dt;
-  }
-
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday; // 1=Monday, 7=Sunday
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      // Convertir Weekday enum a int (Weekday.monday.index = 0, pero DateTime usa 1=Monday)
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          startHour,
-          startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    // Si no hay tiempo que acomodar, retornar inmediatamente
-    if (remaining <= Duration.zero) {
-      return start;
-    }
-
-    while (remaining > Duration.zero) {
-      current = _adjustForWorkingSchedule(current);
-
-      // Obtener inactividades del día actual
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-
-      final dayEnd = DateTime(
-        current.year,
-        current.month,
-        current.day,
-        workingSchedule.value2.hour,
-        workingSchedule.value2.minute,
-      );
-
-      // Verificar si hay una inactividad que intersecta con el tiempo disponible
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          // Hay una inactividad en el camino
-          if (nextAvailable.isBefore(inactivity.start)) {
-            // Podemos trabajar hasta el inicio de la inactividad
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              // La tarea termina antes de la inactividad
-              return nextAvailable.add(remaining);
-            } else {
-              // La tarea se interrumpe por la inactividad
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            // Estamos dentro o después de la inactividad
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      // Calcular tiempo disponible restante en el día (después de inactividades)
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else if (availableToday > Duration.zero) {
-        // Solo restamos si hay tiempo disponible
-        remaining -= availableToday;
-        if (remaining <= Duration.zero) {
-          // La tarea termina exactamente hoy
-          return nextAvailable.add(availableToday + remaining);
-        }
-        current = DateTime(
-          dayEnd.year,
-          dayEnd.month,
-          dayEnd.day + 1,
-          workingSchedule.value1.hour,
-          workingSchedule.value1.minute,
-        );
-      } else {
-        // No hay tiempo disponible hoy, pasar al siguiente día
-        current = DateTime(
-          dayEnd.year,
-          dayEnd.month,
-          dayEnd.day + 1,
-          workingSchedule.value1.hour,
-          workingSchedule.value1.minute,
-        );
-      }
-    }
-
-    return current;
   }
 
   void scheduleOpenShopFIFO() {
@@ -433,6 +319,10 @@ class OpenShop {
     };
 
     Map<int, Map<int, Tuple2<int, Range>>> jobSchedulings = {
+      for (var job in inputJobs) job.jobId: {},
+    };
+
+    Map<int, Map<int, List<ProcessingSegment>>> jobSegments = {
       for (var job in inputJobs) job.jobId: {},
     };
 
@@ -564,7 +454,7 @@ class OpenShop {
       final start = selected.earliestStart;
 
       // Calcular setup time
-      final int? previousSequence = _machineLastSequence.putIfAbsent(selected.machineId, () => null);
+      _machineLastSequence.putIfAbsent(selected.machineId, () => null);
       final int? previousJobId = _machineLastJob.putIfAbsent(selected.machineId, () => null);
       
       Duration setupDuration = Duration.zero;
@@ -580,40 +470,37 @@ class OpenShop {
             }
           }
         }
-      } else {
-        setupDuration = _getSetupDuration(selected.machineId, selected.job.sequenceId, previousSequence);
       }
 
-      final taskStart = _adjustEndTimeWithInactivities(selected.machineId, start, start.add(setupDuration));
-      final adjustedEnd = _adjustEndTimeWithInactivities(selected.machineId, taskStart, taskStart.add(selected.duration));
-
-      // Aplicar descanso por continueCapacity
-      DateTime finalEnd = adjustedEnd;
-      final capacity = machineContinueCapacity[selected.machineId] ?? 0;
-      final restTime = machineRestTime[selected.machineId];
-
-      if (capacity > 0 && restTime != null) {
-        machineProcessedCount[selected.machineId] =
-            (machineProcessedCount[selected.machineId] ?? 0) + 1;
-
-        if (machineProcessedCount[selected.machineId]! >= capacity) {
-          // Aplicar descanso
-          finalEnd = adjustedEnd.add(restTime);
-          machineProcessedCount[selected.machineId] = 0;
-        }
-      }
+      // Split setup+processing into segments wherever the work-shift end, a
+      // maintenance window, or the continuous-use rest cap would otherwise
+      // fall inside this task's span on this machine.
+      final schedule = _engineFor(selected.machineId).computeSegments(
+        earliestStart: start,
+        totalDuration: setupDuration + selected.duration,
+        priorContinuousUsage:
+            _machineContinuousUsage[selected.machineId] ?? Duration.zero,
+        interruptible: selected.job.isTaskInterruptible(selected.taskId),
+      );
+      final DateTime taskStart = schedule.startDate;
+      final DateTime adjustedEnd = schedule.completionTime;
 
       // Programar la operación con taskStart (así queda el gap de alistamiento)
       jobSchedulings[selected.job.jobId]![selected.taskId] =
           Tuple2(selected.machineId, Range(taskStart, adjustedEnd));
+      jobSegments[selected.job.jobId]![selected.taskId] = schedule.segments;
 
       // Actualizar disponibilidades
-      machinesAvailability[selected.machineId] = finalEnd;
+      machinesAvailability[selected.machineId] = adjustedEnd;
       jobAvailability[selected.job.jobId] = adjustedEnd;
       completedOperations[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
       _machineLastJob[selected.machineId] = selected.job.dbJobId;
+      _machineContinuousUsage[selected.machineId] = schedule.segments.length > 1
+          ? schedule.segments.last.duration
+          : (_machineContinuousUsage[selected.machineId] ?? Duration.zero) +
+              schedule.segments.single.duration;
     }
 
     // Generar outputs
@@ -641,6 +528,7 @@ class OpenShop {
         startDate ?? job.availableDate,
         endDate ?? job.availableDate,
         scheduling,
+        segmentsByTask: jobSegments[job.jobId],
       ));
     }
   }
@@ -669,12 +557,15 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
   final List<OpenShopInput> inputJobs = (payload['inputJobs'] as List<dynamic>)
       .map((jobData) {
         final jd = Map<String, dynamic>.from(jobData as Map);
+        final Map<int, bool> interruptibleByTask = {};
         final operations = (jd['operations'] as List<dynamic>).map((opData) {
           final od = Map<String, dynamic>.from(opData as Map);
           final machineDurations = (od['machineDurations'] as Map<dynamic, dynamic>).map(
             (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
           );
-          return Tuple2(od['taskId'] as int, machineDurations);
+          final taskId = od['taskId'] as int;
+          interruptibleByTask[taskId] = (od['interruptible'] as bool?) ?? true;
+          return Tuple2(taskId, machineDurations);
         }).toList();
 
         final dependencies = (jd['dependencies'] as List<dynamic>)
@@ -698,6 +589,7 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
           DateTime.fromMillisecondsSinceEpoch(jd['availableDate'] as int),
           operations,
           dependencies: dependencies,
+          interruptibleByTask: interruptibleByTask,
         );
       })
       .toList();
@@ -728,24 +620,6 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
   for (final entry in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
     machineRestTime[entry.key as int] =
         entry.value == null ? null : Duration(milliseconds: entry.value as int);
-  }
-
-  final changeoverMatrix = <int, Map<int?, Map<int, Duration>>>{};
-  for (final machineEntry in (payload['changeoverMatrix'] as Map<dynamic, dynamic>).entries) {
-    final machineId = machineEntry.key as int;
-    final map = Map<dynamic, dynamic>.from(machineEntry.value as Map);
-    final inner = <int?, Map<int, Duration>>{};
-    for (final prevEntry in map.entries) {
-      final prevKey = prevEntry.key;
-      // El adaptador serializa esta clave con `prevSeqId?.toString() ?? 'null'`,
-      // por lo que aquí llega como String ("5", "null", ...), no como int.
-      final prevId =
-          prevKey == 'null' ? null : int.parse(prevKey as String);
-      inner[prevId] = (Map<dynamic, dynamic>.from(prevEntry.value as Map)).map(
-        (key, value) => MapEntry(key as int, Duration(minutes: value as int)),
-      );
-    }
-    changeoverMatrix[machineId] = inner;
   }
 
   final stateSetupMatrix = payload['stateSetupMatrix'] == null
@@ -780,7 +654,6 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
     machineInactivities: machineInactivities,
     machineContinueCapacity: machineContinueCapacity,
     machineRestTime: machineRestTime,
-    changeoverMatrix: changeoverMatrix,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
   ).output;
@@ -797,6 +670,15 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
             'start': value.value2.startDate.millisecondsSinceEpoch,
             'end': value.value2.endDate.millisecondsSinceEpoch,
           })),
+      'segmentsByTask': out.segmentsByTask.map((taskId, segments) => MapEntry(
+            taskId.toString(),
+            segments
+                .map((s) => {
+                      'start': s.start.millisecondsSinceEpoch,
+                      'end': s.end.millisecondsSinceEpoch,
+                    })
+                .toList(),
+          )),
     };
   }).toList();
 }

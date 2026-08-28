@@ -1,7 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
-import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
 
 class SingleMachineInput {
@@ -15,6 +15,12 @@ class SingleMachineInput {
   /// state-based setup matrix (e.g. "A", "B", "C").
   final String jobState;
 
+  /// Whether this job's processing on this machine may be split by a
+  /// work-shift boundary, the continuous-use rest cap, or a maintenance
+  /// window. False means its start is delayed until a window opens up that
+  /// fits the whole duration uninterrupted.
+  final bool interruptible;
+
   SingleMachineInput(
     this.jobId,
     this.machineDuration,
@@ -22,6 +28,7 @@ class SingleMachineInput {
     this.priority,
     this.availableDate, {
     this.jobState = 'A',
+    this.interruptible = true,
   });
 }
 
@@ -32,6 +39,7 @@ class SingleMachineOutput {
   final DateTime endDate;
   final DateTime dueDate;
   final Duration delay;
+  final List<ProcessingSegment> segments;
 
   SingleMachineOutput(
     this.jobId,
@@ -39,8 +47,9 @@ class SingleMachineOutput {
     this.startDate,
     this.endDate,
     this.dueDate,
-    this.delay,
-  );
+    this.delay, {
+    List<ProcessingSegment>? segments,
+  }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }
 
 class SingleMachine {
@@ -62,11 +71,19 @@ class SingleMachine {
   // Starts as null (cold start → no setup cost for the first job).
   String? _lastJobState;
 
-  // Machine inactivity support
+  // Machine inactivity support.
+  // continueCapacity is interpreted as MINUTES of continuous processing
+  // allowed before a mandatory rest of restTime — not a job count — so a
+  // single long job can be preempted mid-processing, same as a run of
+  // several short jobs.
   final List<MachineInactivityEntity> machineInactivities;
   final int continueCapacity;
   final Duration? restTime;
-  int processedCount = 0;
+
+  /// How long the machine has been running continuously since its last
+  /// pause (of any kind — rest, work-shift end, or maintenance).
+  Duration _continuousUsage = Duration.zero;
+  late final PreemptionEngine _preemptionEngine;
 
   SingleMachine(
     this.machineId,
@@ -79,6 +96,13 @@ class SingleMachine {
     this.continueCapacity = 0,
     this.restTime,
   }) {
+    _preemptionEngine = PreemptionEngine(
+      workingSchedule: workingSchedule,
+      maintenanceWindows: machineInactivities,
+      continuousUseCap:
+          continueCapacity > 0 ? Duration(minutes: continueCapacity) : Duration.zero,
+      restDuration: restTime ?? Duration.zero,
+    );
     switch (rule) {
       //case "JHONSON":jhonsonRule();break;
       case "EDD": eddRule(); break;
@@ -155,22 +179,34 @@ class SingleMachine {
       processStart = _alignToWorkingHours(processStart);
     }
 
-    // 3. Schedule processing after setup.
-    processStart = _getAvailableStartTime(processStart, job.machineDuration);
-    final rawEnd = processStart.add(job.machineDuration);
-    final DateTime end = _adjustEndTimeWithInactivities(processStart, rawEnd);
+    // 3. Schedule processing after setup, splitting into segments wherever
+    //    the work-shift end, a maintenance window, or the continuous-use
+    //    rest cap would otherwise fall inside the job's processing span.
+    final schedule = _preemptionEngine.computeSegments(
+      earliestStart: processStart,
+      totalDuration: job.machineDuration,
+      priorContinuousUsage: _continuousUsage,
+      interruptible: job.interruptible,
+    );
+    final DateTime end = schedule.completionTime;
     final Duration delay = end.isAfter(job.dueDate)
         ? end.difference(job.dueDate)
         : Duration.zero;
 
     output.add(SingleMachineOutput(
-      job.jobId, job.machineDuration, processStart, end, job.dueDate, delay,
+      job.jobId, job.machineDuration, schedule.startDate, end, job.dueDate,
+      delay,
+      segments: schedule.segments,
     ));
 
-    // 4. Remember this job's state for the next iteration.
+    // 4. Remember this job's state and continuous-usage streak for the
+    //    next iteration (a pause during this job already reset the streak).
     _lastJobState = job.jobState;
+    _continuousUsage = schedule.segments.length > 1
+        ? schedule.segments.last.duration
+        : _continuousUsage + schedule.segments.single.duration;
 
-    return _applyRestIfNeeded(end);
+    return end;
   }
 
   /// Pushes [dt] to the start of the next working day if it falls outside
@@ -184,95 +220,6 @@ class SingleMachine {
           workingSchedule.value1.hour, workingSchedule.value1.minute);
     }
     return dt;
-  }
-
-  // Obtener las inactividades para un día específico
-  List<Range> _getInactivitiesForDay(DateTime day) {
-    final weekday = day.weekday;
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in machineInactivities) {
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    while (remaining > Duration.zero) {
-      current = _getStartTime(current);
-
-      final dayInactivities = _getInactivitiesForDay(current);
-
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          if (nextAvailable.isBefore(inactivity.start)) {
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              return nextAvailable.add(remaining);
-            } else {
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return current;
-  }
-
-  // Aplicar descanso por continueCapacity y devolver el end time ajustado
-  DateTime _applyRestIfNeeded(DateTime endTime) {
-    if (continueCapacity > 0 && restTime != null) {
-      processedCount++;
-      if (processedCount >= continueCapacity) {
-        processedCount = 0;
-        return endTime.add(restTime!);
-      }
-    }
-    return endTime;
   }
 
   // ── Dispatching rules ─────────────────────────────────────────────────────
@@ -352,6 +299,7 @@ class SingleMachine {
   void _runSequence() {
     // Reset state tracking so re-entrant calls (e.g. from genetics) start clean.
     _lastJobState = null;
+    _continuousUsage = Duration.zero;
     output.clear();
 
     if (input.isEmpty) return;

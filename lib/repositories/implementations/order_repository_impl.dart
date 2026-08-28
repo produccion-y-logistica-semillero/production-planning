@@ -88,7 +88,6 @@ class OrderRepositoryImpl implements OrderRepository {
                   tasks.map((mod) => mod.toEntity()).toList(),
                   sequenceModel.name,
                   dependenciesM.map((dep) => dep.toEntity()).toList()),
-              model.amount,
               model.jobName,
               model.dueDate,
               model.priority,
@@ -225,7 +224,6 @@ class OrderRepositoryImpl implements OrderRepository {
                 tasks.map((mod) => mod.toEntity()).toList(),
                 sequenceModel.name,
                 dependenciesM.map((dep) => dep.toEntity()).toList()),
-            model.amount,
             model.jobName,
             model.dueDate,
             model.priority,
@@ -296,6 +294,8 @@ class OrderRepositoryImpl implements OrderRepository {
           await jobDao.insertJob(job, order.orderId!);
         }
       }
+
+      await orderDao.updateSetupMatrix(order.orderId!, order.setupTimeMatrix);
 
       return const Right(true);
     } on Failure catch (error) {

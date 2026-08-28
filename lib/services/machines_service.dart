@@ -31,7 +31,8 @@ class MachinesService {
       double preparationPercentage,
       double restPercentage,
       int continueCapacity,
-      DateTime availabilityDateTime) async {
+      DateTime availabilityDateTime,
+      {MachineStartMode startMode = MachineStartMode.specificDate}) async {
     final machine = MachineEntity(
       machineTypeId: machineTypeId,
       name: name,
@@ -41,6 +42,7 @@ class MachinesService {
       restPercentage: restPercentage,
       continueCapacity: continueCapacity,
       availabilityDateTime: availabilityDateTime,
+      startMode: startMode,
     );
 
     final response = await repository.insertMachine(machine);
@@ -131,8 +133,9 @@ class MachinesService {
   double preparationPercentage,
   double restPercentage,
   int continueCapacity,
-  DateTime availabilityDateTime,
-) async {
+  DateTime availabilityDateTime, {
+  MachineStartMode startMode = MachineStartMode.specificDate,
+}) async {
   final machine = MachineEntity(
     id: machineId,
     name: machineName,
@@ -142,6 +145,7 @@ class MachinesService {
     restPercentage: restPercentage,
     continueCapacity: continueCapacity,
     availabilityDateTime: availabilityDateTime,
+    startMode: startMode,
   );
   final response = await repository.updateMachine(machine);
   return response.fold((f) => Left(f), (success) => Right(machine));

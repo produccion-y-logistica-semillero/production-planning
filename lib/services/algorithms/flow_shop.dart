@@ -1,5 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -14,6 +16,11 @@ class FlowShopInput {
   // in this map we have the durations, the id is the task id, and the duration is how long it takes
   final Map<int, Duration> taskTimesInMachines;
 
+  /// Whether each task (keyed by task id) may be split by a work-shift
+  /// boundary, the continuous-use rest cap, or a maintenance window.
+  /// Missing entries default to interruptible.
+  final Map<int, bool> interruptibleByTask;
+
   FlowShopInput(
     this.jobId,
     this.sequenceId,
@@ -21,8 +28,11 @@ class FlowShopInput {
     this.priority,
     this.availableDate,
     this.taskSequence,
-    this.taskTimesInMachines,
-  );
+    this.taskTimesInMachines, {
+    this.interruptibleByTask = const {},
+  });
+
+  bool isTaskInterruptible(int taskId) => interruptibleByTask[taskId] ?? true;
 }
 
 class FlowShopOutput {
@@ -33,13 +43,22 @@ class FlowShopOutput {
   // the output, the map has the key the machine id, the value is a tuple of <task id, range start to end time>
   final Map<int, Tuple2<int, Range>> machinesScheduling;
 
+  /// Processing segments per machine (machineId → segments), for tasks that
+  /// were preempted mid-processing. Defaults to a single segment matching
+  /// the machine's Range when not explicitly provided.
+  final Map<int, List<ProcessingSegment>> segmentsByMachine;
+
   FlowShopOutput(
     this.jobId,
     this.startDate,
     this.dueDate,
     this.endTime,
-    this.machinesScheduling,
-  );
+    this.machinesScheduling, {
+    Map<int, List<ProcessingSegment>>? segmentsByMachine,
+  }) : segmentsByMachine = segmentsByMachine ??
+            machinesScheduling.map((machineId, entry) => MapEntry(
+                machineId,
+                [ProcessingSegment(entry.value2.start, entry.value2.end)]));
 }
 
 class FlowShop {
@@ -50,19 +69,22 @@ class FlowShop {
   Map<int, DateTime> machinesAvailability = {};
   List<FlowShopOutput> output = [];
 
-  /// changeoverMatrix:
-  /// { machineId : { previousSequenceId_or_null : { currentSequenceId : Duration } } }
-  final Map<int, Map<int?, Map<int, Duration>>> changeoverMatrix;
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
 
-  // Machine inactivity support
-  final Map<int, List<dynamic>> machineInactivities;
+  // Machine inactivity support.
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count — so a
+  // single long task can be preempted mid-processing.
+  final Map<int, List<MachineInactivityEntity>> machineInactivities;
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
 
   FlowShop(
     this.startDate,
@@ -70,17 +92,24 @@ class FlowShop {
     this.inputJobs,
     this.machinesAvailability,
     String rule, {
-    Map<int, Map<int?, Map<int, Duration>>>? changeoverMatrix,
     this.stateSetupMatrix,
     this.jobStates,
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
-  }) : changeoverMatrix = changeoverMatrix ?? {} {
+  }) {
     _initializeMachineLastSequence();
-    // Inicializar contador de procesamiento por máquina
+    // Preemption engine per machine (rest cap + maintenance windows).
     for (final machineId in machinesAvailability.keys) {
-      machineProcessedCount[machineId] = 0;
+      _machineContinuousUsage[machineId] = Duration.zero;
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      _engineByMachine[machineId] = PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap:
+            capacityMinutes > 0 ? Duration(minutes: capacityMinutes) : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
     }
     final r = rule.toUpperCase();
     switch (r) {
@@ -261,6 +290,7 @@ class FlowShop {
     DateTime jobStartTime = job.availableDate;
     DateTime? actualStartTime;
     Map<int, Tuple2<int, Range>> scheduling = {};
+    Map<int, List<ProcessingSegment>> segmentsByMachine = {};
 
     for (var task in job.taskSequence) {
       int taskId = task.value1;
@@ -282,32 +312,29 @@ class FlowShop {
       );
       final Duration totalDuration = duration + setupDuration;
 
-      final end = startTime.add(totalDuration);
-      final adjustedEnd = _adjustEndTimeWithInactivities(machineId, startTime, end);
+      // Split setup+processing into segments wherever the work-shift end, a
+      // maintenance window, or the continuous-use rest cap would otherwise
+      // fall inside this task's span on this machine.
+      final schedule = _engineByMachine[machineId]!.computeSegments(
+        earliestStart: startTime,
+        totalDuration: totalDuration,
+        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+        interruptible: job.isTaskInterruptible(taskId),
+      );
+      final DateTime adjustedEnd = schedule.completionTime;
 
-      // Aplicar descanso por continueCapacity
-      DateTime finalEnd = adjustedEnd;
-      final capacity = machineContinueCapacity[machineId] ?? 0;
-      final restTime = machineRestTime[machineId];
+      actualStartTime ??= schedule.startDate;
 
-      if (capacity > 0 && restTime != null) {
-        machineProcessedCount[machineId] =
-            (machineProcessedCount[machineId] ?? 0) + 1;
-
-        if (machineProcessedCount[machineId]! >= capacity) {
-          finalEnd = adjustedEnd.add(restTime);
-          machineProcessedCount[machineId] = 0;
-        }
-      }
-
-      DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
-      actualStartTime ??= startTime;
-
-      scheduling[machineId] = Tuple2(taskId, Range(startTime, adjustedEnd));
-      machinesAvailability[machineId] = finalEnd;
+      scheduling[machineId] = Tuple2(taskId, Range(schedule.startDate, adjustedEnd));
+      segmentsByMachine[machineId] = schedule.segments;
+      machinesAvailability[machineId] = adjustedEnd;
       _machineLastSequence[machineId] = job.sequenceId;
       _machineLastJob[machineId] = job.jobId;
-      jobStartTime = endTime;
+      _machineContinuousUsage[machineId] = schedule.segments.length > 1
+          ? schedule.segments.last.duration
+          : (_machineContinuousUsage[machineId] ?? Duration.zero) +
+              schedule.segments.single.duration;
+      jobStartTime = adjustedEnd;
     }
 
     output.add(
@@ -317,6 +344,7 @@ class FlowShop {
         job.dueDate,
         jobStartTime,
         scheduling,
+        segmentsByMachine: segmentsByMachine,
       ),
     );
   }
@@ -346,26 +374,6 @@ class FlowShop {
       }
     }
 
-    // Fallback to changeover matrix (sequence-based)
-    final machineMatrix = changeoverMatrix[machineId];
-    if (machineMatrix == null) {
-      return Duration.zero;
-    }
-
-    // Try specific previous sequence
-    if (previousSequenceId != null) {
-      final previousDurations = machineMatrix[previousSequenceId];
-      if (previousDurations != null && previousDurations.containsKey(currentSequenceId)) {
-        return previousDurations[currentSequenceId]!;
-      }
-    }
-
-    // Try default (null) mapping
-    final defaultDurations = machineMatrix[null];
-    if (defaultDurations != null && defaultDurations.containsKey(currentSequenceId)) {
-      return defaultDurations[currentSequenceId]!;
-    }
-
     return Duration.zero;
   }
 
@@ -391,114 +399,6 @@ class FlowShop {
       return DateTime(start.year, start.month, start.day + 1, workingStart.hour, workingStart.minute);
     }
     return start;
-  }
-
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday; // 1=Monday, 7=Sunday
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      // Cast to MachineInactivityEntity or extract properties dynamically
-      final inactivityWeekdays = _getWeekdays(inactivity);
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startTime = _getStartTime(inactivity);
-        final duration = _getDuration(inactivity);
-
-        final startHour = startTime.inHours;
-        final startMinute = startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  Set<int> _getWeekdays(dynamic inactivity) {
-    try {
-      return (inactivity.weekdays as List)
-          .map<int>((wd) => wd.index + 1)
-          .toSet();
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Duration _getStartTime(dynamic inactivity) {
-    try {
-      return inactivity.startTime as Duration;
-    } catch (_) {
-      return Duration.zero;
-    }
-  }
-
-  Duration _getDuration(dynamic inactivity) {
-    try {
-      return inactivity.duration as Duration;
-    } catch (_) {
-      return Duration.zero;
-    }
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    while (remaining > Duration.zero) {
-      current = _adjustForWorkingSchedule(current);
-
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          if (nextAvailable.isBefore(inactivity.start)) {
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              return nextAvailable.add(remaining);
-            } else {
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return current;
   }
 
   DateTime _calculateEndWithSchedule(DateTime start, Duration duration) {

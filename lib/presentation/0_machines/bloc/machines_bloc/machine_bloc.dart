@@ -28,12 +28,15 @@ class MachineBloc extends Cubit<MachinesState> {
     String machineName,
     int typeId,
     String availabilityDateTimeStr,
-    List<MachineInactivityEntity> scheduledInactivities,
-  ) async {
+    List<MachineInactivityEntity> scheduledInactivities, {
+    MachineStartMode startMode = MachineStartMode.specificDate,
+  }) async {
     List<MachineEntity> machines = [];
 
     if (state is MachinesRetrievingSuccess) machines = state.machines ?? [];
-    final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
+    final availabilityDateTime = startMode == MachineStartMode.now
+        ? DateTime.now()
+        : DateTime.parse(availabilityDateTimeStr);
 
     final response = await service.addMachine(
       typeId,
@@ -44,6 +47,7 @@ class MachineBloc extends Cubit<MachinesState> {
       restPercentage,
       continueCapacity,
       availabilityDateTime,
+      startMode: startMode,
     );
 
     response.fold(
@@ -91,10 +95,13 @@ class MachineBloc extends Cubit<MachinesState> {
     double restPercentage,
     int continueCapacity,
     String machineName,
-    String availabilityDateTimeStr,
-  ) async {
+    String availabilityDateTimeStr, {
+    MachineStartMode startMode = MachineStartMode.specificDate,
+  }) async {
     List<MachineEntity> machines = state.machines ?? [];
-    final availabilityDateTime = DateTime.parse(availabilityDateTimeStr);
+    final availabilityDateTime = startMode == MachineStartMode.now
+        ? DateTime.now()
+        : DateTime.parse(availabilityDateTimeStr);
 
     final response = await service.editMachine(
       machineId,
@@ -104,6 +111,7 @@ class MachineBloc extends Cubit<MachinesState> {
       restPercentage,
       continueCapacity,
       availabilityDateTime,
+      startMode: startMode,
     );
 
     response.fold(

@@ -66,6 +66,7 @@ class SQLLiteDatabaseProvider {
               rest_percentage REAL NOT NULL DEFAULT 100.0,
               availability_time DATETIME NOT NULL,
               continue_capacity INTEGER,
+              start_mode INTEGER NOT NULL DEFAULT 1,
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
@@ -175,7 +176,6 @@ class SQLLiteDatabaseProvider {
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
               sequence_id INTEGER NOT NULL,
               order_id INTEGER NOT NULL,
-              amount INTEGER NOT NULL,
               job_name VARCHAR(100),
               due_date DATE NOT NULL,
               available_date DATE NOT NULL,
@@ -462,7 +462,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 1,
           'order_id': 1,
-          'amount': 100,
           'due_date': '2024-09-10',
           'priority': 1,
           'available_date': '2024-09-10',
@@ -470,7 +469,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 2,
           'order_id': 2,
-          'amount': 200,
           'due_date': '2024-09-11',
           'priority': 2,
           'available_date': '2024-09-10',
@@ -478,7 +476,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 3,
           'order_id': 3,
-          'amount': 150,
           'due_date': '2024-09-12',
           'priority': 3,
           'available_date': '2024-09-10',
@@ -789,7 +786,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 4,
           'order_id': 4,
-          'amount': 50,
           'job_name': 'Lote Pan Integral Supermercado',
           'due_date': '2024-10-18',
           'priority': 2,
@@ -798,7 +794,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 5,
           'order_id': 4,
-          'amount': 30,
           'job_name': 'Lote Croissants Vitrina',
           'due_date': '2024-10-18',
           'priority': 3,
@@ -807,7 +802,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 6,
           'order_id': 5,
-          'amount': 5,
           'job_name': 'Pastel Cumpleaños El Rincón',
           'due_date': '2024-10-17',
           'priority': 1,
@@ -816,7 +810,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 7,
           'order_id': 5,
-          'amount': 120,
           'job_name': 'Galletas Avena Pedido Mayorista',
           'due_date': '2024-10-19',
           'priority': 2,
@@ -825,7 +818,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 4,
           'order_id': 6,
-          'amount': 25,
           'job_name': 'Pan Artesanal Evento Corporativo',
           'due_date': '2024-10-20',
           'priority': 1,
@@ -1261,7 +1253,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 8,
           'order_id': 7,
-          'amount': 100,
           'job_name': 'Camisetas Blancas Lote A',
           'due_date': '2024-10-25',
           'priority': 2,
@@ -1270,7 +1261,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 8,
           'order_id': 7,
-          'amount': 80,
           'job_name': 'Camisetas Negras Lote B',
           'due_date': '2024-10-25',
           'priority': 2,
@@ -1281,7 +1271,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 9,
           'order_id': 8,
-          'amount': 60,
           'job_name': 'Corte Mezclilla Lote A',
           'due_date': '2024-10-24',
           'priority': 1,
@@ -1290,7 +1279,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 9,
           'order_id': 8,
-          'amount': 50,
           'job_name': 'Corte Algodón Lote B',
           'due_date': '2024-10-24',
           'priority': 1,
@@ -1301,7 +1289,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 12,
           'order_id': 9,
-          'amount': 75,
           'job_name': 'Tintura Azul Marino',
           'due_date': '2024-10-26',
           'priority': 1,
@@ -1310,7 +1297,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 12,
           'order_id': 9,
-          'amount': 60,
           'job_name': 'Tintura Rojo Intenso',
           'due_date': '2024-10-26',
           'priority': 1,
@@ -1321,7 +1307,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 11,
           'order_id': 10,
-          'amount': 40,
           'job_name': 'Camisas Blancas Premium',
           'due_date': '2024-10-27',
           'priority': 1,
@@ -1330,7 +1315,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 11,
           'order_id': 10,
-          'amount': 35,
           'job_name': 'Camisas Azules Premium',
           'due_date': '2024-10-27',
           'priority': 1,
@@ -1577,7 +1561,6 @@ class SQLLiteDatabaseProvider {
           job_id INTEGER PRIMARY KEY AUTOINCREMENT,
           sequence_id INTEGER NOT NULL,
           order_id INTEGER NOT NULL,
-          amount INTEGER NOT NULL,
           job_name VARCHAR(100),
           due_date DATE NOT NULL,
           available_date DATE NOT NULL,
@@ -1612,6 +1595,7 @@ class SQLLiteDatabaseProvider {
     ''');
 
     await _ensureOrderSetupMatrixSchema(_database!);
+    await _ensureMachinesSchema(_database!);
 
     return _database!;
   }
@@ -1638,6 +1622,20 @@ class SQLLiteDatabaseProvider {
     await addIfMissing('from_state', 'TEXT NOT NULL DEFAULT ""');
     await addIfMissing('to_state', 'TEXT NOT NULL DEFAULT ""');
     await addIfMissing('duration_minutes', 'INTEGER NOT NULL DEFAULT 0');
+  }
+
+  /// Adds any columns that may be missing from [MACHINES] due to older
+  /// schema versions being upgraded incrementally. start_mode defaults to
+  /// 1 (specificDate) so existing machines keep their current behavior.
+  static Future<void> _ensureMachinesSchema(Database db) async {
+    final columns = await _getTableColumns(db, 'MACHINES');
+    if (columns.isEmpty) return;
+
+    if (!columns.contains('start_mode')) {
+      await db.execute(
+        'ALTER TABLE MACHINES ADD COLUMN start_mode INTEGER NOT NULL DEFAULT 1;',
+      );
+    }
   }
 
   static Future<List<String>> _getTableColumns(

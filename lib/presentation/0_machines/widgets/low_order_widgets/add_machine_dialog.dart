@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,11 @@ class AddMachineDialog extends StatefulWidget {
   final TextEditingController nameController;
   final TextEditingController availabilityDateTimeController;
   final TextEditingController quantityController;
+
+  /// Holds the currently selected machine start-date mode ("Ahora" vs
+  /// "Fecha específica"). The caller creates it and reads its final value
+  /// when the dialog is confirmed.
+  final ValueNotifier<MachineStartMode> startModeNotifier;
 
   /// Recibe la lista de inactividades programadas al confirmar.
   /// En modo edición el llamador puede ignorar el parámetro con `(_)`.
@@ -31,6 +37,7 @@ class AddMachineDialog extends StatefulWidget {
     required this.restTimeController,
     required this.continueController,
     required this.availabilityDateTimeController,
+    required this.startModeNotifier,
     required this.addMachineHandle,
     required this.quantityController,
     this.isEditing = false,
@@ -354,8 +361,43 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
 
   // ─── Date-time picker field ────────────────────────────────────────────────
 
+  Widget _buildStartModeToggle() {
+    return ValueListenableBuilder<MachineStartMode>(
+      valueListenable: widget.startModeNotifier,
+      builder: (context, mode, _) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SegmentedButton<MachineStartMode>(
+            segments: const [
+              ButtonSegment(
+                value: MachineStartMode.now,
+                label: Text('Ahora'),
+                icon: Icon(Icons.bolt_rounded, size: 16),
+              ),
+              ButtonSegment(
+                value: MachineStartMode.specificDate,
+                label: Text('Fecha específica'),
+                icon: Icon(Icons.event_rounded, size: 16),
+              ),
+            ],
+            selected: {mode},
+            onSelectionChanged: (selection) {
+              widget.startModeNotifier.value = selection.first;
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildDateTimeField() {
-    return buildLabeledField(
+    return ValueListenableBuilder<MachineStartMode>(
+      valueListenable: widget.startModeNotifier,
+      builder: (context, mode, _) {
+        if (mode == MachineStartMode.now) {
+          return const SizedBox.shrink();
+        }
+        return buildLabeledField(
       label: 'Fecha de inicio',
       margin: const EdgeInsets.only(bottom: 20),
       field: TextField(
@@ -478,6 +520,8 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         },
       ),
     );
+      },
+    );
   }
 
   // ─── Build ─────────────────────────────────────────────────────────────────
@@ -547,7 +591,8 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 ),
               ),
 
-              // Availability date-time picker
+              // Machine start-date mode toggle + availability date-time picker
+              _buildStartModeToggle(),
               _buildDateTimeField(),
 
               // Sections only shown when creating (not editing)

@@ -108,10 +108,22 @@ void saveProcess(String processName, List<MachineTypeEntity> nodes, List<Connect
 
   void tsaskUpdated(int index, String description, String hour) async{
     state.selectedMachines![index].description = description;
-    state.selectedMachines![index].processingUnit = Duration(
-      hours: int.parse(hour.substring(0,2) ), 
-      minutes:int.parse(hour.substring(3,5) ), 
-    );
+
+    // hour comes from HourTextInput as "HH:MM". Parse defensively instead of
+    // assuming fixed character positions: an incomplete/malformed value used
+    // to throw here and silently abort the whole update (including the
+    // description change above), leaving the task's processing time stuck
+    // at whatever it was before with no feedback to the user.
+    final parts = hour.split(':');
+    if (parts.length == 2) {
+      final hours = int.tryParse(parts[0]);
+      final minutes = int.tryParse(parts[1]);
+      if (hours != null && minutes != null) {
+        state.selectedMachines![index].processingUnit =
+            Duration(hours: hours, minutes: minutes);
+      }
+    }
+
     emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines, state.dependencies));
   }
 

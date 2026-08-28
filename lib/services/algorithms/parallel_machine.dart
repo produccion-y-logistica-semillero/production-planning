@@ -1,7 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
-import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
 
 class ParallelInput {
@@ -18,6 +18,15 @@ class ParallelInput {
   /// Optional per-machine state (machineId → state). Falls back to [jobState].
   final Map<int, String>? jobStatesByMachine;
 
+  /// Default interruptibility (usually the task's own setting). Whether this
+  /// job's processing may be split by a work-shift boundary, the
+  /// continuous-use rest cap, or a maintenance window.
+  final bool interruptible;
+
+  /// Optional per-machine override (machineId → interruptible). Falls back
+  /// to [interruptible].
+  final Map<int, bool>? interruptibleByMachine;
+
   ParallelInput(
     this.jobId,
     this.dueDate,
@@ -26,10 +35,15 @@ class ParallelInput {
     this.durationsInMachines, {
     this.jobState = 'A',
     this.jobStatesByMachine,
+    this.interruptible = true,
+    this.interruptibleByMachine,
   });
 
   String stateOnMachine(int machineId) =>
       jobStatesByMachine?[machineId] ?? jobState;
+
+  bool isInterruptibleOnMachine(int machineId) =>
+      interruptibleByMachine?[machineId] ?? interruptible;
 }
 
 class ParallelOutput {
@@ -39,6 +53,7 @@ class ParallelOutput {
   final DateTime endDate;
   final Duration delay;
   final DateTime dueDate;
+  final List<ProcessingSegment> segments;
 
   ParallelOutput(
     this.jobId,
@@ -46,8 +61,9 @@ class ParallelOutput {
     this.startDate,
     this.endDate,
     this.delay,
-    this.dueDate,
-  );
+    this.dueDate, {
+    List<ProcessingSegment>? segments,
+  }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }
 
 class ParallelMachine {
@@ -65,11 +81,17 @@ class ParallelMachine {
   // Tracks which job-state each machine processed last (null = cold start).
   final Map<int, String?> _machineLastState = {};
 
-  // Machine inactivity support
+  // Machine inactivity support.
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count — so a
+  // single long job can be preempted mid-processing.
   final Map<int, List<MachineInactivityEntity>> machineInactivities;
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
 
   ParallelMachine(
     this.startDate,
@@ -82,13 +104,18 @@ class ParallelMachine {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
   }) {
-    // Inicializar contador de procesamiento por máquina
-    for (final machineId in machines.keys) {
-      machineProcessedCount[machineId] = 0;
-    }
-    // Initialise cold-start tracking for every machine.
+    // Initialise cold-start tracking and a preemption engine per machine.
     for (final machineId in machines.keys) {
       _machineLastState[machineId] = null;
+      _machineContinuousUsage[machineId] = Duration.zero;
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      _engineByMachine[machineId] = PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap:
+            capacityMinutes > 0 ? Duration(minutes: capacityMinutes) : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
     }
 
     final r = rule.toUpperCase();
@@ -255,8 +282,8 @@ class ParallelMachine {
     for (final job in inputJobs) {
       int bestMachineId = -1;
       DateTime bestProcessStart = DateTime.now();
-      DateTime bestEndTime = DateTime.now();
       Duration bestDelay = const Duration(days: 99999);
+      SegmentedSchedule? bestSchedule;
 
       for (final entry in job.durationsInMachines.entries) {
         final int machineId = entry.key;
@@ -282,42 +309,46 @@ class ParallelMachine {
             ? _adjustForWorkingSchedule(candidateStart.add(setup))
             : candidateStart;
 
-        final rawEnd = processStart.add(processingTime);
-        final DateTime endTime = _adjustEndTimeWithInactivities(machineId, processStart, rawEnd);
+        // Split into segments wherever the work-shift end, a maintenance
+        // window, or the continuous-use rest cap falls inside this job's
+        // processing span on this candidate machine.
+        final schedule = _engineByMachine[machineId]!.computeSegments(
+          earliestStart: processStart,
+          totalDuration: processingTime,
+          priorContinuousUsage:
+              _machineContinuousUsage[machineId] ?? Duration.zero,
+          interruptible: job.isInterruptibleOnMachine(machineId),
+        );
+        final DateTime endTime = schedule.completionTime;
         final Duration delay = endTime.isAfter(job.dueDate)
             ? endTime.difference(job.dueDate)
             : Duration.zero;
 
         // Choose the machine that minimises delay, breaking ties on end time.
-        if (delay < bestDelay || (delay == bestDelay && endTime.isBefore(bestEndTime))) {
+        if (bestSchedule == null ||
+            delay < bestDelay ||
+            (delay == bestDelay && endTime.isBefore(bestSchedule.completionTime))) {
           bestMachineId = machineId;
           bestProcessStart = processStart;
-          bestEndTime = endTime;
+          bestSchedule = schedule;
           bestDelay = delay;
         }
       }
 
-      if (bestMachineId != -1) {
-        // Aplicar descanso por continueCapacity
-        DateTime finalEnd = bestEndTime;
-        final capacity = machineContinueCapacity[bestMachineId] ?? 0;
-        final restTime = machineRestTime[bestMachineId];
+      if (bestMachineId != -1 && bestSchedule != null) {
+        final bestEndTime = bestSchedule.completionTime;
 
-        if (capacity > 0 && restTime != null) {
-          machineProcessedCount[bestMachineId] =
-              (machineProcessedCount[bestMachineId] ?? 0) + 1;
-
-          if (machineProcessedCount[bestMachineId]! >= capacity) {
-            finalEnd = bestEndTime.add(restTime);
-            machineProcessedCount[bestMachineId] = 0;
-          }
-        }
-
-        machineAvailable[bestMachineId] = finalEnd;
+        machineAvailable[bestMachineId] = bestEndTime;
         machines[bestMachineId]?.add(Tuple2(bestProcessStart, bestEndTime));
         // ── Update last-state so the next job on this machine sees the correct
         //    "from" state in the setup matrix.
         _machineLastState[bestMachineId] = job.stateOnMachine(bestMachineId);
+        // A pause anywhere within this job's segments already reset the
+        // continuity streak; otherwise accumulate onto the running streak.
+        _machineContinuousUsage[bestMachineId] = bestSchedule.segments.length > 1
+            ? bestSchedule.segments.last.duration
+            : (_machineContinuousUsage[bestMachineId] ?? Duration.zero) +
+                bestSchedule.segments.single.duration;
 
         output.add(ParallelOutput(
           job.jobId,
@@ -326,6 +357,7 @@ class ParallelMachine {
           bestEndTime,
           bestDelay,
           job.dueDate,
+          segments: bestSchedule.segments,
         ));
       }
     }
@@ -395,100 +427,6 @@ class ParallelMachine {
       return DateTime(start.year, start.month, start.day + 1, ws.hour, ws.minute).add(remaining);
     }
     return endTime;
-  }
-
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday;
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    // Si no hay inactividades configuradas, devolver el end time directamente
-    if (machineInactivities.isEmpty || (machineInactivities[machineId]?.isEmpty ?? true)) {
-      return end;
-    }
-
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-    int maxIterations = 365; // Máximo de días a iterar
-    int iterations = 0;
-
-    while (remaining > Duration.zero && iterations < maxIterations) {
-      iterations++;
-      current = _adjustForWorkingSchedule(current);
-
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-      dayInactivities.sort((a, b) => a.startDate.compareTo(b.startDate));
-
-      final dayStart = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value1.hour, workingSchedule.value1.minute,
-      );
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current.isBefore(dayStart) ? dayStart : current;
-
-      // Si estamos después del final del día, ir al siguiente
-      if (nextAvailable.isAfter(dayEnd) || nextAvailable.isAtSameMomentAs(dayEnd)) {
-        current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
-        continue;
-      }
-
-      // Procesar inactividades ordenadas
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.startDate)) {
-          final availableBeforeInactivity = inactivity.startDate.difference(nextAvailable);
-          if (remaining <= availableBeforeInactivity) {
-            return nextAvailable.add(remaining);
-          }
-          remaining -= availableBeforeInactivity;
-          nextAvailable = inactivity.endDate;
-        } else if (nextAvailable.isBefore(inactivity.endDate)) {
-          nextAvailable = inactivity.endDate;
-        }
-      }
-
-      // Tiempo disponible hoy después de inactividades
-      final availableToday = dayEnd.difference(nextAvailable);
-      if (availableToday > Duration.zero) {
-        if (remaining <= availableToday) {
-          return nextAvailable.add(remaining);
-        }
-        remaining -= availableToday;
-      }
-
-      // Ir al siguiente día
-      current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
-    }
-
-    // Si no hay tiempo suficiente después de iterar, devolver end time
-    return end;
   }
 
   void printOutput() {

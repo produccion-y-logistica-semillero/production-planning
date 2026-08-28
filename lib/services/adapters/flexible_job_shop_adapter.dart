@@ -10,21 +10,19 @@ import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
-import 'package:production_planning/services/setup_time_service.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
-  final SetupTimeService setupTimeService;
 
   FlexibleJobShopAdapter({
     required this.orderRepository,
     required this.machineRepository,
-    required this.setupTimeService,
   });
 
   int toInt(dynamic value) {
@@ -38,22 +36,8 @@ class FlexibleJobShopAdapter {
       int orderId, String rule) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? baseOrder = responseOrder.fold((f) => null, (order) => order);
-    if (baseOrder == null || baseOrder.orderJobs == null) return null;
-
-    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
-    if (baseOrder.setupTimeMatrix != null) {
-      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
-    }
-    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
-
-    final OrderEntity order = OrderEntity(
-      baseOrder.orderId,
-      baseOrder.regDate,
-      baseOrder.orderJobs,
-      setupTimeMatrix:
-          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
-    );
+    OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
+    if (order == null || order.orderJobs == null) return null;
 
     // Obtener todas las máquinas necesarias para los tipos de máquina en las tareas
     final List<int> machineTypeIds = order.orderJobs!
@@ -74,6 +58,7 @@ class FlexibleJobShopAdapter {
     final List<FlexibleJobInput> inputJobs = [];
     for (final job in order.orderJobs!) {
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
+      final Map<int, bool> interruptibleByTask = {};
       for (final task in job.sequence!.tasks!) {
         final Map<int, Duration> machineDurations = {};
 
@@ -98,21 +83,22 @@ class FlexibleJobShopAdapter {
         }
 
         taskSequence.add(Tuple2(task.id!, machineDurations));
+        interruptibleByTask[task.id!] = machineDurations.keys.isEmpty
+            ? task.allowPreemption
+            : resolveInterruptible(job, task, machineDurations.keys.first);
       }
 
-      for (var i = 0; i < job.amount; i++) {
-        final uniqueJobId = job.jobId! * 1000 + i;
-        inputJobs.add(FlexibleJobInput(
-          uniqueJobId,
-          job.jobId!,
-          job.sequence!.id!,
-          job.dueDate,
-          job.priority,
-          job.availableDate,
-          taskSequence,
-          dependencies: job.sequence!.dependencies ?? [],
-        ));
-      }
+      inputJobs.add(FlexibleJobInput(
+        job.jobId!,
+        job.jobId!,
+        job.sequence!.id!,
+        job.dueDate,
+        job.priority,
+        job.availableDate,
+        taskSequence,
+        dependencies: job.sequence!.dependencies ?? [],
+        interruptibleByTask: interruptibleByTask,
+      ));
     }
 
     // Crear la disponibilidad inicial de las máquinas
@@ -165,6 +151,7 @@ class FlexibleJobShopAdapter {
             return {
               'taskId': task.value1,
               'machineDurations': task.value2.map((machineId, duration) => MapEntry(machineId, duration.inMilliseconds)),
+              'interruptible': job.isTaskInterruptible(task.value1),
             };
           }).toList(),
           'dependencies': job.dependencies
@@ -217,6 +204,17 @@ class FlexibleJobShopAdapter {
           ),
         );
       });
+      final segmentsByTask = (out['segmentsByTask'] as Map<dynamic, dynamic>?)
+          ?.map((key, value) {
+        final segs = (value as List<dynamic>).map((segData) {
+          final segMap = Map<String, dynamic>.from(segData as Map);
+          return ProcessingSegment(
+            DateTime.fromMillisecondsSinceEpoch(segMap['start'] as int),
+            DateTime.fromMillisecondsSinceEpoch(segMap['end'] as int),
+          );
+        }).toList();
+        return MapEntry(int.parse(key as String), segs);
+      });
       return FlexibleJobOutput(
         out['jobId'] as int,
         out['dbJobId'] as int,
@@ -224,6 +222,7 @@ class FlexibleJobShopAdapter {
         DateTime.fromMillisecondsSinceEpoch(out['startDate'] as int),
         DateTime.fromMillisecondsSinceEpoch(out['endTime'] as int),
         schedulingMap,
+        segmentsByTask: segmentsByTask,
       );
     }).toList();
 
@@ -238,12 +237,9 @@ class FlexibleJobShopAdapter {
       ));
     }
 
-    final Map<int, int> jobCounter = {};
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
       final sequence = job.sequence!;
-      final current = (jobCounter[out.dbJobId] ?? 0) + 1;
-      jobCounter[out.dbJobId] = current;
 
       for (final taskEntry in out.scheduling.entries) {
         final taskId = taskEntry.key;
@@ -253,14 +249,11 @@ class FlexibleJobShopAdapter {
         final task = sequence.tasks!.firstWhere((t) => t.id == taskId);
 
         final jobName = job.jobName ?? 'Job ${out.dbJobId}';
-        final displayName = current == 1
-            ? jobName
-            : '$jobName (${current - 1})';
 
         final planningTask = PlanningTaskEntity(
           sequenceId: sequence.id!,
           sequenceName: sequence.name,
-          displayName: displayName,
+          displayName: jobName,
           taskId: task.id!,
           numberProcess: taskId,
           startDate: timeRange.start,
@@ -268,6 +261,7 @@ class FlexibleJobShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.end),
           jobId: job.jobId!,
           orderId: orderId,
+          segments: out.segmentsByTask[taskId],
         );
 
         final planningMachine =

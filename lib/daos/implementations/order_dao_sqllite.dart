@@ -113,6 +113,39 @@ class OrderDaoSqlLite implements OrderDao {
   }
   
   @override
+  Future<void> updateSetupMatrix(
+      int orderId, Map<String, Map<String, Map<String, int>>>? matrix) async {
+    try {
+      await db.transaction((txn) async {
+        await txn.delete(
+          'order_setup_matrix',
+          where: 'order_id = ?',
+          whereArgs: [orderId],
+        );
+
+        if (matrix != null) {
+          for (var mEntry in matrix.entries) {
+            for (var entry in mEntry.value.entries) {
+              for (var subEntry in entry.value.entries) {
+                await txn.insert('order_setup_matrix', {
+                  'order_id': orderId,
+                  'machine_name': mEntry.key,
+                  'from_state': entry.key,
+                  'to_state': subEntry.key,
+                  'duration_minutes': subEntry.value,
+                });
+              }
+            }
+          }
+        }
+      });
+    } catch (error) {
+      print('OrderDaoSqlLite.updateSetupMatrix error: ${error.toString()}');
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
   Future<void> deleteOrder(int orderId) async{
     try {
       await db.delete(

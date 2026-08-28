@@ -78,7 +78,6 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         availableHour: null,
         dueHour: null,
         priorityController: TextEditingController(),
-        quantityController: TextEditingController(),
         idController: TextEditingController(text: '$nextJobId'),
         index: index + 1,
         sequences: sequences,
@@ -120,9 +119,6 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         dueHour: sourceJob.dueHour,
         priorityController: TextEditingController(
           text: sourceJob.priorityController?.text ?? '',
-        ),
-        quantityController: TextEditingController(
-          text: sourceJob.quantityController?.text ?? '',
         ),
         idController: TextEditingController(text: '$nextJobId'),
         index: nextIndex,
@@ -200,6 +196,18 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     }
   }
 
+  void setDateMode(DateRegistrationMode mode) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState).copyWith(dateMode: mode));
+    }
+  }
+
+  void setLeadTimeDays(int days) {
+    if (state is NewOrdersState && days > 0) {
+      emit((state as NewOrdersState).copyWith(leadTimeDays: days));
+    }
+  }
+
   // ─── Shared task-machine time builder ─────────────────────────────────────
 
   /// Builds the `taskMachineTimes` map from a job widget's current state.
@@ -257,19 +265,35 @@ class NewOrderBloc extends Cubit<NewOrderState> {
 
   // ─── Persist order ─────────────────────────────────────────────────────────
 
+  /// Resolves the (availableDate, dueDate) pair for [wid] according to the
+  /// order's current [DateRegistrationMode]. In manual mode this simply
+  /// returns whatever the user picked in the form. In automatic mode the
+  /// user-picked values (if any) are ignored: availableDate becomes "now"
+  /// (the order's registration moment) and dueDate is availableDate plus
+  /// the configured lead time.
+  Tuple2<DateTime, DateTime> _resolveDates(
+      NewOrdersState currentState, AddJobWidget wid) {
+    if (currentState.dateMode == DateRegistrationMode.automatic) {
+      final availableDate = DateTime.now();
+      final dueDate = availableDate.add(Duration(days: currentState.leadTimeDays));
+      return Tuple2(availableDate, dueDate);
+    }
+    return Tuple2(wid.availableDate!, wid.dueDate!);
+  }
+
   Future<void> saveOrder() async {
     if (state is NewOrdersState) {
       final currentState = state as NewOrdersState;
       final List<NewOrderRequestModel> jobs =
           currentState.jobs.map<NewOrderRequestModel>((wid) {
         final taskMachineTimes = _buildTaskMachineTimes(wid);
+        final dates = _resolveDates(currentState, wid);
 
         return NewOrderRequestModel(
           wid.selectedSequence!,
-          wid.dueDate!,
-          wid.availableDate!,
+          dates.value2,
+          dates.value1,
           int.parse(wid.priorityController!.text),
-          int.parse(wid.quantityController!.text),
           wid.idController!.text.isNotEmpty ? wid.idController!.text : null,
           preemptionMatrix:
               wid.stateKey.currentState?.getPreemptionMatrix(),
@@ -321,13 +345,13 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       final List<NewOrderRequestModel> jobs =
           currentState.jobs.map<NewOrderRequestModel>((wid) {
         final taskMachineTimes = _buildTaskMachineTimes(wid);
+        final dates = _resolveDates(currentState, wid);
 
         return NewOrderRequestModel(
           wid.selectedSequence!,
-          wid.dueDate!,
-          wid.availableDate!,
+          dates.value2,
+          dates.value1,
           int.parse(wid.priorityController!.text),
-          int.parse(wid.quantityController!.text),
           wid.idController!.text.isNotEmpty ? wid.idController!.text : null,
           preemptionMatrix:
               wid.stateKey.currentState?.getPreemptionMatrix(),
@@ -337,7 +361,11 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         );
       }).toList();
 
-      final response = await orderService.updateOrder(orderId, jobs);
+      final response = await orderService.updateOrder(
+        orderId,
+        jobs,
+        setupTimeMatrix: currentState.setupTimeMatrix,
+      );
 
       response.fold(
         (failure) {
@@ -388,8 +416,6 @@ class NewOrderBloc extends Cubit<NewOrderState> {
                   TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
               priorityController:
                   TextEditingController(text: job.priority.toString()),
-              quantityController:
-                  TextEditingController(text: job.amount.toString()),
               idController: TextEditingController(
                   text: job.jobId?.toString() ?? ''),
               index: index,
@@ -402,6 +428,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         emit(NewOrdersState(
           jobs: jobs,
           sequences: sequences,
+          setupTimeMatrix: order.setupTimeMatrix,
         ));
       },
     );

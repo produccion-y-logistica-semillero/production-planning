@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -12,10 +13,16 @@ class FlexibleFlowInput {
   //tuple2 <task id, Map<machineId, Duration of task in machine>>
   final List<Tuple2<int, Map<int, Duration>>> taskSequence;
 
+  /// Whether each task (keyed by task id) may be split by a work-shift
+  /// boundary, the continuous-use rest cap, or a maintenance window.
+  /// Missing entries default to interruptible.
+  final Map<int, bool> interruptibleByTask;
 
   FlexibleFlowInput(this.jobId, this.dueDate, this.priority, this.availableDate,
-      this.taskSequence);
+      this.taskSequence,
+      {this.interruptibleByTask = const {}});
 
+  bool isTaskInterruptible(int taskId) => interruptibleByTask[taskId] ?? true;
 }
 
 class FlexibleFlowOutput {
@@ -26,9 +33,17 @@ class FlexibleFlowOutput {
   //map<task id, tuple2<machineId, range scheuled>>
   final Map<int, Tuple2<int, Range>> scheduling;
 
+  /// Processing segments per station (stationId → segments), for tasks that
+  /// were preempted mid-processing.
+  final Map<int, List<ProcessingSegment>> segmentsByStation;
 
   FlexibleFlowOutput(
-      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
+      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling,
+      {Map<int, List<ProcessingSegment>>? segmentsByStation})
+      : segmentsByStation = segmentsByStation ??
+            scheduling.map((stationId, entry) => MapEntry(
+                stationId,
+                [ProcessingSegment(entry.value2.start, entry.value2.end)]));
 }
 
 class FlexibleFlowShop {
@@ -41,11 +56,16 @@ class FlexibleFlowShop {
   final Map<int, Map<int, String>>? jobStates;
   final Map<int, int?> _machineLastJob = {};
 
-  // Machine inactivity support
+  // Machine inactivity support.
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count.
   final Map<int, List<MachineInactivityEntity>> machineInactivities;
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
 
   FlexibleFlowShop(
     this.startDate,
@@ -59,10 +79,6 @@ class FlexibleFlowShop {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
   }) {
-    // Inicializar contador de procesamiento por máquina
-    for (final machineId in machinesAvailability.keys) {
-      machineProcessedCount[machineId] = 0;
-    }
     final r = rule.toUpperCase();
     switch (r) {
       case "EDD":
@@ -146,19 +162,35 @@ class FlexibleFlowShop {
     }
   }
 
+  PreemptionEngine _engineFor(int machineId) {
+    return _engineByMachine.putIfAbsent(machineId, () {
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      return PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap: capacityMinutes > 0
+            ? Duration(minutes: capacityMinutes)
+            : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
+    });
+  }
+
   void _assignJobToMachines(FlexibleFlowInput job) {
     DateTime jobStartTime = job.availableDate;
     DateTime? actualStartTime;
     DateTime? finalEndTime;
 
     Map<int, Tuple2<int, Range>> scheduling = {};
+    Map<int, List<ProcessingSegment>> segmentsByStation = {};
 
     for (var task in job.taskSequence) {
       int stationId = task.value1;
       Map<int, Duration> machinesInStation = task.value2;
 
-      Tuple2<int, int> selectedMachine =
-          _selectBestMachine(stationId, machinesInStation, job.jobId, jobStartTime);
+      final bool taskInterruptible = job.isTaskInterruptible(stationId);
+      Tuple2<int, int> selectedMachine = _selectBestMachine(
+          stationId, machinesInStation, job.jobId, jobStartTime, taskInterruptible);
       int machineId = selectedMachine.value2;
       Duration processingTime = machinesInStation[machineId]!;
 
@@ -176,11 +208,17 @@ class FlexibleFlowShop {
         previousJob,
       );
 
-      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
-          startTime, startTime.add(setupDuration));
-      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-          taskStart, taskStart.add(processingTime));
+      // Split setup+processing into segments wherever the work-shift end, a
+      // maintenance window, or the continuous-use rest cap would otherwise
+      // fall inside this task's span on this machine.
+      final schedule = _engineFor(machineId).computeSegments(
+        earliestStart: startTime,
+        totalDuration: setupDuration + processingTime,
+        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+        interruptible: taskInterruptible,
+      );
+      final DateTime taskStart = schedule.startDate;
+      final DateTime endTime = schedule.completionTime;
 
       // Guarda el primer tiempo real de inicio
       actualStartTime ??= taskStart;
@@ -188,8 +226,13 @@ class FlexibleFlowShop {
       finalEndTime = endTime;
 
       scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
+      segmentsByStation[stationId] = schedule.segments;
       machinesAvailability[machineId] = endTime;
       _machineLastJob[machineId] = job.jobId;
+      _machineContinuousUsage[machineId] = schedule.segments.length > 1
+          ? schedule.segments.last.duration
+          : (_machineContinuousUsage[machineId] ?? Duration.zero) +
+              schedule.segments.single.duration;
 
       jobStartTime = endTime;
     }
@@ -200,6 +243,7 @@ class FlexibleFlowShop {
       actualStartTime!,
       finalEndTime!,
       scheduling,
+      segmentsByStation: segmentsByStation,
     ));
   }
 
@@ -209,6 +253,7 @@ class FlexibleFlowShop {
       Map<int, Duration> machinesInStation,
       int jobId,
       DateTime jobStartTime,
+      bool taskInterruptible,
   ) {
     int bestMachineId = -1;
     DateTime bestEndTime = DateTime(9999);
@@ -225,15 +270,14 @@ class FlexibleFlowShop {
 
       final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
       final Duration setupDuration = _getSetupDuration(machineId, jobId, previousJob);
-      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
-        startTime,
-        startTime.add(setupDuration),
+      final schedule = _engineFor(machineId).computeSegments(
+        earliestStart: startTime,
+        totalDuration: setupDuration + processingTime,
+        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+        interruptible: taskInterruptible,
       );
-      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-        taskStart,
-        taskStart.add(processingTime),
-      );
+      DateTime taskStart = schedule.startDate;
+      DateTime endTime = schedule.completionTime;
 
       if (bestMachineId == -1 ||
           endTime.isBefore(bestEndTime) ||
@@ -312,85 +356,6 @@ class FlexibleFlowShop {
       ).add(remainingTime);
     }
     return end;
-  }
-
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday;
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    while (remaining > Duration.zero) {
-      current = _adjustForWorkingSchedule(current);
-
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          if (nextAvailable.isBefore(inactivity.start)) {
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              return nextAvailable.add(remaining);
-            } else {
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return current;
   }
 
   Duration _getSetupDuration(

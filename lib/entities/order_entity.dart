@@ -1,13 +1,12 @@
 // lib/entities/order_entity.dart
 //
-// Change: adds optional setupTimeMatrix field.
-// This is populated by OrdersService.scheduleOrder() just before calling
-// an adapter, by reading SetupTimeService.allCachedMatrices.
-// Adapters then call the helper functions in shared/functions/functions.dart
-// (buildMachineStateSetupMatrix / buildJobMachineStates) using this field.
+// setupTimeMatrix is provided by the caller (the new-order wizard's BLoC
+// state) when creating/updating an order, and is persisted in the
+// order_setup_matrix table by OrderDao. Adapters then call the helper
+// functions in shared/functions/functions.dart (buildMachineStateSetupMatrix
+// / buildJobMachineStates) using this field, read back from the DB.
 
 import 'package:production_planning/entities/job_entity.dart';
-import 'package:production_planning/services/setup_time_matrix.dart';
 
 class OrderEntity {
   final int? orderId;

@@ -9,6 +9,21 @@ class JobDaoSQLlite implements JobDao {
 
   JobDaoSQLlite(this.db);
 
+  // Installations created before the "amount" (cantidad) field was removed
+  // still have a NOT NULL "amount" column with no default value on the
+  // jobs table (we intentionally didn't recreate the table for existing
+  // installs). Detect it once and, only when present, satisfy the
+  // constraint with a harmless placeholder — nothing reads this column
+  // anymore. Fresh installs never have the column, so they skip this.
+  bool? _hasAmountColumn;
+
+  Future<bool> _jobsTableHasAmountColumn() async {
+    if (_hasAmountColumn != null) return _hasAmountColumn!;
+    final info = await db.rawQuery('PRAGMA table_info(jobs);');
+    _hasAmountColumn = info.any((row) => row['name'] == 'amount');
+    return _hasAmountColumn!;
+  }
+
   @override
   Future<List<JobModel>> getJobsByOrderId(int orderId) async {
     final List<Map<String, dynamic>> maps = await db.query(
@@ -55,8 +70,6 @@ class JobDaoSQLlite implements JobDao {
           final processingMinutes = tm['processing_minutes'] as int;
           final preparationMinutes = tm['preparation_minutes'] as int;
           final restMinutes = tm['rest_minutes'] as int;
-          print(
-              'JobDao: loaded time for job $jobId task $tId machine $mId = $processingMinutes/$preparationMinutes/$restMinutes minutes');
           taskMachineTimes.putIfAbsent(tId, () => {})[mId] = {
             'processing': processingMinutes,
             'preparation': preparationMinutes,
@@ -83,7 +96,6 @@ class JobDaoSQLlite implements JobDao {
       jobs.add(JobModel(
         jobId,
         map['sequence_id'] as int,
-        map['amount'] as int,
         map['job_name'] as String?,
         DateTime.parse(map['due_date'] as String),
         map['priority'] as int,
@@ -100,16 +112,19 @@ class JobDaoSQLlite implements JobDao {
   @override
   Future<void> insertJob(JobEntity job, int orderId) async {
     try {
+      final hasAmountColumn = await _jobsTableHasAmountColumn();
       await db.transaction((txn) async {
         // map job data for data base
         final jobMap = {
           'sequence_id': job.sequence!.id,
           'order_id': orderId,
-          'amount': job.amount,
           'job_name': job.jobName,
           'due_date': job.dueDate.toIso8601String(), // due date
           'priority': job.priority,
           'available_date': job.availableDate.toIso8601String(),
+          // Only needed on installs created before "amount" was removed;
+          // see _jobsTableHasAmountColumn.
+          if (hasAmountColumn) 'amount': 1,
         };
 
         // insert job to data base
@@ -134,8 +149,6 @@ class JobDaoSQLlite implements JobDao {
               final processingMinutes = e.value.processing.inMinutes;
               final preparationMinutes = e.value.preparation.inMinutes;
               final restMinutes = e.value.rest.inMinutes;
-              print(
-                  'JobDao: inserting time for job $jobId task $taskId machine ${e.key} = $processingMinutes/$preparationMinutes/$restMinutes minutes');
               await txn.insert('job_task_machine_times', {
                 'job_id': jobId,
                 'task_id': taskId,

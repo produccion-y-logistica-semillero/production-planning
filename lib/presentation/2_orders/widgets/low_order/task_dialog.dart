@@ -58,8 +58,6 @@ class TaskDialog extends StatelessWidget {
   Widget _buildOrderInfo(OrderEntity order) {
     final job = order.orderJobs!.firstWhere((j) => j.jobId! == task.jobId);
 
-    final taskInfo = job.sequence!.tasks!.firstWhere((t) => t.id == task.taskId);
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,16 +73,26 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Nombre de Job", job.jobName ?? "Job ${job.jobId}"),
           _buildInfoRow("Secuencia", task.sequenceName),
           _buildInfoRow("ID tarea", task.taskId.toString()),
-          _buildInfoRow("Tiempo procesamiento", '${taskInfo.processingUnits.inHours.toString().padLeft(2,'0')}:${(taskInfo.processingUnits.inMinutes- (taskInfo.processingUnits.inHours*60)).toString().padLeft(2,'0') }'),
+          _buildInfoRow(
+            "Tiempo procesamiento",
+            _formatProcessingDuration(_actualProcessingDuration(task)),
+          ),
          /* _buildInfoRow(
             "Número ejecución",
             "${taskInfo.execOrder} de ${job.sequence!.tasks!.length}",
           ),*/
-          _buildInfoRow("Cantidad", job.amount.toString()),
           _buildInfoRow(
             "Fechas",
             "${getDateFormat(task.startDate)} - ${getDateFormat(task.endDate)}",
           ),
+          if (task.segments.length > 1)
+            _buildInfoRow(
+              "Procesado en ${task.segments.length} tramos",
+              task.segments
+                  .map((s) =>
+                      '${getDateFormat(s.start)} – ${getDateFormat(s.end)}')
+                  .join('\n'),
+            ),
         ],
       ),
     );
@@ -116,5 +124,24 @@ class TaskDialog extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// The duration actually spent processing this specific task instance —
+  /// the sum of its segments, excluding any preemption pauses. This is what
+  /// was truly scheduled for this job, as opposed to the sequence's generic
+  /// per-task template duration (which can differ once per-job/per-machine
+  /// overrides or machine processing percentages are applied).
+  Duration _actualProcessingDuration(PlanningTaskEntity task) {
+    return task.segments.fold(
+      Duration.zero,
+      (sum, segment) => sum + segment.duration,
+    );
+  }
+
+  String _formatProcessingDuration(Duration duration) {
+    final hours = duration.inHours.toString().padLeft(2, '0');
+    final minutes =
+        (duration.inMinutes - duration.inHours * 60).toString().padLeft(2, '0');
+    return '$hours:$minutes';
   }
 }

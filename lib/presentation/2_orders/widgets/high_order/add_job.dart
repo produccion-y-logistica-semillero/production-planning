@@ -20,6 +20,7 @@ import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
+import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 
 // Helper widget for numeric input with max value validation
 class _MaxValueFormatter extends TextInputFormatter {
@@ -85,7 +86,6 @@ class AddJobWidget extends StatefulWidget {
   TimeOfDay? availableHour;
   TimeOfDay? dueHour;
   final TextEditingController? priorityController;
-  final TextEditingController? quantityController;
   final TextEditingController? idController;
   final List<dartz.Tuple2<int, String>> sequences;
   final int index;
@@ -100,7 +100,6 @@ class AddJobWidget extends StatefulWidget {
     required this.availableHour,
     required this.dueHour,
     required this.priorityController,
-    required this.quantityController,
     required this.idController,
     required this.index,
     required this.sequences,
@@ -113,7 +112,6 @@ class AddJobWidget extends StatefulWidget {
     required TimeOfDay? availableHour,
     required TimeOfDay? dueHour,
     required TextEditingController? priorityController,
-    required TextEditingController? quantityController,
     required TextEditingController? idController,
     required int index,
     required List<dartz.Tuple2<int, String>> sequences,
@@ -128,7 +126,6 @@ class AddJobWidget extends StatefulWidget {
       availableHour: availableHour,
       dueHour: dueHour,
       priorityController: priorityController,
-      quantityController: quantityController,
       idController: idController,
       index: index,
       sequences: sequences,
@@ -426,24 +423,6 @@ class AddJobState extends State<AddJobWidget> {
             ),
             const SizedBox(height: 8),
             TextFormField(
-              controller: widget.quantityController,
-              decoration: InputDecoration(
-                labelText: 'Cantidad',
-                labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: colorScheme.outline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: colorScheme.primary),
-                ),
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
               controller: widget.priorityController,
               decoration: InputDecoration(
                 labelText: 'Prioridad',
@@ -461,20 +440,39 @@ class AddJobState extends State<AddJobWidget> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: selectDate('Seleccione fecha de disponibilidad',
-                      availableDate, availableHour),
-                ),
-                const Expanded(flex: 2, child: SizedBox()),
-                Expanded(
-                  flex: 3,
-                  child: selectDate(
-                      'Seleccione fecha de entrega', dueDate, dueHour),
-                ),
-              ],
+            BlocBuilder<NewOrderBloc, NewOrderState>(
+              builder: (context, state) {
+                final isAutomatic = state is NewOrdersState &&
+                    state.dateMode == DateRegistrationMode.automatic;
+                if (isAutomatic) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Las fechas de disponibilidad y entrega se calculan '
+                      'automáticamente al guardar la orden.',
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: selectDate('Seleccione fecha de disponibilidad',
+                          availableDate, availableHour),
+                    ),
+                    const Expanded(flex: 2, child: SizedBox()),
+                    Expanded(
+                      flex: 3,
+                      child: selectDate(
+                          'Seleccione fecha de entrega', dueDate, dueHour),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             DropdownButton<int>(
@@ -765,6 +763,27 @@ class AddJobState extends State<AddJobWidget> {
     final restController =
         TextEditingController(text: _formatDuration(restDuration));
 
+    // Without this, tapping into a pre-filled field (e.g. showing the
+    // stale "00:05:00" default) places the cursor instead of selecting the
+    // existing text — since _HhMmSsTextInputFormatter always keeps only the
+    // FIRST 6 digits of the resulting string, typing a new value without
+    // first clearing the field just gets truncated away and the old value
+    // silently "wins", making the field look impossible to edit.
+    final processingFocusNode = FocusNode();
+    processingFocusNode.addListener(() {
+      if (processingFocusNode.hasFocus) {
+        processingController.selection = TextSelection(
+            baseOffset: 0, extentOffset: processingController.text.length);
+      }
+    });
+    final restFocusNode = FocusNode();
+    restFocusNode.addListener(() {
+      if (restFocusNode.hasFocus) {
+        restController.selection = TextSelection(
+            baseOffset: 0, extentOffset: restController.text.length);
+      }
+    });
+
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -795,6 +814,7 @@ class AddJobState extends State<AddJobWidget> {
                 const SizedBox(height: 4),
                 TextField(
                   controller: processingController,
+                  focusNode: processingFocusNode,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                       hintText: 'HH:MM:SS', border: OutlineInputBorder()),
@@ -808,6 +828,7 @@ class AddJobState extends State<AddJobWidget> {
                 const SizedBox(height: 4),
                 TextField(
                   controller: restController,
+                  focusNode: restFocusNode,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                       hintText: 'HH:MM:SS', border: OutlineInputBorder()),
@@ -884,6 +905,9 @@ class AddJobState extends State<AddJobWidget> {
       _syncStandardTimesToMachines(
           machineTypeId, _stationTimes[machineTypeId]!);
     }
+
+    processingFocusNode.dispose();
+    restFocusNode.dispose();
   }
 
   // ── helpers (unchanged) ───────────────────────────────────────────────────

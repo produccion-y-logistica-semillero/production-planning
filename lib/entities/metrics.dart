@@ -6,6 +6,7 @@ class Metrics {
   final Duration avarageProcessingTime;
   final Duration avarageDelayTime; // average tardiness, always non-negative
   final Duration avarageLatenessTime; // average lateness, can be negative
+  final Duration avarageEarlinessTime; // average earliness, always non-negative
   final int delayedJobs;
   final double percentageDelayedJobs;
   final Duration makespan;
@@ -24,6 +25,7 @@ class Metrics {
       required this.avarageProcessingTime,
       required this.avarageDelayTime,
       required this.avarageLatenessTime,
+      required this.avarageEarlinessTime,
       required this.delayedJobs,
       required this.makespan,
       required this.totalFlow,

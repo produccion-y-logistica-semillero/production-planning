@@ -17,18 +17,24 @@ import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
-import 'package:production_planning/services/setup_time_service.dart';
 
 class OrdersService {
   final OrderRepository orderRepo;
   final MachineRepository machineRepo;
-  final SetupTimeService setupTimeService;
 
-  OrdersService(this.orderRepo, this.machineRepo, this.setupTimeService);
+  OrdersService(this.orderRepo, this.machineRepo);
+
+  /// Ensures every job gets a human-readable name, so downstream UI never
+  /// has to fall back to displaying a raw numeric job ID.
+  String _resolveJobName(String? jobName, int indexInOrder) {
+    if (jobName != null && jobName.trim().isNotEmpty) return jobName;
+    return 'Trabajo ${indexInOrder + 1}';
+  }
 
   Future<Either<Failure, bool>> addOrder(List<NewOrderRequestModel> model,
       {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
-    final List<JobEntity> jobs = model.map((jobModel) {
+    final List<JobEntity> jobs = model.asMap().entries.map((entry) {
+      final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
       if (jobModel.taskMachineTimesMinutes != null) {
         taskMachineTimes = {};
@@ -48,8 +54,7 @@ class OrdersService {
       return JobEntity(
         null,
         SequenceEntity(jobModel.sequenceId, null, "", null),
-        jobModel.amount,
-        jobModel.jobName,
+        _resolveJobName(jobModel.jobName, entry.key),
         jobModel.dueDate,
         jobModel.priority,
         jobModel.availableDate,
@@ -80,8 +85,10 @@ class OrdersService {
   }
 
   Future<Either<Failure, bool>> updateOrder(
-      int orderId, List<NewOrderRequestModel> model) async {
-    final List<JobEntity> jobs = model.map((jobModel) {
+      int orderId, List<NewOrderRequestModel> model,
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+    final List<JobEntity> jobs = model.asMap().entries.map((entry) {
+      final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
       if (jobModel.taskMachineTimesMinutes != null) {
         taskMachineTimes = {};
@@ -101,8 +108,7 @@ class OrdersService {
       return JobEntity(
         null,
         SequenceEntity(jobModel.sequenceId, null, "", null),
-        jobModel.amount,
-        jobModel.jobName,
+        _resolveJobName(jobModel.jobName, entry.key),
         jobModel.dueDate,
         jobModel.priority,
         jobModel.availableDate,
@@ -112,7 +118,8 @@ class OrdersService {
       );
     }).toList();
 
-    final OrderEntity updatedOrder = OrderEntity(orderId, DateTime.now(), jobs);
+    final OrderEntity updatedOrder = OrderEntity(orderId, DateTime.now(), jobs,
+        setupTimeMatrix: setupTimeMatrix);
     try {
       return await orderRepo.updateOrder(updatedOrder);
     } catch (error, stack) {
@@ -629,33 +636,30 @@ class OrdersService {
       scheduleOrder(Tuple3<int, String, String> sch) async {
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
-              orderRepository: orderRepo, 
-              machineRepository: machineRepo, setupTimeService: setupTimeService)
+              orderRepository: orderRepo,
+              machineRepository: machineRepo)
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo, setupTimeService: setupTimeService)
+              machineRepository: machineRepo, orderRepository: orderRepo)
           .parallelMachineAdapter(sch.value1, sch.value2)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
-              machineRepository: machineRepo, 
-              orderRepository: orderRepo, setupTimeService: setupTimeService)
+              machineRepository: machineRepo,
+              orderRepository: orderRepo)
           .flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
-              machineRepository: machineRepo, orderRepository: orderRepo, setupTimeService: setupTimeService)
+              machineRepository: machineRepo, orderRepository: orderRepo)
           .flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => await FlexibleJobShopAdapter(
               machineRepository: machineRepo,
-              orderRepository: orderRepo,
-              setupTimeService: setupTimeService)
+              orderRepository: orderRepo)
           .flexibleJobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
       'JOB SHOP' => await JobShopAdapter(
               machineRepository: machineRepo,
-              orderRepository: orderRepo,
-              setupTimeService: setupTimeService)
+              orderRepository: orderRepo)
             .jobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo,
-              orderRepository: orderRepo,
-              setupTimeService: setupTimeService)
+              orderRepository: orderRepo)
           .openShopAdapter(sch.value1, sch.value2)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),

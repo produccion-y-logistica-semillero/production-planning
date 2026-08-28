@@ -1,6 +1,7 @@
 import 'package:production_planning/entities/job_entity.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_times.dart';
+import 'package:production_planning/entities/task_entity.dart';
 
 /// Returns the explicit Duration for [job]-[taskId]-[machine] when available.
 /// Tries the following fallbacks in order:
@@ -39,6 +40,18 @@ Duration? getExplicitProcessingDuration(
     JobEntity job, int taskId, MachineEntity machine) {
   final machineTime = getExplicitMachineTimes(job, taskId, machine);
   return machineTime?.processing;
+}
+
+/// Whether [job]'s processing of [task] on [machineId] may be split by a
+/// work-shift boundary, the continuous-use rest cap, or a maintenance
+/// window. [job.preemptionMatrix] (per job, per machine — 1 = interruptible)
+/// takes priority when it has an entry for [machineId]; otherwise falls back
+/// to [task.allowPreemption] (the task's own default, set when the sequence
+/// was created).
+bool resolveInterruptible(JobEntity job, TaskEntity task, int machineId) {
+  final override = job.preemptionMatrix?[machineId];
+  if (override != null) return override != 0;
+  return task.allowPreemption;
 }
 
 String _normalizeMachineName(String machineName) {

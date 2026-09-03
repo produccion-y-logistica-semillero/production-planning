@@ -16,7 +16,7 @@ void main() {
       Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 19, minute: 0));
 
   test('work-shift boundary pauses and resumes a job the next working day', () {
-    final engine = const PreemptionEngine(workingSchedule: workingSchedule);
+    const engine = PreemptionEngine(workingSchedule: workingSchedule);
 
     // Starts at 17:00 within a 6am-7pm shift, needs 5h -> only 2h available
     // today before 19:00, so it must pause and resume at 06:00 next day.
@@ -41,7 +41,7 @@ void main() {
   });
 
   test('continuous-use cap pauses for the configured rest and resumes', () {
-    final engine = const PreemptionEngine(
+    const engine = PreemptionEngine(
       workingSchedule: workingSchedule,
       continuousUseCap: Duration(hours: 3),
       restDuration: Duration(hours: 1),
@@ -69,8 +69,9 @@ void main() {
     expect(result.totalProcessingDuration, const Duration(hours: 3));
   });
 
-  test('scheduled maintenance window pauses and resumes a job on the same day', () {
-    final engine = PreemptionEngine(
+  test('scheduled maintenance window pauses and resumes a job on the same day',
+      () {
+    const engine = PreemptionEngine(
       workingSchedule: workingSchedule,
       maintenanceWindows: [
         MachineInactivityEntity(
@@ -102,7 +103,7 @@ void main() {
   });
 
   test('a job that fits entirely within one segment is not split', () {
-    final engine = const PreemptionEngine(workingSchedule: workingSchedule);
+    const engine = PreemptionEngine(workingSchedule: workingSchedule);
     final start = DateTime(2026, 1, 5, 8, 0);
     final result = engine.computeSegments(
       earliestStart: start,

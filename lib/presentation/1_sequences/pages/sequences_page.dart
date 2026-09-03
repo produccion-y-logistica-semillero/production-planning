@@ -20,8 +20,7 @@ import 'package:production_planning/presentation/1_sequences/widgets/high_order_
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/add_order.dart';
 
 class SequencesPage extends StatefulWidget {
-  SequencesPage({super.key});
-
+  const SequencesPage({super.key});
 
   @override
   State<SequencesPage> createState() => _SequencesPageState();
@@ -41,23 +40,24 @@ class _SequencesPageState extends State<SequencesPage> {
           listeners: [
             // Refrescar la lista cuando pasas de "Nueva Ruta" a "Ver Secuencias"
             BlocListener<SequencesBloc, SequencesState>(
-
-              listenWhen: (prev, curr) => prev.isNewOrder == true && curr.isNewOrder == false,
+              listenWhen: (prev, curr) =>
+                  prev.isNewOrder == true && curr.isNewOrder == false,
               listener: (context, state) {
                 // Forzar que la lista se recargue para que aparezca la recién creada
-                context.read<SeeProcessBloc>().retrieveSequences(); // si tienes force: true, úsalo aquí
-
+                context
+                    .read<SeeProcessBloc>()
+                    .retrieveSequences(); // si tienes force: true, úsalo aquí
               },
             ),
           ],
           child: BlocBuilder<SequencesBloc, SequencesState>(
             builder: (context, state) {
-             
-              Widget machinesContent = const Center(child: CircularProgressIndicator());
+              Widget machinesContent =
+                  const Center(child: CircularProgressIndicator());
 
               if (state is SequencesInitialState) {
-                BlocProvider.of<SequencesBloc>(context).retrieveSequencesMachine();
-
+                BlocProvider.of<SequencesBloc>(context)
+                    .retrieveSequencesMachine();
               }
               if (state is SequencesMachineFailure) {
                 machinesContent = const Center(child: Text("Error fetching"));
@@ -66,8 +66,8 @@ class _SequencesPageState extends State<SequencesPage> {
                 machinesContent = MachinesList(
                   machineTypes: state.machines!,
                   onSelectMachine: (machine) {
-
-                    BlocProvider.of<SequencesBloc>(context).selectMachine(machine);
+                    BlocProvider.of<SequencesBloc>(context)
+                        .selectMachine(machine);
 
                     nodeEditorKey.currentState?.addNodeForMachine(machine);
                   },
@@ -86,8 +86,8 @@ class _SequencesPageState extends State<SequencesPage> {
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Por favor ingresa un nombre para la secuencia'),
-
+                          content: Text(
+                              'Por favor ingresa un nombre para la secuencia'),
                         ),
                       );
                     }
@@ -109,7 +109,7 @@ class _SequencesPageState extends State<SequencesPage> {
                       context,
                       title: 'Secuencias',
                       content:
-                      'Una secuencia se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o "tarea" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min',
+                          'Una secuencia se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o "tarea" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min',
                     ),
                     icon: const Icon(Icons.info),
                   ),
@@ -132,12 +132,17 @@ class _SequencesPageState extends State<SequencesPage> {
                                 ButtonMode(
                                   callback: state.isNewOrder
                                       ? () {
-                                    BlocProvider.of<SequencesBloc>(context).useMode(false);
+                                          BlocProvider.of<SequencesBloc>(
+                                                  context)
+                                              .useMode(false);
 
-                                    context.read<SeeProcessBloc>().retrieveSequences();
-                                  }
-                                      : () => BlocProvider.of<SequencesBloc>(context).useMode(true),
-
+                                          context
+                                              .read<SeeProcessBloc>()
+                                              .retrieveSequences();
+                                        }
+                                      : () => BlocProvider.of<SequencesBloc>(
+                                              context)
+                                          .useMode(true),
                                   labelText: state.isNewOrder
                                       ? "Ver Secuencias"
                                       : "Nueva Ruta de proceso",

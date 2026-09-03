@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_states.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 
@@ -73,6 +74,11 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Nombre de Job", job.jobName ?? "Job ${job.jobId}"),
           _buildInfoRow("Secuencia", task.sequenceName),
           _buildInfoRow("ID tarea", task.taskId.toString()),
+          if (task.setupSegments.isNotEmpty)
+            _buildInfoRow(
+              "Tiempo de alistamiento",
+              _formatProcessingDuration(_sumSegments(task.setupSegments)),
+            ),
           _buildInfoRow(
             "Tiempo procesamiento",
             _formatProcessingDuration(_actualProcessingDuration(task)),
@@ -131,8 +137,11 @@ class TaskDialog extends StatelessWidget {
   /// was truly scheduled for this job, as opposed to the sequence's generic
   /// per-task template duration (which can differ once per-job/per-machine
   /// overrides or machine processing percentages are applied).
-  Duration _actualProcessingDuration(PlanningTaskEntity task) {
-    return task.segments.fold(
+  Duration _actualProcessingDuration(PlanningTaskEntity task) =>
+      _sumSegments(task.segments);
+
+  Duration _sumSegments(List<ProcessingSegment> segments) {
+    return segments.fold(
       Duration.zero,
       (sum, segment) => sum + segment.duration,
     );

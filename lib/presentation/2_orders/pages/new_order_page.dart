@@ -209,48 +209,127 @@ class NewOrderPage extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SegmentedButton<DateRegistrationMode>(
-            segments: const [
-              ButtonSegment(
-                value: DateRegistrationMode.manual,
-                label: Text('Manual'),
-                icon: Icon(Icons.edit_calendar_rounded, size: 16),
+          Row(
+            children: [
+              SegmentedButton<DateRegistrationMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: DateRegistrationMode.manual,
+                    label: Text('Manual'),
+                    icon: Icon(Icons.edit_calendar_rounded, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: DateRegistrationMode.automatic,
+                    label: Text('Automático'),
+                    icon: Icon(Icons.auto_awesome_rounded, size: 16),
+                  ),
+                ],
+                selected: {state.dateMode},
+                onSelectionChanged: (selection) =>
+                    bloc.setDateMode(selection.first),
               ),
-              ButtonSegment(
-                value: DateRegistrationMode.automatic,
-                label: Text('Automático'),
-                icon: Icon(Icons.auto_awesome_rounded, size: 16),
-              ),
+              if (state.dateMode == DateRegistrationMode.automatic) ...[
+                const SizedBox(width: 12),
+                const Text('Plazo (días):'),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: leadTimeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(isDense: true),
+                    onSubmitted: (value) {
+                      final days = int.tryParse(value.trim());
+                      if (days != null && days > 0) {
+                        bloc.setLeadTimeDays(days);
+                      }
+                    },
+                    onEditingComplete: () {
+                      final days =
+                          int.tryParse(leadTimeController.text.trim());
+                      if (days != null && days > 0) {
+                        bloc.setLeadTimeDays(days);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ],
-            selected: {state.dateMode},
-            onSelectionChanged: (selection) =>
-                bloc.setDateMode(selection.first),
           ),
           if (state.dateMode == DateRegistrationMode.automatic) ...[
-            const SizedBox(width: 12),
-            const Text('Plazo (días):'),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 60,
-              child: TextField(
-                controller: leadTimeController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(isDense: true),
-                onSubmitted: (value) {
-                  final days = int.tryParse(value.trim());
-                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
-                },
-                onEditingComplete: () {
-                  final days = int.tryParse(leadTimeController.text.trim());
-                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
-                },
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _selectOrderAutomaticHour(
+                  context,
+                  'Hora de inicio',
+                  state.automaticStartHour,
+                  bloc.setAutomaticStartHour,
+                  colorScheme,
+                ),
+                const SizedBox(width: 24),
+                _selectOrderAutomaticHour(
+                  context,
+                  'Hora de entrega',
+                  state.automaticDueHour,
+                  bloc.setAutomaticDueHour,
+                  colorScheme,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Aplican a todos los jobs de esta orden que no tengan su '
+              'propia hora. Si se dejan vacías, se usa la hora actual.',
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  /// Order-wide hour picker for automatic mode — mirrors the per-job
+  /// `_selectAutomaticHour` in `add_job.dart`, but writes to the bloc's
+  /// order-level default instead of a single job's override.
+  Widget _selectOrderAutomaticHour(
+    BuildContext context,
+    String label,
+    TimeOfDay? hour,
+    ValueChanged<TimeOfDay?> onPicked,
+    ColorScheme colorScheme,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
+        TextButton(
+          onPressed: () async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: hour ?? TimeOfDay.now(),
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: hour == null
+              ? const Text('Hora actual')
+              : Text("${hour.hour.toString().padLeft(2, '0')}:"
+                  "${hour.minute.toString().padLeft(2, '0')}"),
+        ),
+        if (hour != null)
+          IconButton(
+            icon: const Icon(Icons.clear, size: 16),
+            tooltip: 'Usar hora actual',
+            onPressed: () => onPicked(null),
+          ),
+      ],
     );
   }
 

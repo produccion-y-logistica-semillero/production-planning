@@ -48,13 +48,15 @@ class FlexibleJobOutput {
   /// preempted mid-processing.
   final Map<int, List<ProcessingSegment>> segmentsByTask;
 
-  FlexibleJobOutput(
-      this.jobId, this.dbJobId, this.dueDate, this.startDate, this.endTime,
-      this.scheduling,
-      {Map<int, List<ProcessingSegment>>? segmentsByTask})
+  /// Setup/changeover segments per task (taskId → segments), if any.
+  final Map<int, List<ProcessingSegment>> setupSegmentsByTask;
+
+  FlexibleJobOutput(this.jobId, this.dbJobId, this.dueDate, this.startDate,
+      this.endTime, this.scheduling,
+      {Map<int, List<ProcessingSegment>>? segmentsByTask,
+      this.setupSegmentsByTask = const {}})
       : segmentsByTask = segmentsByTask ??
-            scheduling.map((taskId, entry) => MapEntry(
-                taskId,
+            scheduling.map((taskId, entry) => MapEntry(taskId,
                 [ProcessingSegment(entry.value2.start, entry.value2.end)]));
 }
 
@@ -98,7 +100,6 @@ class FlexibleJobShop {
     this.workingSchedule,
     this.inputJobs,
     this.machinesAvailability,
-
     String rule, {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
@@ -142,7 +143,7 @@ class FlexibleJobShop {
         break;
     }
   }
- 
+
   void scheduleFlexibleJobShopGENETICS() {
     // Simple genetics-like heuristic: combine CR and WSPT into a score
     print('FlexibleJobShop: starting scheduling (GENETICS)');
@@ -238,7 +239,8 @@ class FlexibleJobShop {
     for (int i = currentOpIndex; i < job.taskSequence.length; i++) {
       final task = job.taskSequence[i];
       if (task.value2.isEmpty) continue;
-      final sum = task.value2.values.fold<int>(0, (total, duration) => total + duration.inMinutes);
+      final sum = task.value2.values
+          .fold<int>(0, (total, duration) => total + duration.inMinutes);
       final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
       totalMinutes += avgDuration;
     }
@@ -247,7 +249,6 @@ class FlexibleJobShop {
   }
 
   void scheduleFlexibleJobShopMS() {
-
     int accumulatedProcessingTime = 0; // Acumulamos el tiempo aquí
 
     _schedule((a, b) {
@@ -267,21 +268,22 @@ class FlexibleJobShop {
 
   int _accumulatedProcessingTimeForJob(
       FlexibleJobInput job, int currentAccumulatedTime) {
-    int totalProcessingTime = currentAccumulatedTime; // Empezamos desde el tiempo acumulado
+    int totalProcessingTime =
+        currentAccumulatedTime; // Empezamos desde el tiempo acumulado
 
     final opIndex = jobOperationIndex[job.jobId]!;
 
     for (int i = 0; i < opIndex; i++) {
       final task = job.taskSequence[i];
       if (task.value2.isEmpty) continue;
-      final sum = task.value2.values.fold<int>(0, (total, duration) => total + duration.inMinutes);
+      final sum = task.value2.values
+          .fold<int>(0, (total, duration) => total + duration.inMinutes);
       final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
       totalProcessingTime += avgDuration;
     }
 
     return totalProcessingTime;
   }
-
 
   double _calculateSlack(
       FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
@@ -294,7 +296,6 @@ class FlexibleJobShop {
   }
 
   void scheduleFlexibleJobShopCR() {
-
     int accumulatedProcessingTime =
         0; // Inicializamos el acumulado en cada llamada
 
@@ -310,7 +311,6 @@ class FlexibleJobShop {
       return crA.compareTo(crB);
     });
   }
-
 
   double _calculateCR(
       FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
@@ -398,7 +398,8 @@ class FlexibleJobShop {
     }
   }
 
-  DateTime _getJobReadyTime(FlexibleJobInput job, int taskId, Map<int, DateTime> compTimes) {
+  DateTime _getJobReadyTime(
+      FlexibleJobInput job, int taskId, Map<int, DateTime> compTimes) {
     if (job.dependencies.isEmpty) {
       final idx = job.taskSequence.indexWhere((t) => t.value1 == taskId);
       if (idx > 0) {
@@ -442,8 +443,12 @@ class FlexibleJobShop {
       for (var job in inputJobs) job.jobId: {},
     };
 
-    int _iter = 0;
-    const int _maxIter = 1000000; // safety cap
+    Map<int, Map<int, List<ProcessingSegment>>> jobSetupSegments = {
+      for (var job in inputJobs) job.jobId: {},
+    };
+
+    int iter = 0;
+    const int maxIter = 1000000; // safety cap
     int lastCompletedCount = 0;
     int stallIterations = 0;
 
@@ -451,15 +456,18 @@ class FlexibleJobShop {
       final job = inputJobs.firstWhere((j) => j.jobId == entry.key);
       return entry.value.length < job.taskSequence.length;
     })) {
-      _iter++;
-      if (_iter % 10000 == 0) {
-        print('FlexibleJobShop._schedule: iter=$_iter, remainingJobs=${completedTasks.values.map((s) => s.length).join(',')}');
+      iter++;
+      if (iter % 10000 == 0) {
+        print(
+            'FlexibleJobShop._schedule: iter=$iter, remainingJobs=${completedTasks.values.map((s) => s.length).join(',')}');
       }
-      if (_iter > _maxIter) {
-        print('FlexibleJobShop._schedule: reached max iterations ($_maxIter), aborting to avoid freeze');
+      if (iter > maxIter) {
+        print(
+            'FlexibleJobShop._schedule: reached max iterations ($maxIter), aborting to avoid freeze');
         break;
       }
-      final currentCompletedCount = completedTasks.values.fold<int>(0, (sum, set) => sum + set.length);
+      final currentCompletedCount =
+          completedTasks.values.fold<int>(0, (sum, set) => sum + set.length);
       if (currentCompletedCount == lastCompletedCount) {
         stallIterations += 1;
       } else {
@@ -467,7 +475,8 @@ class FlexibleJobShop {
       }
       lastCompletedCount = currentCompletedCount;
       if (stallIterations > 1000) {
-        print('FlexibleJobShop._schedule: no progress after $stallIterations iterations, aborting to avoid freeze');
+        print(
+            'FlexibleJobShop._schedule: no progress after $stallIterations iterations, aborting to avoid freeze');
         break;
       }
 
@@ -495,7 +504,8 @@ class FlexibleJobShop {
           for (var entry in task.value2.entries) {
             final machineId = entry.key;
             final duration = entry.value;
-            final machineAvailable = machinesAvailability[machineId] ?? startDate;
+            final machineAvailable =
+                machinesAvailability[machineId] ?? startDate;
 
             final earliestStart = machineAvailable.isAfter(jobReadyTime)
                 ? machineAvailable
@@ -514,7 +524,8 @@ class FlexibleJobShop {
       }
 
       if (candidates.isEmpty) {
-        print('FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
+        print(
+            'FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
         break;
       }
 
@@ -533,14 +544,33 @@ class FlexibleJobShop {
       final Duration setupDuration = _getSetupDuration(
           selected.machineId, selected.job.jobId, previousJob);
 
-      // Split setup+processing into segments wherever the work-shift end, a
+      // Schedule setup as its own segmented block (through the preemption
+      // engine, so it's just as sensitive to work-shift/rest/maintenance
+      // boundaries as processing is), then start processing right after.
+      List<ProcessingSegment> setupSegments = const [];
+      DateTime processStart = start;
+      Duration continuousUsage =
+          _machineContinuousUsage[selected.machineId] ?? Duration.zero;
+      if (setupDuration > Duration.zero) {
+        final setupSchedule = _engineFor(selected.machineId).computeSegments(
+          earliestStart: start,
+          totalDuration: setupDuration,
+          priorContinuousUsage: continuousUsage,
+        );
+        setupSegments = setupSchedule.segments;
+        processStart = setupSchedule.completionTime;
+        continuousUsage = setupSegments.length > 1
+            ? setupSegments.last.duration
+            : continuousUsage + setupSegments.single.duration;
+      }
+
+      // Split processing into segments wherever the work-shift end, a
       // maintenance window, or the continuous-use rest cap would otherwise
       // fall inside this task's span on this machine.
       final schedule = _engineFor(selected.machineId).computeSegments(
-        earliestStart: start,
-        totalDuration: setupDuration + selected.duration,
-        priorContinuousUsage:
-            _machineContinuousUsage[selected.machineId] ?? Duration.zero,
+        earliestStart: processStart,
+        totalDuration: selected.duration,
+        priorContinuousUsage: continuousUsage,
         interruptible: selected.job.isTaskInterruptible(selected.taskId),
       );
       final DateTime taskStart = schedule.startDate;
@@ -549,12 +579,12 @@ class FlexibleJobShop {
       jobSchedulings[selected.job.jobId]![selected.taskId] =
           Tuple2(selected.machineId, Range(taskStart, adjustedEnd));
       jobSegments[selected.job.jobId]![selected.taskId] = schedule.segments;
+      jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
       machinesAvailability[selected.machineId] = adjustedEnd;
       _machineContinuousUsage[selected.machineId] = schedule.segments.length > 1
           ? schedule.segments.last.duration
-          : (_machineContinuousUsage[selected.machineId] ?? Duration.zero) +
-              schedule.segments.single.duration;
+          : continuousUsage + schedule.segments.single.duration;
       completedTasks[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
       jobOperationIndex[selected.job.jobId] =
@@ -562,7 +592,7 @@ class FlexibleJobShop {
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
       _machineLastJob[selected.machineId] = selected.job.dbJobId;
     }
-    print('FlexibleJobShop._schedule: exiting main loop after iter=$_iter');
+    print('FlexibleJobShop._schedule: exiting main loop after iter=$iter');
 
     for (var job in inputJobs) {
       final sched = jobSchedulings[job.jobId]!;
@@ -581,10 +611,10 @@ class FlexibleJobShop {
         end,
         sched,
         segmentsByTask: jobSegments[job.jobId],
+        setupSegmentsByTask: jobSetupSegments[job.jobId] ?? const {},
       ));
     }
   }
-
 
   DateTime _adjustForWorkingSchedule(DateTime start) {
     TimeOfDay workingStart = workingSchedule.value1;
@@ -605,46 +635,56 @@ class FlexibleJobShop {
 
   DateTime _adjustEndTimeForWorkingSchedule(DateTime start, DateTime end) {
     TimeOfDay workingEnd = workingSchedule.value2;
-    DateTime endOfDay = DateTime(start.year, start.month, start.day, workingEnd.hour, workingEnd.minute);
+    DateTime endOfDay = DateTime(
+        start.year, start.month, start.day, workingEnd.hour, workingEnd.minute);
 
     if (end.isAfter(endOfDay)) {
       Duration remainingTime = end.difference(endOfDay);
-      return DateTime(start.year, start.month, start.day + 1, workingSchedule.value1.hour, workingSchedule.value1.minute)
+      return DateTime(start.year, start.month, start.day + 1,
+              workingSchedule.value1.hour, workingSchedule.value1.minute)
           .add(remainingTime);
     }
     return end;
   }
-
 
   int calcularCmax(List<FlexibleJobOutput> output) {
     if (output.isEmpty) return 0;
     final startTimes = output.map((job) => job.startDate).toList();
     final endTimes = output.map((job) => job.endTime).toList();
 
-    final earliestStart = startTimes.fold<DateTime>(startTimes.first,
-        (a, b) => a.isBefore(b) ? a : b);
-    final latestEnd = endTimes.fold<DateTime>(endTimes.first,
-        (a, b) => a.isAfter(b) ? a : b);
+    final earliestStart = startTimes.fold<DateTime>(
+        startTimes.first, (a, b) => a.isBefore(b) ? a : b);
+    final latestEnd =
+        endTimes.fold<DateTime>(endTimes.first, (a, b) => a.isAfter(b) ? a : b);
 
     final duration = latestEnd.difference(earliestStart);
     return duration.inHours;
   }
 }
 
-List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload) {
-  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+List<Map<String, dynamic>> flexibleJobShopSchedule(
+    Map<String, dynamic> payload) {
+  final startDate =
+      DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
   final workingSchedule = Tuple2(
-    TimeOfDay(hour: payload['workingStartHour'] as int, minute: payload['workingStartMinute'] as int),
-    TimeOfDay(hour: payload['workingEndHour'] as int, minute: payload['workingEndMinute'] as int),
+    TimeOfDay(
+        hour: payload['workingStartHour'] as int,
+        minute: payload['workingStartMinute'] as int),
+    TimeOfDay(
+        hour: payload['workingEndHour'] as int,
+        minute: payload['workingEndMinute'] as int),
   );
 
   final inputJobs = (payload['inputJobs'] as List<dynamic>).map((jobData) {
     final jobMap = Map<String, dynamic>.from(jobData as Map);
     final Map<int, bool> interruptibleByTask = {};
-    final taskSequence = (jobMap['taskSequence'] as List<dynamic>).map((taskData) {
+    final taskSequence =
+        (jobMap['taskSequence'] as List<dynamic>).map((taskData) {
       final taskMap = Map<String, dynamic>.from(taskData as Map);
-      final durations = (taskMap['machineDurations'] as Map<dynamic, dynamic>).map(
-        (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
+      final durations =
+          (taskMap['machineDurations'] as Map<dynamic, dynamic>).map(
+        (key, value) =>
+            MapEntry(key as int, Duration(milliseconds: value as int)),
       );
       final taskId = taskMap['taskId'] as int;
       interruptibleByTask[taskId] = (taskMap['interruptible'] as bool?) ?? true;
@@ -676,30 +716,40 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
     );
   }).toList();
 
-  final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
-      .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
+  final machinesAvailability =
+      (payload['machinesAvailability'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+              key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
 
   final machineInactivities = <int, List<MachineInactivityEntity>>{};
-  for (final entry in (payload['machineInactivities'] as Map<dynamic, dynamic>).entries) {
+  for (final entry
+      in (payload['machineInactivities'] as Map<dynamic, dynamic>).entries) {
     final machineId = entry.key as int;
     final list = (entry.value as List<dynamic>);
-    machineInactivities[machineId] = list.map((item) {
-      final map = Map<String, dynamic>.from(item as Map);
-      return MachineInactivityEntity(
-        machineId: map['machineId'] as int,
-        name: map['name'] as String,
-        weekdays: (map['weekdays'] as List<dynamic>).map((w) => Weekday.values[w as int]).toSet(),
-        startTime: Duration(minutes: map['startTimeMinutes'] as int),
-        duration: Duration(minutes: map['durationMinutes'] as int),
-      );
-    }).cast<MachineInactivityEntity>().toList();
+    machineInactivities[machineId] = list
+        .map((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          return MachineInactivityEntity(
+            machineId: map['machineId'] as int,
+            name: map['name'] as String,
+            weekdays: (map['weekdays'] as List<dynamic>)
+                .map((w) => Weekday.values[w as int])
+                .toSet(),
+            startTime: Duration(minutes: map['startTimeMinutes'] as int),
+            duration: Duration(minutes: map['durationMinutes'] as int),
+          );
+        })
+        .cast<MachineInactivityEntity>()
+        .toList();
   }
 
-  final machineContinueCapacity = (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
-      .map((key, value) => MapEntry(key as int, value as int));
+  final machineContinueCapacity =
+      (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as int));
 
   final machineRestTime = <int, Duration?>{};
-  for (final entry in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
+  for (final entry
+      in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
     machineRestTime[entry.key as int] =
         entry.value == null ? null : Duration(milliseconds: entry.value as int);
   }
@@ -712,7 +762,8 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
             (Map<dynamic, dynamic>.from(value as Map)).map(
               (prev, curr) => MapEntry(
                 prev as String,
-                (Map<dynamic, dynamic>.from(curr as Map)).map((next, minutes) => MapEntry(next as String, minutes as int)),
+                (Map<dynamic, dynamic>.from(curr as Map)).map((next, minutes) =>
+                    MapEntry(next as String, minutes as int)),
               ),
             ),
           ),
@@ -723,7 +774,8 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
       : (payload['jobStates'] as Map<dynamic, dynamic>).map(
           (key, value) => MapEntry(
             key as int,
-            (Map<dynamic, dynamic>.from(value as Map)).map((mKey, state) => MapEntry(mKey as int, state as String)),
+            (Map<dynamic, dynamic>.from(value as Map))
+                .map((mKey, state) => MapEntry(mKey as int, state as String)),
           ),
         );
 
@@ -747,11 +799,12 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
       'dueDate': out.dueDate.millisecondsSinceEpoch,
       'startDate': out.startDate.millisecondsSinceEpoch,
       'endTime': out.endTime.millisecondsSinceEpoch,
-      'scheduling': out.scheduling.map((key, value) => MapEntry(key.toString(), {
-            'machineId': value.value1,
-            'start': value.value2.startDate.millisecondsSinceEpoch,
-            'end': value.value2.endDate.millisecondsSinceEpoch,
-          })),
+      'scheduling':
+          out.scheduling.map((key, value) => MapEntry(key.toString(), {
+                'machineId': value.value1,
+                'start': value.value2.startDate.millisecondsSinceEpoch,
+                'end': value.value2.endDate.millisecondsSinceEpoch,
+              })),
       'segmentsByTask': out.segmentsByTask.map((taskId, segments) => MapEntry(
             taskId.toString(),
             segments
@@ -761,6 +814,16 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(Map<String, dynamic> payload)
                     })
                 .toList(),
           )),
+      'setupSegmentsByTask':
+          out.setupSegmentsByTask.map((taskId, segments) => MapEntry(
+                taskId.toString(),
+                segments
+                    .map((s) => {
+                          'start': s.start.millisecondsSinceEpoch,
+                          'end': s.end.millisecondsSinceEpoch,
+                        })
+                    .toList(),
+              )),
     };
   }).toList();
 }

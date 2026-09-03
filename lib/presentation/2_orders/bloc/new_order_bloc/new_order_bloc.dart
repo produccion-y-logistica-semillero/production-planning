@@ -208,6 +208,22 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     }
   }
 
+  /// Order-wide default hour for automatic mode. Pass `null` to clear it
+  /// (falls back to the current time at save, same as leaving it unset).
+  void setAutomaticStartHour(TimeOfDay? tod) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState)
+          .copyWith(automaticStartHour: Optional(tod)));
+    }
+  }
+
+  void setAutomaticDueHour(TimeOfDay? tod) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState)
+          .copyWith(automaticDueHour: Optional(tod)));
+    }
+  }
+
   // ─── Shared task-machine time builder ─────────────────────────────────────
 
   /// Builds the `taskMachineTimes` map from a job widget's current state.
@@ -268,14 +284,30 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   /// Resolves the (availableDate, dueDate) pair for [wid] according to the
   /// order's current [DateRegistrationMode]. In manual mode this simply
   /// returns whatever the user picked in the form. In automatic mode the
-  /// user-picked values (if any) are ignored: availableDate becomes "now"
-  /// (the order's registration moment) and dueDate is availableDate plus
-  /// the configured lead time.
+  /// user-picked dates (if any) are ignored: availableDate's day is "today"
+  /// and dueDate's day is "today" plus the configured lead time — but the
+  /// HOUR of each comes from, in order of precedence: the per-job override
+  /// (wid.automaticStartHour / wid.automaticDueHour), then the order-wide
+  /// default (currentState.automaticStartHour / automaticDueHour), then the
+  /// current time when none of those were set.
   Tuple2<DateTime, DateTime> _resolveDates(
       NewOrdersState currentState, AddJobWidget wid) {
     if (currentState.dateMode == DateRegistrationMode.automatic) {
-      final availableDate = DateTime.now();
-      final dueDate = availableDate.add(Duration(days: currentState.leadTimeDays));
+      final now = DateTime.now();
+      final startTod = wid.automaticStartHour ??
+          currentState.automaticStartHour ??
+          TimeOfDay.fromDateTime(now);
+      final dueTod = wid.automaticDueHour ??
+          currentState.automaticDueHour ??
+          TimeOfDay.fromDateTime(now);
+
+      final availableDate = DateTime(
+          now.year, now.month, now.day, startTod.hour, startTod.minute);
+      final dueBase =
+          availableDate.add(Duration(days: currentState.leadTimeDays));
+      final dueDate = DateTime(
+          dueBase.year, dueBase.month, dueBase.day, dueTod.hour, dueTod.minute);
+
       return Tuple2(availableDate, dueDate);
     }
     return Tuple2(wid.availableDate!, wid.dueDate!);

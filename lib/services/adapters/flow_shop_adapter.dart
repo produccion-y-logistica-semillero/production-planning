@@ -163,7 +163,10 @@ class FlowShopAdapter {
           retarded: out.dueDate.isBefore(out.endTime),
           orderId: orderId,
           jobId: out.jobId,
+          machineName: planningMachineEntity.machineName,
           segments: out.segmentsByMachine[machineScheduling.key],
+          setupSegments:
+              out.setupSegmentsByMachine[machineScheduling.key] ?? const [],
         ));
       }
     }

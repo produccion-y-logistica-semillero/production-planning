@@ -66,8 +66,15 @@ class GanttPage extends StatelessWidget {
                 content.add(const Center(child: CircularProgressIndicator()));
               }
               if (state is GanttPlanningError) {
-                content.add(const Center(
-                    child: Text("Hubo problemas planificando la orden")));
+                content.add(Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      state.message ?? "Hubo problemas planificando la orden",
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ));
               }
               if (state is GanttPlanningSuccess) {
                 // Deduplicate items based on rule ID to prevent dropdown errors

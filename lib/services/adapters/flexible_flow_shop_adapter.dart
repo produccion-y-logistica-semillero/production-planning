@@ -17,7 +17,6 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
-import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleFlowShopAdapter {
@@ -176,7 +175,9 @@ class FlexibleFlowShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.endDate),
           jobId: job.jobId!,
           orderId: orderId,
+          machineName: machines.firstWhere((m) => m.id == machineId).name,
           segments: out.segmentsByStation[taskId],
+          setupSegments: out.setupSegmentsByStation[taskId] ?? const [],
         );
 
         planningMachines
@@ -189,11 +190,10 @@ class FlexibleFlowShopAdapter {
     // ── 8. Metrics ────────────────────────────────────────────────────────
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
-          job.priority);
+      return Tuple5(
+          out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
     }).toList();
 
-    return Tuple2(
-        planningMachines, getMetricts(planningMachines, jobsDates));
+    return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
   }
 }

@@ -65,19 +65,23 @@ class FlexibleJobShopAdapter {
         for (final machine
             in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
           // Priority 1: Explicit per-job per-task per-machine time
-          final explicit = getExplicitProcessingDuration(job, task.id!, machine);
+          final explicit =
+              getExplicitProcessingDuration(job, task.id!, machine);
           if (explicit != null) {
             machineDurations[machine.id!] = explicit;
           } else {
             // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
-            if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+            if (machine.processingPercentage == 100 ||
+                machine.processingPercentage <= 0) {
               // Standard machine: use processingUnits as-is
               machineDurations[machine.id!] = task.processingUnits;
             } else {
               // Non-standard machine: scale processingUnits by machine percentage
               final ratio = machine.processingPercentage / 100.0;
-              final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
-              machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
+              final scaledMillis =
+                  (task.processingUnits.inMilliseconds * ratio).round();
+              machineDurations[machine.id!] =
+                  Duration(milliseconds: scaledMillis);
             }
           }
         }
@@ -121,7 +125,8 @@ class FlexibleJobShopAdapter {
       } else {
         // Non-standard rest: scale 1 hour by machine percentage
         final ratio = machine.restPercentage / 100.0;
-        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
+        final scaledMillis =
+            (const Duration(hours: 1).inMilliseconds * ratio).round();
         machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
       }
     }
@@ -150,7 +155,8 @@ class FlexibleJobShopAdapter {
           'taskSequence': job.taskSequence.map((task) {
             return {
               'taskId': task.value1,
-              'machineDurations': task.value2.map((machineId, duration) => MapEntry(machineId, duration.inMilliseconds)),
+              'machineDurations': task.value2.map((machineId, duration) =>
+                  MapEntry(machineId, duration.inMilliseconds)),
               'interruptible': job.isTaskInterruptible(task.value1),
             };
           }).toList(),
@@ -163,20 +169,25 @@ class FlexibleJobShopAdapter {
               .toList(),
         };
       }).toList(),
-      'machinesAvailability': machinesAvailability.map((machineId, date) => MapEntry(machineId, date.millisecondsSinceEpoch)),
-      'machineInactivities': machineInactivitiesMap.map((machineId, inactivities) {
-        return MapEntry(machineId, inactivities.map((inactivity) {
-          return {
-            'machineId': inactivity.machineId,
-            'name': inactivity.name,
-            'weekdays': inactivity.weekdays.map((wd) => wd.index).toList(),
-            'startTimeMinutes': inactivity.startTime.inMinutes,
-            'durationMinutes': inactivity.duration.inMinutes,
-          };
-        }).toList());
+      'machinesAvailability': machinesAvailability.map((machineId, date) =>
+          MapEntry(machineId, date.millisecondsSinceEpoch)),
+      'machineInactivities':
+          machineInactivitiesMap.map((machineId, inactivities) {
+        return MapEntry(
+            machineId,
+            inactivities.map((inactivity) {
+              return {
+                'machineId': inactivity.machineId,
+                'name': inactivity.name,
+                'weekdays': inactivity.weekdays.map((wd) => wd.index).toList(),
+                'startTimeMinutes': inactivity.startTime.inMinutes,
+                'durationMinutes': inactivity.duration.inMinutes,
+              };
+            }).toList());
       }),
       'machineContinueCapacity': machineContinueCapacityMap,
-      'machineRestTime': machineRestTimeMap.map((machineId, duration) => MapEntry(machineId, duration?.inMilliseconds)),
+      'machineRestTime': machineRestTimeMap.map((machineId, duration) =>
+          MapEntry(machineId, duration?.inMilliseconds)),
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
     };
@@ -185,13 +196,15 @@ class FlexibleJobShopAdapter {
     try {
       rawOutput = await compute(flexibleJobShopSchedule, payload);
     } catch (error, stack) {
-      print('FlexibleJobShopAdapter.flexibleJobShopAdapter compute error: ${error.toString()}');
+      print(
+          'FlexibleJobShopAdapter.flexibleJobShopAdapter compute error: ${error.toString()}');
       print(stack.toString());
       return null;
     }
 
     final List<FlexibleJobOutput> output = rawOutput.map((out) {
-      final schedulingMap = (out['scheduling'] as Map<dynamic, dynamic>).map((key, value) {
+      final schedulingMap =
+          (out['scheduling'] as Map<dynamic, dynamic>).map((key, value) {
         final entry = Map<String, dynamic>.from(value as Map);
         return MapEntry(
           int.parse(key as String),
@@ -204,8 +217,20 @@ class FlexibleJobShopAdapter {
           ),
         );
       });
-      final segmentsByTask = (out['segmentsByTask'] as Map<dynamic, dynamic>?)
-          ?.map((key, value) {
+      final segmentsByTask =
+          (out['segmentsByTask'] as Map<dynamic, dynamic>?)?.map((key, value) {
+        final segs = (value as List<dynamic>).map((segData) {
+          final segMap = Map<String, dynamic>.from(segData as Map);
+          return ProcessingSegment(
+            DateTime.fromMillisecondsSinceEpoch(segMap['start'] as int),
+            DateTime.fromMillisecondsSinceEpoch(segMap['end'] as int),
+          );
+        }).toList();
+        return MapEntry(int.parse(key as String), segs);
+      });
+      final setupSegmentsByTask =
+          (out['setupSegmentsByTask'] as Map<dynamic, dynamic>?)
+              ?.map((key, value) {
         final segs = (value as List<dynamic>).map((segData) {
           final segMap = Map<String, dynamic>.from(segData as Map);
           return ProcessingSegment(
@@ -223,6 +248,7 @@ class FlexibleJobShopAdapter {
         DateTime.fromMillisecondsSinceEpoch(out['endTime'] as int),
         schedulingMap,
         segmentsByTask: segmentsByTask,
+        setupSegmentsByTask: setupSegmentsByTask ?? const {},
       );
     }).toList();
 
@@ -261,7 +287,9 @@ class FlexibleJobShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.end),
           jobId: job.jobId!,
           orderId: orderId,
+          machineName: machines.firstWhere((m) => m.id == machineId).name,
           segments: out.segmentsByTask[taskId],
+          setupSegments: out.setupSegmentsByTask[taskId] ?? const [],
         );
 
         final planningMachine =

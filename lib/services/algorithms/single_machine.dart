@@ -40,6 +40,7 @@ class SingleMachineOutput {
   final DateTime dueDate;
   final Duration delay;
   final List<ProcessingSegment> segments;
+  final List<ProcessingSegment> setupSegments;
 
   SingleMachineOutput(
     this.jobId,
@@ -49,6 +50,7 @@ class SingleMachineOutput {
     this.dueDate,
     this.delay, {
     List<ProcessingSegment>? segments,
+    this.setupSegments = const [],
   }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }
 
@@ -169,14 +171,24 @@ class SingleMachine {
     // 1. Compute setup duration for this transition.
     final setup = _setupDuration(_lastJobState, job.jobState);
 
-    // 2. If there is a setup cost, advance the pointer past it (and
-    //    re-check working-schedule boundaries after the setup period).
+    // 2. If there is a setup cost, schedule it as its own segmented block
+    //    (through the preemption engine, so it's just as sensitive to
+    //    work-shift/rest/maintenance boundaries as processing is), then
+    //    start processing right after it ends.
+    List<ProcessingSegment> setupSegments = const [];
     DateTime processStart = scheduleTime;
+    Duration continuousUsage = _continuousUsage;
     if (setup > Duration.zero) {
-      processStart = _getAvailableStartTime(scheduleTime, setup);
-      processStart = processStart.add(setup);
-      // Re-align to working hours in case the setup pushed us past day-end.
-      processStart = _alignToWorkingHours(processStart);
+      final setupSchedule = _preemptionEngine.computeSegments(
+        earliestStart: scheduleTime,
+        totalDuration: setup,
+        priorContinuousUsage: continuousUsage,
+      );
+      setupSegments = setupSchedule.segments;
+      processStart = setupSchedule.completionTime;
+      continuousUsage = setupSegments.length > 1
+          ? setupSegments.last.duration
+          : continuousUsage + setupSegments.single.duration;
     }
 
     // 3. Schedule processing after setup, splitting into segments wherever
@@ -185,7 +197,7 @@ class SingleMachine {
     final schedule = _preemptionEngine.computeSegments(
       earliestStart: processStart,
       totalDuration: job.machineDuration,
-      priorContinuousUsage: _continuousUsage,
+      priorContinuousUsage: continuousUsage,
       interruptible: job.interruptible,
     );
     final DateTime end = schedule.completionTime;
@@ -197,6 +209,7 @@ class SingleMachine {
       job.jobId, job.machineDuration, schedule.startDate, end, job.dueDate,
       delay,
       segments: schedule.segments,
+      setupSegments: setupSegments,
     ));
 
     // 4. Remember this job's state and continuous-usage streak for the
@@ -204,7 +217,7 @@ class SingleMachine {
     _lastJobState = job.jobState;
     _continuousUsage = schedule.segments.length > 1
         ? schedule.segments.last.duration
-        : _continuousUsage + schedule.segments.single.duration;
+        : continuousUsage + schedule.segments.single.duration;
 
     return end;
   }

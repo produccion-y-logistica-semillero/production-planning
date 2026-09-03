@@ -8,7 +8,8 @@ import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/algorithms/single_machine.dart';
 
 void main() {
-  test('a job spanning a scheduled maintenance window is split and resumed', () {
+  test('a job spanning a scheduled maintenance window is split and resumed',
+      () {
     const workingSchedule =
         Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 19, minute: 0));
 
@@ -27,12 +28,12 @@ void main() {
       [job],
       'FIFO',
       machineInactivities: [
-        MachineInactivityEntity(
+        const MachineInactivityEntity(
           machineId: 1,
           name: 'Mantenimiento semanal',
-          weekdays: const {Weekday.wednesday},
-          startTime: const Duration(hours: 15),
-          duration: const Duration(hours: 1),
+          weekdays: {Weekday.wednesday},
+          startTime: Duration(hours: 15),
+          duration: Duration(hours: 1),
         ),
       ],
     );
@@ -78,6 +79,7 @@ void main() {
     final out = machine.output.single;
     expect(out.segments, hasLength(2));
     expect(out.segments[0].duration, const Duration(hours: 2));
-    expect(out.segments[1].start, out.segments[0].end.add(const Duration(minutes: 30)));
+    expect(out.segments[1].start,
+        out.segments[0].end.add(const Duration(minutes: 30)));
   });
 }

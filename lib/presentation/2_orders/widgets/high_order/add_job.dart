@@ -15,12 +15,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 
 // Helper widget for numeric input with max value validation
 class _MaxValueFormatter extends TextInputFormatter {
@@ -85,6 +87,12 @@ class AddJobWidget extends StatefulWidget {
   DateTime? dueDate;
   TimeOfDay? availableHour;
   TimeOfDay? dueHour;
+  // Optional hour overrides for "Automático" date-registration mode: the
+  // date itself is always computed at save time (today / today + lead
+  // time), but the user can still pin a specific hour for each. Left null
+  // means "use the current time at save time".
+  TimeOfDay? automaticStartHour;
+  TimeOfDay? automaticDueHour;
   final TextEditingController? priorityController;
   final TextEditingController? idController;
   final List<dartz.Tuple2<int, String>> sequences;
@@ -149,6 +157,8 @@ class AddJobState extends State<AddJobWidget> {
   DateTime? dueDate;
   TimeOfDay? availableHour;
   TimeOfDay? dueHour;
+  TimeOfDay? automaticStartHour;
+  TimeOfDay? automaticDueHour;
 
   SequenceEntity? _sequenceDetails;
   bool _loadingStations = false;
@@ -233,6 +243,8 @@ class AddJobState extends State<AddJobWidget> {
     dueDate = widget.dueDate;
     availableHour = widget.availableHour;
     dueHour = widget.dueHour;
+    automaticStartHour = widget.automaticStartHour;
+    automaticDueHour = widget.automaticDueHour;
     selectedSequenceValue = widget.selectedSequence;
     if (selectedSequenceValue != null) {
       _loadSequence(selectedSequenceValue!);
@@ -344,7 +356,7 @@ class AddJobState extends State<AddJobWidget> {
               final processingMinutes =
                   (baseProcessingMinutes * machine.processingPercentage / 100)
                       .round();
-              final preparationMinutes = 0; // comes from matrix — always 0 here
+              const preparationMinutes = 0; // comes from matrix — always 0 here
               final restMinutes = times?.rest?.inMinutes ??
                   (60 * machine.restPercentage / 100).round();
 
@@ -354,6 +366,22 @@ class AddJobState extends State<AddJobWidget> {
                 'preparation': preparationMinutes,
                 'rest': restMinutes,
               };
+
+              // Seed the per-job preemption override for EVERY candidate
+              // machine of this station from the sequence's own flag. Two
+              // reasons this matters:
+              //   • what the toggle shows is then always what the scheduler
+              //     will use — an unseeded machine silently falls back to
+              //     task.allowPreemption, so a task seeded as interruptible
+              //     would display "No" while behaving as "Sí";
+              //   • flexible environments only read the FIRST candidate
+              //     machine's entry, so leaving gaps makes the effective
+              //     value depend on map ordering.
+              final int seed = task.allowPreemption ? 1 : 0;
+              for (final candidate in machines) {
+                if (candidate.id == null) continue;
+                _preemptionMatrix.putIfAbsent(candidate.id!, () => seed);
+              }
             }
           }
         });
@@ -447,13 +475,46 @@ class AddJobState extends State<AddJobWidget> {
                 if (isAutomatic) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Las fechas de disponibilidad y entrega se calculan '
-                      'automáticamente al guardar la orden.',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _selectAutomaticHour(
+                                'Hora de inicio',
+                                automaticStartHour,
+                                (picked) => setState(() {
+                                  automaticStartHour = picked;
+                                  widget.automaticStartHour = picked;
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _selectAutomaticHour(
+                                'Hora de entrega',
+                                automaticDueHour,
+                                (picked) => setState(() {
+                                  automaticDueHour = picked;
+                                  widget.automaticDueHour = picked;
+                                }),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Las fechas se calculan automáticamente al guardar '
+                          'la orden. Si dejas una hora vacía, se usa la hora '
+                          'actual.',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -513,6 +574,32 @@ class AddJobState extends State<AddJobWidget> {
   }
 
   // ── date/time row widgets (unchanged) ─────────────────────────────────────
+
+  /// Hour-only picker for "Automático" mode — the date is always computed
+  /// at save time, so unlike [selectHour] there's no date to merge with.
+  Widget _selectAutomaticHour(
+      String label, TimeOfDay? hour, ValueChanged<TimeOfDay> onPicked) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
+        TextButton(
+          onPressed: () async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: hour ?? TimeOfDay.now(),
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: hour == null
+              ? const Text('Hora actual')
+              : Text("${hour.hour.toString().padLeft(2, '0')}:"
+                  "${hour.minute.toString().padLeft(2, '0')}"),
+        ),
+      ],
+    );
+  }
 
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -648,6 +735,7 @@ class AddJobState extends State<AddJobWidget> {
               ),
             ],
           ),
+          ..._buildPreemptionMatrixForTask(task),
         ],
       ),
     );
@@ -950,13 +1038,41 @@ class AddJobState extends State<AddJobWidget> {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
-  // ignore: unused_element
-  List<Widget> _buildPreemptionMatrixForTask(int machineTypeId) {
-    final machines = _machinesByType[machineTypeId] ?? [];
-    if (machines.isEmpty) return [];
-    return machines.map((machine) {
-      final currentValue = _preemptionMatrix[machine.id] ?? 0;
-      return Padding(
+  // ── per-job preemption ────────────────────────────────────────────────────
+
+  /// One "¿Interrumpible?" switch per candidate machine of this station.
+  ///
+  /// The value lands in `job_preemption` and wins over the sequence's own
+  /// `allow_preemption`, so two jobs of the same order — even on the same
+  /// route — can be interruptible independently. Values are seeded from the
+  /// sequence when it loads, so the switch never shows something different
+  /// from what the scheduler will do.
+  List<Widget> _buildPreemptionMatrixForTask(TaskEntity task) {
+    final machines = _machinesByType[task.machineTypeId] ?? const [];
+    if (machines.isEmpty) return const [];
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final widgets = <Widget>[
+      const SizedBox(height: 12),
+      const Text(
+        '¿Se puede interrumpir en esta máquina?',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      const Text(
+        'Si no, el trabajo espera a que haya un bloque libre completo en vez '
+        'de partirse.',
+        style: TextStyle(fontSize: 11),
+      ),
+    ];
+
+    for (final machine in machines) {
+      if (machine.id == null) continue;
+      final int currentValue =
+          _preemptionMatrix[machine.id] ?? (task.allowPreemption ? 1 : 0);
+      final String? warning =
+          currentValue == 0 ? _uninterruptibleWarning(task, machine) : null;
+
+      widgets.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Row(
           children: [
@@ -972,15 +1088,92 @@ class AddJobState extends State<AddJobWidget> {
               children: const [
                 Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('0')),
+                    child: Text('No')),
                 Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('1')),
+                    child: Text('Sí')),
               ],
             ),
           ],
         ),
-      );
-    }).toList();
+      ));
+
+      if (warning != null) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8, right: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 16, color: colorScheme.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  warning,
+                  style: TextStyle(fontSize: 11, color: colorScheme.error),
+                ),
+              ),
+            ],
+          ),
+        ));
+      }
+    }
+
+    return widgets;
+  }
+
+  /// Explains, before the order is even saved, why marking this job as
+  /// non-interruptible on [machine] cannot be honoured — the scheduler will
+  /// split it anyway rather than search forever for a block that does not
+  /// exist. Returns null when the choice is satisfiable.
+  String? _uninterruptibleWarning(TaskEntity task, MachineEntity machine) {
+    final duration = _effectiveProcessingDuration(task, machine);
+    if (duration <= Duration.zero) return null;
+
+    if (machine.continueCapacity > 0 &&
+        duration.inMinutes > machine.continueCapacity) {
+      return 'Dura ${_formatDuration(duration)} y la máquina descansa cada '
+          '${machine.continueCapacity} min de uso continuo, así que se '
+          'partirá de todos modos.';
+    }
+
+    // Same calculation the scheduler uses, so the warning cannot disagree
+    // with what actually happens.
+    final engine = PreemptionEngine(
+      workingSchedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
+      maintenanceWindows: machine.scheduledInactivities,
+    );
+    final longest = engine.largestContiguousWindow();
+
+    if (longest <= Duration.zero) {
+      return 'La máquina no tiene ningún horario disponible: la jornada '
+          'laboral está vacía o los mantenimientos la cubren por completo. '
+          'La orden no se podrá planificar.';
+    }
+    if (duration > longest) {
+      return 'Dura ${_formatDuration(duration)} y el bloque libre más largo '
+          'de esta máquina es ${_formatDuration(longest)} (jornada menos '
+          'mantenimientos), así que se partirá de todos modos.';
+    }
+    return null;
+  }
+
+  /// The processing time the scheduler will actually use for this
+  /// task/machine pair, following the same precedence as the adapters:
+  /// explicit time first, then the sequence's own time scaled by the
+  /// machine's percentage.
+  Duration _effectiveProcessingDuration(TaskEntity task, MachineEntity machine) {
+    final explicit = _explicitTaskMachineMinutes[task.id]?[machine.id]
+        ?['processing'];
+    if (explicit != null) return Duration(minutes: explicit);
+
+    final base = _stationTimes[task.machineTypeId]?.processing ??
+        task.processingUnits;
+    if (machine.processingPercentage == 100 ||
+        machine.processingPercentage <= 0) {
+      return base;
+    }
+    final ratio = machine.processingPercentage / 100.0;
+    return Duration(milliseconds: (base.inMilliseconds * ratio).round());
   }
 }

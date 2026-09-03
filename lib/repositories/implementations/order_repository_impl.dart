@@ -20,7 +20,6 @@ import 'package:production_planning/entities/machine_times.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 
 class OrderRepositoryImpl implements OrderRepository {
-
   final OrderDao orderDao;
   final JobDao jobDao;
   final EnviromentDao enviromentDao;
@@ -28,7 +27,6 @@ class OrderRepositoryImpl implements OrderRepository {
   final SequencesDao sequencesDao;
   final TasksDao tasksDao;
   final TaskDependencyDao taskDependencyDao;
-
 
   OrderRepositoryImpl(
       {required this.orderDao,
@@ -42,28 +40,26 @@ class OrderRepositoryImpl implements OrderRepository {
   @override
   Future<Either<Failure, List<OrderEntity>>> getAllOrders() async {
     try {
-
       final orderModels = await orderDao.getAllOrders();
       List<OrderEntity> orders = [];
 
       for (var orderModel in orderModels) {
-
         final List<JobModel> jobs =
             await jobDao.getJobsByOrderId(orderModel.orderId!);
         List<JobEntity> jobsEntities = [];
         for (final model in jobs) {
           final sequenceModel =
-            await sequencesDao.getSequenceById(model.sequenceId);
-        if (sequenceModel == null || sequenceModel.sequenceId == null) {
-          print(
-              'OrderRepositoryImpl.getAllOrders: missing sequence ${model.sequenceId} for job ${model.jobId} in order ${orderModel.orderId}');
-          continue;
-        }
-        final int sequenceId = sequenceModel.sequenceId!;
-        final List<TaskModel> tasks =
-            await tasksDao.getTasksBySequenceId(sequenceId);
-        final List<TaskDependencyModel> dependenciesM =
-            await taskDependencyDao.getDependenciesBySequenceId(sequenceId);
+              await sequencesDao.getSequenceById(model.sequenceId);
+          if (sequenceModel == null || sequenceModel.sequenceId == null) {
+            print(
+                'OrderRepositoryImpl.getAllOrders: missing sequence ${model.sequenceId} for job ${model.jobId} in order ${orderModel.orderId}');
+            continue;
+          }
+          final int sequenceId = sequenceModel.sequenceId!;
+          final List<TaskModel> tasks =
+              await tasksDao.getTasksBySequenceId(sequenceId);
+          final List<TaskDependencyModel> dependenciesM =
+              await taskDependencyDao.getDependenciesBySequenceId(sequenceId);
           // Convert optional taskMachineTimesMinutes (minutes) to MachineTimes map
           Map<int, Map<int, MachineTimes>>? taskTimes;
           if (model.taskMachineTimesMinutes != null) {
@@ -109,15 +105,13 @@ class OrderRepositoryImpl implements OrderRepository {
           jobsEntities,
           setupTimeMatrix: orderModel.setupTimeMatrix,
         ));
-
       }
 
       return Right(orders);
     } on Failure catch (error) {
       return Left(error);
-
     } catch (error, stack) {
-      print('OrderRepositoryImpl.getAllOrders error: ' + error.toString());
+      print('OrderRepositoryImpl.getAllOrders error: $error');
       print(stack.toString());
       return Left(LocalStorageFailure());
     }
@@ -136,38 +130,38 @@ class OrderRepositoryImpl implements OrderRepository {
         final upper = env.name.toUpperCase();
         if (upper == 'JOB SHOP') {
           finalRules = [
-            Tuple2(1, 'EDD'),
-            Tuple2(2, 'SPT'),
-            Tuple2(3, 'LPT'),
-            Tuple2(4, 'FIFO'),
-            Tuple2(5, 'WSPT'),
-            Tuple2(12, 'CR'),
-            Tuple2(13, 'ATCS'),
-            Tuple2(24, 'GENETICS'),
+            const Tuple2(1, 'EDD'),
+            const Tuple2(2, 'SPT'),
+            const Tuple2(3, 'LPT'),
+            const Tuple2(4, 'FIFO'),
+            const Tuple2(5, 'WSPT'),
+            const Tuple2(12, 'CR'),
+            const Tuple2(13, 'ATCS'),
+            const Tuple2(24, 'GENETICS'),
           ];
         } else if (upper == 'FLEXIBLE JOB SHOP') {
           finalRules = [
-            Tuple2(1, 'EDD'),
-            Tuple2(2, 'SPT'),
-            Tuple2(3, 'LPT'),
-            Tuple2(4, 'FIFO'),
-            Tuple2(5, 'WSPT'),
-            Tuple2(12, 'CR'),
-            Tuple2(13, 'ATCS'),
-            Tuple2(21, 'MS'),
-            Tuple2(24, 'GENETICS'),
+            const Tuple2(1, 'EDD'),
+            const Tuple2(2, 'SPT'),
+            const Tuple2(3, 'LPT'),
+            const Tuple2(4, 'FIFO'),
+            const Tuple2(5, 'WSPT'),
+            const Tuple2(12, 'CR'),
+            const Tuple2(13, 'ATCS'),
+            const Tuple2(21, 'MS'),
+            const Tuple2(24, 'GENETICS'),
           ];
         } else if (upper == 'OPEN SHOP' || upper == 'FLEXIBLE OPEN SHOP') {
           finalRules = [
-            Tuple2(1, 'EDD'),
-            Tuple2(2, 'SPT'),
-            Tuple2(3, 'LPT'),
-            Tuple2(4, 'FIFO'),
-            Tuple2(5, 'WSPT'),
-            Tuple2(11, 'MINSLACK'),
-            Tuple2(12, 'CR'),
-            Tuple2(13, 'ATCS'),
-            Tuple2(24, 'GENETICS'),
+            const Tuple2(1, 'EDD'),
+            const Tuple2(2, 'SPT'),
+            const Tuple2(3, 'LPT'),
+            const Tuple2(4, 'FIFO'),
+            const Tuple2(5, 'WSPT'),
+            const Tuple2(11, 'MINSLACK'),
+            const Tuple2(12, 'CR'),
+            const Tuple2(13, 'ATCS'),
+            const Tuple2(24, 'GENETICS'),
           ];
         }
       }
@@ -175,7 +169,6 @@ class OrderRepositoryImpl implements OrderRepository {
       return Right(EnvironmentEntity(env.id, env.name, finalRules));
     } on Failure catch (error) {
       return Left(error);
-
     }
   }
 
@@ -196,8 +189,8 @@ class OrderRepositoryImpl implements OrderRepository {
         final int sequenceId = sequenceModel.sequenceId!;
         final List<TaskModel> tasks =
             await tasksDao.getTasksBySequenceId(sequenceId);
-        final List<TaskDependencyModel> dependenciesM = await taskDependencyDao
-            .getDependenciesBySequenceId(sequenceId);
+        final List<TaskDependencyModel> dependenciesM =
+            await taskDependencyDao.getDependenciesBySequenceId(sequenceId);
 
         // Convert optional taskMachineTimesMinutes (minutes) to MachineTimes
         // and build the exact nested map expected by JobEntity.
@@ -243,7 +236,7 @@ class OrderRepositoryImpl implements OrderRepository {
     } on Failure catch (error) {
       return Left(error);
     } catch (error, stack) {
-      print('OrderRepositoryImpl.getFullOrder error: ' + error.toString());
+      print('OrderRepositoryImpl.getFullOrder error: $error');
       print(stack.toString());
       return Left(LocalStorageFailure());
     }
@@ -301,7 +294,7 @@ class OrderRepositoryImpl implements OrderRepository {
     } on Failure catch (error) {
       return Left(error);
     } catch (error, stack) {
-      print('OrderRepositoryImpl.updateOrder error: ' + error.toString());
+      print('OrderRepositoryImpl.updateOrder error: $error');
       print(stack.toString());
       return Left(LocalStorageFailure());
     }

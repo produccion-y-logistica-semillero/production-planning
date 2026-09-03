@@ -7,8 +7,7 @@ import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_
 
 class AlgorithmPickerPage extends StatefulWidget {
   final int orderId;
-  const AlgorithmPickerPage({Key? key, required this.orderId}) : super(key: key);
-
+  const AlgorithmPickerPage({super.key, required this.orderId});
 
   @override
   State<AlgorithmPickerPage> createState() => _AlgorithmPickerPageState();
@@ -80,8 +79,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
           ),
           backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
       return;
@@ -132,8 +131,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                 content: const Text('Error al cargar los algoritmos'),
                 backgroundColor: colorScheme.error,
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             );
           }
@@ -164,7 +163,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
             if (env != null) {
               // Log rules for debugging
               try {
-                print('DEBUG: AlgorithmPickerPage env.rules.length=${env.rules.length}');
+                print(
+                    'DEBUG: AlgorithmPickerPage env.rules.length=${env.rules.length}');
               } catch (_) {}
             }
             if (env == null) {
@@ -344,8 +344,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             ),
                           ),
                           value: isSelected,
-                          onChanged: (v) => _toggleSingle(index, v, rules.length),
-
+                          onChanged: (v) =>
+                              _toggleSingle(index, v, rules.length),
                           activeColor: colorScheme.primary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -415,8 +415,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                       ),
                       const SizedBox(width: 12),
                       FilledButton.icon(
-                        onPressed: _selectedIndexes.isEmpty ? null : _onCalculate,
-
+                        onPressed:
+                            _selectedIndexes.isEmpty ? null : _onCalculate,
                         icon: const Icon(Icons.calculate),
                         label: const Text('Calcular'),
                         style: FilledButton.styleFrom(
@@ -425,8 +425,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             vertical: 12,
                           ),
                           backgroundColor: _selectedIndexes.isEmpty
-                              ? colorScheme.surfaceVariant
-
+                              ? colorScheme.surfaceContainerHighest
                               : colorScheme.primary,
                           foregroundColor: _selectedIndexes.isEmpty
                               ? colorScheme.onSurfaceVariant
@@ -447,4 +446,3 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     );
   }
 }
-

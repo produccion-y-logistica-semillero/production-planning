@@ -32,8 +32,7 @@ class OpenShopInput {
     this.operations, {
     this.dependencies = const [],
     this.interruptibleByTask = const {},
-  }
-  );
+  });
 
   bool isTaskInterruptible(int taskId) => interruptibleByTask[taskId] ?? true;
 }
@@ -51,6 +50,9 @@ class OpenShopOutput {
   /// preempted mid-processing.
   final Map<int, List<ProcessingSegment>> segmentsByTask;
 
+  /// Setup/changeover segments per task (taskId → segments), if any.
+  final Map<int, List<ProcessingSegment>> setupSegmentsByTask;
+
   OpenShopOutput(
     this.jobId,
     this.dbJobId,
@@ -59,9 +61,9 @@ class OpenShopOutput {
     this.endTime,
     this.scheduling, {
     Map<int, List<ProcessingSegment>>? segmentsByTask,
+    this.setupSegmentsByTask = const {},
   }) : segmentsByTask = segmentsByTask ??
-            scheduling.map((taskId, entry) => MapEntry(
-                taskId,
+            scheduling.map((taskId, entry) => MapEntry(taskId,
                 [ProcessingSegment(entry.value2.start, entry.value2.end)]));
 }
 
@@ -146,8 +148,10 @@ class OpenShop {
       case "GENETICS":
         // Simple genetics-like ordering based on CR and WSPT
         _schedule((a, b) {
-          final crA = _calculateCR(a.job as OpenShopInput, a.duration as Duration);
-          final crB = _calculateCR(b.job as OpenShopInput, b.duration as Duration);
+          final crA =
+              _calculateCR(a.job as OpenShopInput, a.duration as Duration);
+          final crB =
+              _calculateCR(b.job as OpenShopInput, b.duration as Duration);
           final durationMinutesA = (a.duration as Duration).inMinutes;
           final durationMinutesB = (b.duration as Duration).inMinutes;
           final wsptA = a.job.priority / max(1, durationMinutesA);
@@ -234,8 +238,10 @@ class OpenShop {
 
   void scheduleOpenShopMWR() {
     _schedule((a, b) {
-      final remainingA = _remainingWork(a.job as OpenShopInput, a.taskId as int);
-      final remainingB = _remainingWork(b.job as OpenShopInput, b.taskId as int);
+      final remainingA =
+          _remainingWork(a.job as OpenShopInput, a.taskId as int);
+      final remainingB =
+          _remainingWork(b.job as OpenShopInput, b.taskId as int);
       return remainingB.compareTo(remainingA);
     });
   }
@@ -250,8 +256,10 @@ class OpenShop {
 
   void scheduleOpenShopATCS() {
     _schedule((a, b) {
-      final atcsA = _calculateATCS(a.job as OpenShopInput, a.duration as Duration);
-      final atcsB = _calculateATCS(b.job as OpenShopInput, b.duration as Duration);
+      final atcsA =
+          _calculateATCS(a.job as OpenShopInput, a.duration as Duration);
+      final atcsB =
+          _calculateATCS(b.job as OpenShopInput, b.duration as Duration);
       return atcsB.compareTo(atcsA);
     });
   }
@@ -262,7 +270,9 @@ class OpenShop {
     for (var operation in job.operations) {
       if (operation.value1 != currentTaskId) {
         if (operation.value2.isEmpty) continue;
-        final sum = operation.value2.values.map((d) => d.inMinutes).fold<int>(0, (a, b) => a + b);
+        final sum = operation.value2.values
+            .map((d) => d.inMinutes)
+            .fold<int>(0, (a, b) => a + b);
         final avgDuration = sum ~/ operation.value2.length;
         totalMinutes += avgDuration;
       }
@@ -312,7 +322,8 @@ class OpenShop {
   }
 
   void _schedule(int Function(dynamic, dynamic) comparator) {
-    print('OpenShop._schedule: entering main loop for ${inputJobs.length} jobs');
+    print(
+        'OpenShop._schedule: entering main loop for ${inputJobs.length} jobs');
     // Rastrear qué operaciones ya se completaron por job
     Map<int, Set<int>> completedOperations = {
       for (var job in inputJobs) job.jobId: <int>{},
@@ -326,6 +337,10 @@ class OpenShop {
       for (var job in inputJobs) job.jobId: {},
     };
 
+    Map<int, Map<int, List<ProcessingSegment>>> jobSetupSegments = {
+      for (var job in inputJobs) job.jobId: {},
+    };
+
     Map<int, DateTime> jobAvailability = {
       for (var job in inputJobs) job.jobId: job.availableDate,
     };
@@ -334,7 +349,7 @@ class OpenShop {
       for (var job in inputJobs) job.jobId: {},
     };
 
-    bool _isTaskReady(OpenShopInput job, int taskId, Set<int> completed) {
+    bool isTaskReady(OpenShopInput job, int taskId, Set<int> completed) {
       if (job.dependencies.isEmpty) {
         // Treat operations as unordered; allow first operation if no predecessor defined
         final idx = job.operations.indexWhere((t) => t.value1 == taskId);
@@ -353,7 +368,8 @@ class OpenShop {
       }
     }
 
-    DateTime _getJobReadyTime(OpenShopInput job, int taskId, Map<int, DateTime> compTimes) {
+    DateTime getJobReadyTime(
+        OpenShopInput job, int taskId, Map<int, DateTime> compTimes) {
       if (job.dependencies.isEmpty) {
         final idx = job.operations.indexWhere((t) => t.value1 == taskId);
         if (idx > 0) {
@@ -375,20 +391,21 @@ class OpenShop {
       }
     }
 
-    int _iter = 0;
-    const int _maxIter = 1000000;
+    int iter = 0;
+    const int maxIter = 1000000;
 
     // Mientras haya operaciones sin completar
     while (completedOperations.entries.any((entry) {
       final job = inputJobs.firstWhere((j) => j.jobId == entry.key);
       return entry.value.length < job.operations.length;
     })) {
-      _iter++;
-      if (_iter % 10000 == 0) {
-        print('OpenShop._schedule: iter=$_iter');
+      iter++;
+      if (iter % 10000 == 0) {
+        print('OpenShop._schedule: iter=$iter');
       }
-      if (_iter > _maxIter) {
-        print('OpenShop._schedule: reached max iterations ($_maxIter), aborting loop');
+      if (iter > maxIter) {
+        print(
+            'OpenShop._schedule: reached max iterations ($maxIter), aborting loop');
         break;
       }
       List<
@@ -411,9 +428,9 @@ class OpenShop {
           // Si ya se completó esta operación, skip
           if (completed.contains(taskId)) continue;
 
-          if (!_isTaskReady(job, taskId, completed)) continue;
+          if (!isTaskReady(job, taskId, completed)) continue;
 
-          final jobReadyTime = _getJobReadyTime(job, taskId, compTimes);
+          final jobReadyTime = getJobReadyTime(job, taskId, compTimes);
 
           // Verificar cada máquina posible para esta operación
           for (var entry in operation.value2.entries) {
@@ -439,7 +456,6 @@ class OpenShop {
         }
       }
 
-
       if (candidates.isEmpty) break;
 
       // Ordenar candidatos según earliestStart primero (Non-delay), luego por la regla de despacho
@@ -455,14 +471,19 @@ class OpenShop {
 
       // Calcular setup time
       _machineLastSequence.putIfAbsent(selected.machineId, () => null);
-      final int? previousJobId = _machineLastJob.putIfAbsent(selected.machineId, () => null);
-      
+      final int? previousJobId =
+          _machineLastJob.putIfAbsent(selected.machineId, () => null);
+
       Duration setupDuration = Duration.zero;
-      if (previousJobId != null && stateSetupMatrix != null && jobStates != null && previousJobId > 0) {
+      if (previousJobId != null &&
+          stateSetupMatrix != null &&
+          jobStates != null &&
+          previousJobId > 0) {
         final machineStates = stateSetupMatrix![selected.machineId];
         if (machineStates != null) {
           final previousState = jobStates![previousJobId]?[selected.machineId];
-          final currentState = jobStates![selected.job.dbJobId]?[selected.machineId];
+          final currentState =
+              jobStates![selected.job.dbJobId]?[selected.machineId];
           if (previousState != null && currentState != null) {
             final setupMinutes = machineStates[previousState]?[currentState];
             if (setupMinutes != null) {
@@ -472,14 +493,33 @@ class OpenShop {
         }
       }
 
-      // Split setup+processing into segments wherever the work-shift end, a
+      // Schedule setup as its own segmented block (through the preemption
+      // engine, so it's just as sensitive to work-shift/rest/maintenance
+      // boundaries as processing is), then start processing right after.
+      List<ProcessingSegment> setupSegments = const [];
+      DateTime processStart = start;
+      Duration continuousUsage =
+          _machineContinuousUsage[selected.machineId] ?? Duration.zero;
+      if (setupDuration > Duration.zero) {
+        final setupSchedule = _engineFor(selected.machineId).computeSegments(
+          earliestStart: start,
+          totalDuration: setupDuration,
+          priorContinuousUsage: continuousUsage,
+        );
+        setupSegments = setupSchedule.segments;
+        processStart = setupSchedule.completionTime;
+        continuousUsage = setupSegments.length > 1
+            ? setupSegments.last.duration
+            : continuousUsage + setupSegments.single.duration;
+      }
+
+      // Split processing into segments wherever the work-shift end, a
       // maintenance window, or the continuous-use rest cap would otherwise
       // fall inside this task's span on this machine.
       final schedule = _engineFor(selected.machineId).computeSegments(
-        earliestStart: start,
-        totalDuration: setupDuration + selected.duration,
-        priorContinuousUsage:
-            _machineContinuousUsage[selected.machineId] ?? Duration.zero,
+        earliestStart: processStart,
+        totalDuration: selected.duration,
+        priorContinuousUsage: continuousUsage,
         interruptible: selected.job.isTaskInterruptible(selected.taskId),
       );
       final DateTime taskStart = schedule.startDate;
@@ -489,6 +529,7 @@ class OpenShop {
       jobSchedulings[selected.job.jobId]![selected.taskId] =
           Tuple2(selected.machineId, Range(taskStart, adjustedEnd));
       jobSegments[selected.job.jobId]![selected.taskId] = schedule.segments;
+      jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
       // Actualizar disponibilidades
       machinesAvailability[selected.machineId] = adjustedEnd;
@@ -499,8 +540,7 @@ class OpenShop {
       _machineLastJob[selected.machineId] = selected.job.dbJobId;
       _machineContinuousUsage[selected.machineId] = schedule.segments.length > 1
           ? schedule.segments.last.duration
-          : (_machineContinuousUsage[selected.machineId] ?? Duration.zero) +
-              schedule.segments.single.duration;
+          : continuousUsage + schedule.segments.single.duration;
     }
 
     // Generar outputs
@@ -529,6 +569,7 @@ class OpenShop {
         endDate ?? job.availableDate,
         scheduling,
         segmentsByTask: jobSegments[job.jobId],
+        setupSegmentsByTask: jobSetupSegments[job.jobId] ?? const {},
       ));
     }
   }
@@ -548,76 +589,92 @@ class OpenShop {
 }
 
 List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
-  final startDate = DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
+  final startDate =
+      DateTime.fromMillisecondsSinceEpoch(payload['startDate'] as int);
   final workingSchedule = Tuple2(
-    TimeOfDay(hour: payload['workingStartHour'] as int, minute: payload['workingStartMinute'] as int),
-    TimeOfDay(hour: payload['workingEndHour'] as int, minute: payload['workingEndMinute'] as int),
+    TimeOfDay(
+        hour: payload['workingStartHour'] as int,
+        minute: payload['workingStartMinute'] as int),
+    TimeOfDay(
+        hour: payload['workingEndHour'] as int,
+        minute: payload['workingEndMinute'] as int),
   );
 
-  final List<OpenShopInput> inputJobs = (payload['inputJobs'] as List<dynamic>)
-      .map((jobData) {
-        final jd = Map<String, dynamic>.from(jobData as Map);
-        final Map<int, bool> interruptibleByTask = {};
-        final operations = (jd['operations'] as List<dynamic>).map((opData) {
-          final od = Map<String, dynamic>.from(opData as Map);
-          final machineDurations = (od['machineDurations'] as Map<dynamic, dynamic>).map(
-            (key, value) => MapEntry(key as int, Duration(milliseconds: value as int)),
+  final List<OpenShopInput> inputJobs =
+      (payload['inputJobs'] as List<dynamic>).map((jobData) {
+    final jd = Map<String, dynamic>.from(jobData as Map);
+    final Map<int, bool> interruptibleByTask = {};
+    final operations = (jd['operations'] as List<dynamic>).map((opData) {
+      final od = Map<String, dynamic>.from(opData as Map);
+      final machineDurations =
+          (od['machineDurations'] as Map<dynamic, dynamic>).map(
+        (key, value) =>
+            MapEntry(key as int, Duration(milliseconds: value as int)),
+      );
+      final taskId = od['taskId'] as int;
+      interruptibleByTask[taskId] = (od['interruptible'] as bool?) ?? true;
+      return Tuple2(taskId, machineDurations);
+    }).toList();
+
+    final dependencies = (jd['dependencies'] as List<dynamic>)
+        .map((depData) {
+          final depMap = Map<String, dynamic>.from(depData as Map);
+          return TaskDependencyEntity(
+            predecessor_id: depMap['predecessor_id'] as int,
+            successor_id: depMap['successor_id'] as int,
+            sequenceId: depMap['sequenceId'] as int,
           );
-          final taskId = od['taskId'] as int;
-          interruptibleByTask[taskId] = (od['interruptible'] as bool?) ?? true;
-          return Tuple2(taskId, machineDurations);
-        }).toList();
+        })
+        .cast<TaskDependencyEntity>()
+        .toList();
 
-        final dependencies = (jd['dependencies'] as List<dynamic>)
-            .map((depData) {
-              final depMap = Map<String, dynamic>.from(depData as Map);
-              return TaskDependencyEntity(
-                predecessor_id: depMap['predecessor_id'] as int,
-                successor_id: depMap['successor_id'] as int,
-                sequenceId: depMap['sequenceId'] as int,
-              );
-            })
-            .cast<TaskDependencyEntity>()
-            .toList();
+    return OpenShopInput(
+      jd['jobId'] as int,
+      jd['dbJobId'] as int,
+      jd['sequenceId'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jd['dueDate'] as int),
+      jd['priority'] as int,
+      DateTime.fromMillisecondsSinceEpoch(jd['availableDate'] as int),
+      operations,
+      dependencies: dependencies,
+      interruptibleByTask: interruptibleByTask,
+    );
+  }).toList();
 
-        return OpenShopInput(
-          jd['jobId'] as int,
-          jd['dbJobId'] as int,
-          jd['sequenceId'] as int,
-          DateTime.fromMillisecondsSinceEpoch(jd['dueDate'] as int),
-          jd['priority'] as int,
-          DateTime.fromMillisecondsSinceEpoch(jd['availableDate'] as int),
-          operations,
-          dependencies: dependencies,
-          interruptibleByTask: interruptibleByTask,
-        );
-      })
-      .toList();
-
-  final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
-      .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
+  final machinesAvailability =
+      (payload['machinesAvailability'] as Map<dynamic, dynamic>).map(
+          (key, value) => MapEntry(
+              key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
 
   final machineInactivities = <int, List<MachineInactivityEntity>>{};
-  for (final entry in (payload['machineInactivities'] as Map<dynamic, dynamic>).entries) {
+  for (final entry
+      in (payload['machineInactivities'] as Map<dynamic, dynamic>).entries) {
     final machineId = entry.key as int;
     final list = (entry.value as List<dynamic>);
-    machineInactivities[machineId] = list.map((item) {
-      final map = Map<String, dynamic>.from(item as Map);
-      return MachineInactivityEntity(
-        machineId: map['machineId'] as int,
-        name: map['name'] as String,
-        weekdays: (map['weekdays'] as List<dynamic>).map((w) => Weekday.values[w as int]).toSet(),
-        startTime: Duration(minutes: map['startTimeMinutes'] as int),
-        duration: Duration(minutes: map['durationMinutes'] as int),
-      );
-    }).cast<MachineInactivityEntity>().toList();
+    machineInactivities[machineId] = list
+        .map((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          return MachineInactivityEntity(
+            machineId: map['machineId'] as int,
+            name: map['name'] as String,
+            weekdays: (map['weekdays'] as List<dynamic>)
+                .map((w) => Weekday.values[w as int])
+                .toSet(),
+            startTime: Duration(minutes: map['startTimeMinutes'] as int),
+            duration: Duration(minutes: map['durationMinutes'] as int),
+          );
+        })
+        .cast<MachineInactivityEntity>()
+        .toList();
   }
 
-  final machineContinueCapacity = (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
-      .map((key, value) => MapEntry(key as int, value as int));
+  final machineContinueCapacity =
+      (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as int));
 
   final machineRestTime = <int, Duration?>{};
-  for (final entry in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
+  for (final entry
+      in (payload['machineRestTime'] as Map<dynamic, dynamic>).entries) {
     machineRestTime[entry.key as int] =
         entry.value == null ? null : Duration(milliseconds: entry.value as int);
   }
@@ -630,7 +687,8 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
             (Map<dynamic, dynamic>.from(value as Map)).map(
               (prev, curr) => MapEntry(
                 prev as String,
-                (Map<dynamic, dynamic>.from(curr as Map)).map((next, minutes) => MapEntry(next as String, minutes as int)),
+                (Map<dynamic, dynamic>.from(curr as Map)).map((next, minutes) =>
+                    MapEntry(next as String, minutes as int)),
               ),
             ),
           ),
@@ -641,7 +699,8 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
       : (payload['jobStates'] as Map<dynamic, dynamic>).map(
           (key, value) => MapEntry(
             key as int,
-            (Map<dynamic, dynamic>.from(value as Map)).map((mKey, state) => MapEntry(mKey as int, state as String)),
+            (Map<dynamic, dynamic>.from(value as Map))
+                .map((mKey, state) => MapEntry(mKey as int, state as String)),
           ),
         );
 
@@ -665,11 +724,12 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
       'dueDate': out.dueDate.millisecondsSinceEpoch,
       'startDate': out.startDate.millisecondsSinceEpoch,
       'endTime': out.endTime.millisecondsSinceEpoch,
-      'scheduling': out.scheduling.map((key, value) => MapEntry(key.toString(), {
-            'machineId': value.value1,
-            'start': value.value2.startDate.millisecondsSinceEpoch,
-            'end': value.value2.endDate.millisecondsSinceEpoch,
-          })),
+      'scheduling':
+          out.scheduling.map((key, value) => MapEntry(key.toString(), {
+                'machineId': value.value1,
+                'start': value.value2.startDate.millisecondsSinceEpoch,
+                'end': value.value2.endDate.millisecondsSinceEpoch,
+              })),
       'segmentsByTask': out.segmentsByTask.map((taskId, segments) => MapEntry(
             taskId.toString(),
             segments
@@ -679,6 +739,16 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
                     })
                 .toList(),
           )),
+      'setupSegmentsByTask':
+          out.setupSegmentsByTask.map((taskId, segments) => MapEntry(
+                taskId.toString(),
+                segments
+                    .map((s) => {
+                          'start': s.start.millisecondsSinceEpoch,
+                          'end': s.end.millisecondsSinceEpoch,
+                        })
+                    .toList(),
+              )),
     };
   }).toList();
 }

@@ -141,7 +141,10 @@ class ParallelMachineAdapter {
         retarded: out.dueDate.isBefore(out.endDate),
         jobId: job.jobId!,
         orderId: orderId,
+        machineName:
+            machineEntities.firstWhere((m) => m.id == out.machineId).name,
         segments: out.segments,
+        setupSegments: out.setupSegments,
       );
 
       machineTasksMap.putIfAbsent(out.machineId, () => []).add(planningTask);

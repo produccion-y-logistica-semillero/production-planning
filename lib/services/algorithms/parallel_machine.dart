@@ -54,6 +54,7 @@ class ParallelOutput {
   final Duration delay;
   final DateTime dueDate;
   final List<ProcessingSegment> segments;
+  final List<ProcessingSegment> setupSegments;
 
   ParallelOutput(
     this.jobId,
@@ -63,6 +64,7 @@ class ParallelOutput {
     this.delay,
     this.dueDate, {
     List<ProcessingSegment>? segments,
+    this.setupSegments = const [],
   }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }
 
@@ -284,6 +286,8 @@ class ParallelMachine {
       DateTime bestProcessStart = DateTime.now();
       Duration bestDelay = const Duration(days: 99999);
       SegmentedSchedule? bestSchedule;
+      List<ProcessingSegment> bestSetupSegments = const [];
+      Duration bestContinuousUsageAfterSetup = Duration.zero;
 
       for (final entry in job.durationsInMachines.entries) {
         final int machineId = entry.key;
@@ -298,16 +302,32 @@ class ParallelMachine {
         // ── Sequence-dependent setup time ─────────────────────────────────
         // The machine needs s_{prevState → jobState} minutes of preparation
         // before it can start processing this job.  Setup runs on the machine
-        // (occupies it), so processing only starts after setup finishes.
+        // (occupies it) and, like processing, is scheduled through the
+        // preemption engine as its own segmented block, so it's just as
+        // sensitive to work-shift/rest/maintenance boundaries.
         final String toState = job.stateOnMachine(machineId);
         final Duration setup = _setupDuration(
           machineId,
           _machineLastState[machineId],
           toState,
         );
-        final DateTime processStart = setup > Duration.zero
-            ? _adjustForWorkingSchedule(candidateStart.add(setup))
-            : candidateStart;
+
+        List<ProcessingSegment> candidateSetupSegments = const [];
+        DateTime processStart = candidateStart;
+        Duration continuousUsageAfterSetup =
+            _machineContinuousUsage[machineId] ?? Duration.zero;
+        if (setup > Duration.zero) {
+          final setupSchedule = _engineByMachine[machineId]!.computeSegments(
+            earliestStart: candidateStart,
+            totalDuration: setup,
+            priorContinuousUsage: continuousUsageAfterSetup,
+          );
+          candidateSetupSegments = setupSchedule.segments;
+          processStart = setupSchedule.completionTime;
+          continuousUsageAfterSetup = candidateSetupSegments.length > 1
+              ? candidateSetupSegments.last.duration
+              : continuousUsageAfterSetup + candidateSetupSegments.single.duration;
+        }
 
         // Split into segments wherever the work-shift end, a maintenance
         // window, or the continuous-use rest cap falls inside this job's
@@ -315,8 +335,7 @@ class ParallelMachine {
         final schedule = _engineByMachine[machineId]!.computeSegments(
           earliestStart: processStart,
           totalDuration: processingTime,
-          priorContinuousUsage:
-              _machineContinuousUsage[machineId] ?? Duration.zero,
+          priorContinuousUsage: continuousUsageAfterSetup,
           interruptible: job.isInterruptibleOnMachine(machineId),
         );
         final DateTime endTime = schedule.completionTime;
@@ -332,23 +351,28 @@ class ParallelMachine {
           bestProcessStart = processStart;
           bestSchedule = schedule;
           bestDelay = delay;
+          bestSetupSegments = candidateSetupSegments;
+          bestContinuousUsageAfterSetup = continuousUsageAfterSetup;
         }
       }
 
       if (bestMachineId != -1 && bestSchedule != null) {
         final bestEndTime = bestSchedule.completionTime;
+        final bestStart = bestSetupSegments.isNotEmpty
+            ? bestSetupSegments.first.start
+            : bestProcessStart;
 
         machineAvailable[bestMachineId] = bestEndTime;
-        machines[bestMachineId]?.add(Tuple2(bestProcessStart, bestEndTime));
+        machines[bestMachineId]?.add(Tuple2(bestStart, bestEndTime));
         // ── Update last-state so the next job on this machine sees the correct
         //    "from" state in the setup matrix.
         _machineLastState[bestMachineId] = job.stateOnMachine(bestMachineId);
         // A pause anywhere within this job's segments already reset the
-        // continuity streak; otherwise accumulate onto the running streak.
+        // continuity streak; otherwise accumulate onto the running streak
+        // that setup (if any) already left off at.
         _machineContinuousUsage[bestMachineId] = bestSchedule.segments.length > 1
             ? bestSchedule.segments.last.duration
-            : (_machineContinuousUsage[bestMachineId] ?? Duration.zero) +
-                bestSchedule.segments.single.duration;
+            : bestContinuousUsageAfterSetup + bestSchedule.segments.single.duration;
 
         output.add(ParallelOutput(
           job.jobId,
@@ -358,6 +382,7 @@ class ParallelMachine {
           bestDelay,
           job.dueDate,
           segments: bestSchedule.segments,
+          setupSegments: bestSetupSegments,
         ));
       }
     }

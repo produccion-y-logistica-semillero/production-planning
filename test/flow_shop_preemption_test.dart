@@ -6,7 +6,8 @@ import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/algorithms/flow_shop.dart';
 
 void main() {
-  test('a task spanning a scheduled maintenance window is split and resumed', () {
+  test('a task spanning a scheduled maintenance window is split and resumed',
+      () {
     const workingSchedule =
         Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 19, minute: 0));
     final start = DateTime(2026, 1, 7, 14, 0); // Wednesday
@@ -29,12 +30,12 @@ void main() {
       'FIFO',
       machineInactivities: {
         1: [
-          MachineInactivityEntity(
+          const MachineInactivityEntity(
             machineId: 1,
             name: 'Mantenimiento',
-            weekdays: const {Weekday.wednesday},
-            startTime: const Duration(hours: 15),
-            duration: const Duration(hours: 1),
+            weekdays: {Weekday.wednesday},
+            startTime: Duration(hours: 15),
+            duration: Duration(hours: 1),
           ),
         ],
       },

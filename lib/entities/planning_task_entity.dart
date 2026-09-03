@@ -12,6 +12,11 @@ class PlanningTaskEntity {
   final int jobId;
   final int orderId;
 
+  /// Name of the machine this task ran on. Needed to label its setup-time
+  /// bar in the Gantt ("Alistamiento — [machineName]") even in "Por Job"
+  /// view, where the row is no longer the machine.
+  final String machineName;
+
   /// The actual processing segments (start/end pairs) that make up this
   /// task's execution. A task that isn't preempted has exactly one segment
   /// equal to (startDate, endDate). A task that was paused by a work-shift
@@ -20,6 +25,11 @@ class PlanningTaskEntity {
   /// span the whole thing (first segment's start to last segment's end) for
   /// consumers that only need the overall window.
   final List<ProcessingSegment> segments;
+
+  /// Sequence-dependent setup/changeover segments that ran immediately
+  /// before [segments] on the same machine, if any. Empty when this task
+  /// had no setup cost.
+  final List<ProcessingSegment> setupSegments;
 
   PlanningTaskEntity({
     required this.sequenceId,
@@ -32,6 +42,8 @@ class PlanningTaskEntity {
     required this.retarded,
     required this.orderId,
     required this.jobId,
+    required this.machineName,
     List<ProcessingSegment>? segments,
+    this.setupSegments = const [],
   }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }

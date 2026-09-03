@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
 
 /// How availableDate/dueDate are determined for the jobs of an order being
@@ -35,6 +36,13 @@ class NewOrdersState extends NewOrderState {
   final DateRegistrationMode dateMode;
   final int leadTimeDays;
 
+  /// Order-wide default hour used in [DateRegistrationMode.automatic] for
+  /// availableDate/dueDate when a job doesn't set its own
+  /// [AddJobWidget.automaticStartHour]/[AddJobWidget.automaticDueHour]
+  /// override. `null` means "use the current time at save".
+  final TimeOfDay? automaticStartHour;
+  final TimeOfDay? automaticDueHour;
+
   NewOrdersState({
     required this.jobs,
     required this.sequences,
@@ -42,6 +50,8 @@ class NewOrdersState extends NewOrderState {
     this.setupTimeMatrix,
     this.dateMode = DateRegistrationMode.manual,
     this.leadTimeDays = 3,
+    this.automaticStartHour,
+    this.automaticDueHour,
   });
 
   NewOrdersState copyWith({
@@ -51,6 +61,8 @@ class NewOrdersState extends NewOrderState {
     Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
     DateRegistrationMode? dateMode,
     int? leadTimeDays,
+    Optional<TimeOfDay>? automaticStartHour,
+    Optional<TimeOfDay>? automaticDueHour,
   }) => NewOrdersState(
     jobs: jobs ?? this.jobs,
     sequences: sequences ?? this.sequences,
@@ -58,5 +70,19 @@ class NewOrdersState extends NewOrderState {
     setupTimeMatrix: setupTimeMatrix ?? this.setupTimeMatrix,
     dateMode: dateMode ?? this.dateMode,
     leadTimeDays: leadTimeDays ?? this.leadTimeDays,
+    automaticStartHour: automaticStartHour == null
+        ? this.automaticStartHour
+        : automaticStartHour.value,
+    automaticDueHour: automaticDueHour == null
+        ? this.automaticDueHour
+        : automaticDueHour.value,
   );
+}
+
+/// Wraps a value that may itself be `null`, so [NewOrdersState.copyWith] can
+/// tell "leave unchanged" (argument omitted) apart from "clear it"
+/// (`Optional(null)`) for the nullable `TimeOfDay?` hour fields.
+class Optional<T> {
+  final T? value;
+  const Optional(this.value);
 }

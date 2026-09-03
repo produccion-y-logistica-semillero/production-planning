@@ -48,6 +48,9 @@ class FlowShopOutput {
   /// the machine's Range when not explicitly provided.
   final Map<int, List<ProcessingSegment>> segmentsByMachine;
 
+  /// Setup/changeover segments per machine (machineId → segments), if any.
+  final Map<int, List<ProcessingSegment>> setupSegmentsByMachine;
+
   FlowShopOutput(
     this.jobId,
     this.startDate,
@@ -55,6 +58,7 @@ class FlowShopOutput {
     this.endTime,
     this.machinesScheduling, {
     Map<int, List<ProcessingSegment>>? segmentsByMachine,
+    this.setupSegmentsByMachine = const {},
   }) : segmentsByMachine = segmentsByMachine ??
             machinesScheduling.map((machineId, entry) => MapEntry(
                 machineId,
@@ -291,6 +295,7 @@ class FlowShop {
     DateTime? actualStartTime;
     Map<int, Tuple2<int, Range>> scheduling = {};
     Map<int, List<ProcessingSegment>> segmentsByMachine = {};
+    Map<int, List<ProcessingSegment>> setupSegmentsByMachine = {};
 
     for (var task in job.taskSequence) {
       int taskId = task.value1;
@@ -310,30 +315,50 @@ class FlowShop {
         currentJobId: job.jobId,
         previousJobId: previousJob,
       );
-      final Duration totalDuration = duration + setupDuration;
 
-      // Split setup+processing into segments wherever the work-shift end, a
+      // Schedule setup as its own segmented block (through the preemption
+      // engine, so it's just as sensitive to work-shift/rest/maintenance
+      // boundaries as processing is), then start processing right after.
+      List<ProcessingSegment> setupSegments = const [];
+      DateTime processStart = startTime;
+      Duration continuousUsage = _machineContinuousUsage[machineId] ?? Duration.zero;
+      if (setupDuration > Duration.zero) {
+        final setupSchedule = _engineByMachine[machineId]!.computeSegments(
+          earliestStart: startTime,
+          totalDuration: setupDuration,
+          priorContinuousUsage: continuousUsage,
+        );
+        setupSegments = setupSchedule.segments;
+        processStart = setupSchedule.completionTime;
+        continuousUsage = setupSegments.length > 1
+            ? setupSegments.last.duration
+            : continuousUsage + setupSegments.single.duration;
+      }
+
+      // Split processing into segments wherever the work-shift end, a
       // maintenance window, or the continuous-use rest cap would otherwise
       // fall inside this task's span on this machine.
       final schedule = _engineByMachine[machineId]!.computeSegments(
-        earliestStart: startTime,
-        totalDuration: totalDuration,
-        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+        earliestStart: processStart,
+        totalDuration: duration,
+        priorContinuousUsage: continuousUsage,
         interruptible: job.isTaskInterruptible(taskId),
       );
       final DateTime adjustedEnd = schedule.completionTime;
 
-      actualStartTime ??= schedule.startDate;
+      actualStartTime ??= setupSegments.isNotEmpty
+          ? setupSegments.first.start
+          : schedule.startDate;
 
       scheduling[machineId] = Tuple2(taskId, Range(schedule.startDate, adjustedEnd));
       segmentsByMachine[machineId] = schedule.segments;
+      setupSegmentsByMachine[machineId] = setupSegments;
       machinesAvailability[machineId] = adjustedEnd;
       _machineLastSequence[machineId] = job.sequenceId;
       _machineLastJob[machineId] = job.jobId;
       _machineContinuousUsage[machineId] = schedule.segments.length > 1
           ? schedule.segments.last.duration
-          : (_machineContinuousUsage[machineId] ?? Duration.zero) +
-              schedule.segments.single.duration;
+          : continuousUsage + schedule.segments.single.duration;
       jobStartTime = adjustedEnd;
     }
 
@@ -345,6 +370,7 @@ class FlowShop {
         jobStartTime,
         scheduling,
         segmentsByMachine: segmentsByMachine,
+        setupSegmentsByMachine: setupSegmentsByMachine,
       ),
     );
   }

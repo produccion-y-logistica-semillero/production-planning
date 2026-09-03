@@ -12,7 +12,6 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/open_shop.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
-import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import '../../shared/utils/task_time_utils.dart';
 
@@ -59,27 +58,31 @@ class OpenShopAdapter {
         for (final machine
             in machines.where((m) => m.machineTypeId == task.machineTypeId)) {
           // Priority 1: Explicit per-job per-task per-machine time
-          final explicit = getExplicitProcessingDuration(job, task.id!, machine);
+          final explicit =
+              getExplicitProcessingDuration(job, task.id!, machine);
           if (explicit != null) {
             machineDurations[machine.id!] = explicit;
           } else {
             // Priority 2: Use task processingUnits directly, scaled only if machine is not standard (100%)
-            if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+            if (machine.processingPercentage == 100 ||
+                machine.processingPercentage <= 0) {
               // Standard machine: use processingUnits as-is
               machineDurations[machine.id!] = task.processingUnits;
             } else {
               // Non-standard machine: scale processingUnits by machine percentage
               final ratio = machine.processingPercentage / 100.0;
-              final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
-              machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
+              final scaledMillis =
+                  (task.processingUnits.inMilliseconds * ratio).round();
+              machineDurations[machine.id!] =
+                  Duration(milliseconds: scaledMillis);
             }
           }
         }
 
         if (machineDurations.isNotEmpty) {
           operations.add(Tuple2(task.id!, machineDurations));
-          interruptibleByTask[task.id!] = resolveInterruptible(
-              job, task, machineDurations.keys.first);
+          interruptibleByTask[task.id!] =
+              resolveInterruptible(job, task, machineDurations.keys.first);
         }
       }
 
@@ -114,9 +117,9 @@ class OpenShopAdapter {
     }
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
-      buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
+        buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
-      buildJobMachineStates(order.orderJobs!, machines);
+        buildJobMachineStates(order.orderJobs!, machines);
 
     // Ejecutar el algoritmo Open Shop en un isolate y transformar la salida en PlanningMachineEntity
     final payload = <String, dynamic>{
@@ -137,7 +140,8 @@ class OpenShopAdapter {
           'operations': job.operations.map((operation) {
             return {
               'taskId': operation.value1,
-              'machineDurations': operation.value2.map((machineId, duration) => MapEntry(machineId, duration.inMilliseconds)),
+              'machineDurations': operation.value2.map((machineId, duration) =>
+                  MapEntry(machineId, duration.inMilliseconds)),
               'interruptible': job.isTaskInterruptible(operation.value1),
             };
           }).toList(),
@@ -150,20 +154,25 @@ class OpenShopAdapter {
               .toList(),
         };
       }).toList(),
-      'machinesAvailability': machinesAvailability.map((machineId, date) => MapEntry(machineId, date.millisecondsSinceEpoch)),
-      'machineInactivities': machineInactivitiesMap.map((machineId, inactivities) {
-        return MapEntry(machineId, inactivities.map((inactivity) {
-          return {
-            'machineId': inactivity.machineId,
-            'name': inactivity.name,
-            'weekdays': inactivity.weekdays.map((wd) => wd.index).toList(),
-            'startTimeMinutes': inactivity.startTime.inMinutes,
-            'durationMinutes': inactivity.duration.inMinutes,
-          };
-        }).toList());
+      'machinesAvailability': machinesAvailability.map((machineId, date) =>
+          MapEntry(machineId, date.millisecondsSinceEpoch)),
+      'machineInactivities':
+          machineInactivitiesMap.map((machineId, inactivities) {
+        return MapEntry(
+            machineId,
+            inactivities.map((inactivity) {
+              return {
+                'machineId': inactivity.machineId,
+                'name': inactivity.name,
+                'weekdays': inactivity.weekdays.map((wd) => wd.index).toList(),
+                'startTimeMinutes': inactivity.startTime.inMinutes,
+                'durationMinutes': inactivity.duration.inMinutes,
+              };
+            }).toList());
       }),
       'machineContinueCapacity': machineContinueCapacityMap,
-      'machineRestTime': machineRestTimeMap.map((machineId, duration) => MapEntry(machineId, duration?.inMilliseconds)),
+      'machineRestTime': machineRestTimeMap.map((machineId, duration) =>
+          MapEntry(machineId, duration?.inMilliseconds)),
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
     };
@@ -172,13 +181,15 @@ class OpenShopAdapter {
     try {
       rawOutput = await compute(openShopSchedule, payload);
     } catch (error, stack) {
-      print('OpenShopAdapter.openShopAdapter compute error: ${error.toString()}');
+      print(
+          'OpenShopAdapter.openShopAdapter compute error: ${error.toString()}');
       print(stack.toString());
       return null;
     }
 
     final List<OpenShopOutput> output = rawOutput.map((out) {
-      final schedulingMap = (out['scheduling'] as Map<dynamic, dynamic>).map((key, value) {
+      final schedulingMap =
+          (out['scheduling'] as Map<dynamic, dynamic>).map((key, value) {
         final entry = Map<String, dynamic>.from(value as Map);
         return MapEntry(
           int.parse(key as String),
@@ -191,8 +202,20 @@ class OpenShopAdapter {
           ),
         );
       });
-      final segmentsByTask = (out['segmentsByTask'] as Map<dynamic, dynamic>?)
-          ?.map((key, value) {
+      final segmentsByTask =
+          (out['segmentsByTask'] as Map<dynamic, dynamic>?)?.map((key, value) {
+        final segs = (value as List<dynamic>).map((segData) {
+          final segMap = Map<String, dynamic>.from(segData as Map);
+          return ProcessingSegment(
+            DateTime.fromMillisecondsSinceEpoch(segMap['start'] as int),
+            DateTime.fromMillisecondsSinceEpoch(segMap['end'] as int),
+          );
+        }).toList();
+        return MapEntry(int.parse(key as String), segs);
+      });
+      final setupSegmentsByTask =
+          (out['setupSegmentsByTask'] as Map<dynamic, dynamic>?)
+              ?.map((key, value) {
         final segs = (value as List<dynamic>).map((segData) {
           final segMap = Map<String, dynamic>.from(segData as Map);
           return ProcessingSegment(
@@ -210,6 +233,7 @@ class OpenShopAdapter {
         DateTime.fromMillisecondsSinceEpoch(out['endTime'] as int),
         schedulingMap,
         segmentsByTask: segmentsByTask,
+        setupSegmentsByTask: setupSegmentsByTask ?? const {},
       );
     }).toList();
 
@@ -240,7 +264,9 @@ class OpenShopAdapter {
           retarded: range.end.isAfter(job.dueDate),
           jobId: job.jobId!,
           orderId: orderId,
+          machineName: machines.firstWhere((m) => m.id == machineId).name,
           segments: jobOutput.segmentsByTask[taskId],
+          setupSegments: jobOutput.setupSegmentsByTask[taskId] ?? const [],
         );
 
         if (!machineTasksMap.containsKey(machineId)) {
@@ -266,8 +292,8 @@ class OpenShopAdapter {
       planningMachines,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-        return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
-            job.priority);
+        return Tuple5(
+            out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
       }).toList(),
     );
 

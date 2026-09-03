@@ -37,9 +37,13 @@ class FlexibleFlowOutput {
   /// were preempted mid-processing.
   final Map<int, List<ProcessingSegment>> segmentsByStation;
 
+  /// Setup/changeover segments per station (stationId → segments), if any.
+  final Map<int, List<ProcessingSegment>> setupSegmentsByStation;
+
   FlexibleFlowOutput(
       this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling,
-      {Map<int, List<ProcessingSegment>>? segmentsByStation})
+      {Map<int, List<ProcessingSegment>>? segmentsByStation,
+      this.setupSegmentsByStation = const {}})
       : segmentsByStation = segmentsByStation ??
             scheduling.map((stationId, entry) => MapEntry(
                 stationId,
@@ -183,6 +187,7 @@ class FlexibleFlowShop {
 
     Map<int, Tuple2<int, Range>> scheduling = {};
     Map<int, List<ProcessingSegment>> segmentsByStation = {};
+    Map<int, List<ProcessingSegment>> setupSegmentsByStation = {};
 
     for (var task in job.taskSequence) {
       int stationId = task.value1;
@@ -208,31 +213,51 @@ class FlexibleFlowShop {
         previousJob,
       );
 
-      // Split setup+processing into segments wherever the work-shift end, a
+      // Schedule setup as its own segmented block (through the preemption
+      // engine, so it's just as sensitive to work-shift/rest/maintenance
+      // boundaries as processing is), then start processing right after.
+      List<ProcessingSegment> setupSegments = const [];
+      DateTime processStart = startTime;
+      Duration continuousUsage = _machineContinuousUsage[machineId] ?? Duration.zero;
+      if (setupDuration > Duration.zero) {
+        final setupSchedule = _engineFor(machineId).computeSegments(
+          earliestStart: startTime,
+          totalDuration: setupDuration,
+          priorContinuousUsage: continuousUsage,
+        );
+        setupSegments = setupSchedule.segments;
+        processStart = setupSchedule.completionTime;
+        continuousUsage = setupSegments.length > 1
+            ? setupSegments.last.duration
+            : continuousUsage + setupSegments.single.duration;
+      }
+
+      // Split processing into segments wherever the work-shift end, a
       // maintenance window, or the continuous-use rest cap would otherwise
       // fall inside this task's span on this machine.
       final schedule = _engineFor(machineId).computeSegments(
-        earliestStart: startTime,
-        totalDuration: setupDuration + processingTime,
-        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+        earliestStart: processStart,
+        totalDuration: processingTime,
+        priorContinuousUsage: continuousUsage,
         interruptible: taskInterruptible,
       );
       final DateTime taskStart = schedule.startDate;
       final DateTime endTime = schedule.completionTime;
 
       // Guarda el primer tiempo real de inicio
-      actualStartTime ??= taskStart;
+      actualStartTime ??=
+          setupSegments.isNotEmpty ? setupSegments.first.start : taskStart;
       // Guarda el último tiempo de finalización
       finalEndTime = endTime;
 
       scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
       segmentsByStation[stationId] = schedule.segments;
+      setupSegmentsByStation[stationId] = setupSegments;
       machinesAvailability[machineId] = endTime;
       _machineLastJob[machineId] = job.jobId;
       _machineContinuousUsage[machineId] = schedule.segments.length > 1
           ? schedule.segments.last.duration
-          : (_machineContinuousUsage[machineId] ?? Duration.zero) +
-              schedule.segments.single.duration;
+          : continuousUsage + schedule.segments.single.duration;
 
       jobStartTime = endTime;
     }
@@ -244,6 +269,7 @@ class FlexibleFlowShop {
       finalEndTime!,
       scheduling,
       segmentsByStation: segmentsByStation,
+      setupSegmentsByStation: setupSegmentsByStation,
     ));
   }
 

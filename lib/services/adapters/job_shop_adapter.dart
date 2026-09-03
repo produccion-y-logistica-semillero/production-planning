@@ -52,18 +52,22 @@ class JobShopAdapter {
       final Map<int, bool> interruptibleByTask = {};
       for (final task in sequence.tasks!) {
         final Map<int, Duration> machineDurations = {};
-        final machine = machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
+        final machine =
+            machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
 
         final explicit = getExplicitProcessingDuration(job, task.id!, machine);
         if (explicit != null) {
           machineDurations[machine.id!] = explicit;
         } else {
-          if (machine.processingPercentage == 100 || machine.processingPercentage <= 0) {
+          if (machine.processingPercentage == 100 ||
+              machine.processingPercentage <= 0) {
             machineDurations[machine.id!] = task.processingUnits;
           } else {
             final ratio = machine.processingPercentage / 100.0;
-            final scaledMillis = (task.processingUnits.inMilliseconds * ratio).round();
-            machineDurations[machine.id!] = Duration(milliseconds: scaledMillis);
+            final scaledMillis =
+                (task.processingUnits.inMilliseconds * ratio).round();
+            machineDurations[machine.id!] =
+                Duration(milliseconds: scaledMillis);
           }
         }
         taskSequence.add(Tuple2(task.id!, machineDurations));
@@ -101,7 +105,8 @@ class JobShopAdapter {
         machineRestTimeMap[machine.id!] = const Duration(hours: 1);
       } else {
         final ratio = machine.restPercentage / 100.0;
-        final scaledMillis = (Duration(hours: 1).inMilliseconds * ratio).round();
+        final scaledMillis =
+            (const Duration(hours: 1).inMilliseconds * ratio).round();
         machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
       }
     }
@@ -167,7 +172,9 @@ class JobShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.end),
           jobId: job.jobId!,
           orderId: orderId,
+          machineName: machines.firstWhere((m) => m.id == machineId).name,
           segments: out.segmentsByTask[taskId],
+          setupSegments: out.setupSegmentsByTask[taskId] ?? const [],
         );
 
         final planningMachine =
@@ -180,8 +187,8 @@ class JobShopAdapter {
     final List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates = [];
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
-      jobsDates.add(Tuple5(out.dbJobId, out.startDate, out.endTime, out.dueDate,
-          job.priority));
+      jobsDates.add(Tuple5(
+          out.dbJobId, out.startDate, out.endTime, out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(planningMachines, jobsDates);

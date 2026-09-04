@@ -18,9 +18,15 @@ class _GanttRow {
   final String name;
   final List<PlanningTaskEntity> tasks;
 
+  /// Color shown as a dot next to this row's name — the machine's color in
+  /// "Por Máquina" view, the job's color in "Por Job" view. Null only when
+  /// the row somehow has no resolvable color.
+  final Color? accentColor;
+
   const _GanttRow({
     required this.name,
     required this.tasks,
+    this.accentColor,
   });
 }
 
@@ -33,9 +39,9 @@ class _PositionedSegment {
   final double right;
 
   /// True for a sequence-dependent setup/changeover block that runs right
-  /// before the task's own processing — rendered with a distinct diagonal-
-  /// stripe pattern instead of the job's color, so it's never mistaken for
-  /// actual processing time.
+  /// before the task's own processing — rendered with no fill and diagonal
+  /// stripes in the job's own color, so it reads as "preparing the machine
+  /// for this job" while never being mistaken for actual processing time.
   final bool isSetup;
 
   const _PositionedSegment({
@@ -48,8 +54,8 @@ class _PositionedSegment {
 }
 
 /// Paints evenly-spaced diagonal stripes across the widget's bounds, used to
-/// mark setup/changeover bars as visually distinct from job processing bars
-/// regardless of their (fixed, neutral) base color.
+/// mark setup/changeover bars as visually distinct from the solid job
+/// processing bars they share a color with.
 class _DiagonalStripesPainter extends CustomPainter {
   final Color stripeColor;
   final double spacing;
@@ -127,7 +133,30 @@ class _GanttChartState extends State<GanttChart> {
   late int initialHour;
   late int endingHour;
 
+  /// Job color, keyed by jobId. Seeded from the jobId itself (see
+  /// [_assignJobColors]) so the same job keeps the same color across
+  /// rebuilds and across the side-by-side charts in gantt_page_container.
   final Map<int, Color> _jobColor = {};
+
+  /// Machine color, keyed by machineName — shown as a dot beside the row
+  /// name so each machine has a stable visual identity. Assigned by the
+  /// machine's position in [GanttChart.machines], not by a hash, so two
+  /// charts compared side by side agree.
+  final Map<String, Color> _machineColor = {};
+
+  /// Fixed, mutually distinguishable colors handed out to machines in order.
+  static const List<Color> _machinePalette = [
+    Color(0xFF1E88E5), // azul
+    Color(0xFFE65100), // naranja
+    Color(0xFF2E7D32), // verde
+    Color(0xFF6A1B9A), // morado
+    Color(0xFFC62828), // rojo
+    Color(0xFF00838F), // cian
+    Color(0xFF8D6E63), // café
+    Color(0xFFAD1457), // magenta
+    Color(0xFF558B2F), // oliva
+    Color(0xFF4527A0), // índigo
+  ];
 
   int? _selectedRule;
 
@@ -149,6 +178,9 @@ class _GanttChartState extends State<GanttChart> {
     if (endingHour <= initialHour) {
       endingHour = initialHour + 1;
     }
+
+    _assignMachineColors();
+    _assignJobColors();
 
     _calculateChartDateRange();
     _updateRows();
@@ -197,6 +229,39 @@ class _GanttChartState extends State<GanttChart> {
     super.dispose();
   }
 
+  /// Hands each machine a color from [_machinePalette] following the order
+  /// they arrive in, so the assignment is deterministic: the same machine
+  /// gets the same color on every rebuild and in every chart on screen.
+  void _assignMachineColors() {
+    for (int i = 0; i < widget.machines.length; i++) {
+      _machineColor[widget.machines[i].machineName] =
+          _machinePalette[i % _machinePalette.length];
+    }
+  }
+
+  /// Precomputes every job's color up front, seeding the generator with the
+  /// jobId itself. Doing it here rather than lazily while painting bars
+  /// matters for two reasons: the row-name panel is built before the bars in
+  /// the same frame and needs the color already resolved, and seeding keeps
+  /// a job's color identical across the charts that gantt_page_container
+  /// places side by side.
+  void _assignJobColors() {
+    for (final machine in widget.machines) {
+      for (final task in machine.tasks) {
+        _jobColor.putIfAbsent(task.jobId, () {
+          final random = Random(task.jobId);
+
+          return Color.fromARGB(
+            255,
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
+          );
+        });
+      }
+    }
+  }
+
   void _calculateChartDateRange() {
     DateTime? earliest;
     DateTime? latest;
@@ -213,6 +278,16 @@ class _GanttChartState extends State<GanttChart> {
 
         if (task.startDate.isBefore(earliest)) {
           earliest = task.startDate;
+        }
+
+        // startDate is the start of *processing*: a task's setup block runs
+        // before it, so it can fall outside the range startDate/endDate
+        // describe. Without this the earliest setup bar would be clamped
+        // onto the first displayed day instead of drawn where it belongs.
+        for (final setupSegment in task.setupSegments) {
+          if (setupSegment.start.isBefore(earliest!)) {
+            earliest = setupSegment.start;
+          }
         }
 
         if (task.endDate.isAfter(latest!)) {
@@ -262,6 +337,7 @@ class _GanttChartState extends State<GanttChart> {
         return _GanttRow(
           name: machine.machineName,
           tasks: machineTasks,
+          accentColor: _machineColor[machine.machineName],
         );
       }).toList();
     } else {
@@ -282,6 +358,7 @@ class _GanttChartState extends State<GanttChart> {
         return _GanttRow(
           name: label,
           tasks: tasks,
+          accentColor: _jobColor[entry.key],
         );
       }).toList();
     }
@@ -549,14 +626,33 @@ class _GanttChartState extends State<GanttChart> {
                   width: 1,
                 ),
               ),
-              child: Text(
-                _rows[i].name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  if (_rows[i].accentColor != null) ...[
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _rows[i].accentColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  // Expanded so the name still gets a bounded width and its
+                  // ellipsis overflow keeps working next to the dot.
+                  Expanded(
+                    child: Text(
+                      _rows[i].name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -887,22 +983,15 @@ class _GanttChartState extends State<GanttChart> {
         final ps = rowSegments[s];
         final task = ps.task;
 
-        if (!_jobColor.containsKey(task.jobId)) {
-          final random = Random();
+        // Colors are precomputed in _assignJobColors, but fall back to a
+        // neutral grey rather than throwing if a task somehow wasn't seen
+        // there (e.g. a machine list mutated after initState).
+        final Color jobColor = _jobColor[task.jobId] ?? Colors.blueGrey;
 
-          _jobColor[task.jobId] = Color.fromARGB(
-            255,
-            random.nextInt(160) + 60,
-            random.nextInt(160) + 60,
-            random.nextInt(160) + 60,
-          );
-        }
-
-        // Setup/changeover bars use a fixed neutral color + diagonal-stripe
-        // overlay instead of the job's color, so they read as "the machine
-        // is busy changing over" rather than "this job is processing" —
-        // distinctive regardless of which job precedes/follows.
-        final color = ps.isSetup ? _setupBarBaseColor : _jobColor[task.jobId]!;
+        // A setup/changeover block is painted with no fill at all and only
+        // diagonal stripes in its job's color: it stays tied to the job the
+        // machine is being prepared for, while the empty background makes it
+        // impossible to confuse with the solid bar of actual processing.
         final bool isSegmented = !ps.isSetup && task.segments.length > 1;
 
         final double width =
@@ -921,7 +1010,10 @@ class _GanttChartState extends State<GanttChart> {
           child: Text(
             ps.label,
             style: TextStyle(
-              color: Colors.white,
+              // A setup bar has no fill, so white text on it would sit on
+              // the light row background and disappear — use the job's own
+              // color, which is dark enough to read there.
+              color: ps.isSetup ? jobColor : Colors.white,
               fontWeight: FontWeight.w700,
               fontSize: taskLabelFontSize,
             ),
@@ -944,23 +1036,33 @@ class _GanttChartState extends State<GanttChart> {
                     width: width,
                     height: rowHeight * _verticalZoom,
                     decoration: BoxDecoration(
-                      color: color,
+                      color: ps.isSetup ? Colors.transparent : jobColor,
                       borderRadius: BorderRadius.circular(6),
                       border: ps.isSetup
-                          ? Border.all(color: Colors.black54, width: 1)
+                          ? Border.all(color: jobColor, width: 1.5)
                           : isSegmented
                               ? Border.all(color: Colors.white, width: 1)
                               : null,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: Offset(1, 1),
-                        ),
-                      ],
+                      // No shadow behind a setup bar: it would paint a solid
+                      // block under the transparent fill and defeat the
+                      // whole point of leaving the background showing.
+                      boxShadow: ps.isSetup
+                          ? null
+                          : const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 4,
+                                offset: Offset(1, 1),
+                              ),
+                            ],
                     ),
                     alignment: Alignment.centerLeft,
-                    padding: labelFitsInside
+                    // Setup bars take no padding here: it would inset the
+                    // ClipRRect below and leave the stripes short of the
+                    // bar's ends — plainly visible now that there is no fill
+                    // covering the gap. Their label is inset by its own
+                    // Padding inside the stack instead.
+                    padding: labelFitsInside && !ps.isSetup
                         ? const EdgeInsets.symmetric(horizontal: 10)
                         : EdgeInsets.zero,
                     child: ps.isSetup
@@ -969,9 +1071,11 @@ class _GanttChartState extends State<GanttChart> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                const CustomPaint(
+                                CustomPaint(
                                   painter: _DiagonalStripesPainter(
-                                    stripeColor: Colors.white54,
+                                    stripeColor: jobColor,
+                                    spacing: 7,
+                                    strokeWidth: 1.5,
                                   ),
                                 ),
                                 if (labelFitsInside)
@@ -998,9 +1102,7 @@ class _GanttChartState extends State<GanttChart> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: ps.isSetup
-                                ? _setupBarBaseColor
-                                : Colors.black87,
+                            color: ps.isSetup ? jobColor : Colors.black87,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -1017,11 +1119,6 @@ class _GanttChartState extends State<GanttChart> {
 
     return bars;
   }
-
-  /// Fixed neutral color for setup/changeover bars — deliberately not tied
-  /// to any job's color, since a setup block belongs to the machine, not a
-  /// specific job.
-  static const Color _setupBarBaseColor = Color(0xFF546E7A);
 
   double _calculateTaskLeft(
     DateTime date,

@@ -48,13 +48,19 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   /// Returns the next sequential job ID by finding the current maximum among
   /// all existing job `idController` values. Only present in file 9 — needed
   /// by both [addJob] and [duplicateJob].
+  ///
+  /// The field holds a free-text name, so most values will not parse as a
+  /// number (a job called "Job 1" parses to nothing). When none of them do,
+  /// fall back to the job count rather than to 0 — otherwise every job added
+  /// to an order whose jobs have text names would be numbered "1" and collide
+  /// with the previous one.
   int _getNextJobId(List<AddJobWidget> jobs) {
     final parsedIds = jobs
         .map((job) => int.tryParse(job.idController?.text ?? '') ?? 0)
         .where((id) => id > 0)
         .toList();
-    final maxId =
-        parsedIds.isNotEmpty ? parsedIds.reduce((a, b) => a > b ? a : b) : 0;
+    if (parsedIds.isEmpty) return jobs.length + 1;
+    final maxId = parsedIds.reduce((a, b) => a > b ? a : b);
     return maxId + 1;
   }
 
@@ -448,11 +454,31 @@ class NewOrderBloc extends Cubit<NewOrderState> {
                   TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
               priorityController:
                   TextEditingController(text: job.priority.toString()),
+              // The name the user typed, not the database's auto-increment
+              // id. This field is submitted back as NewOrderRequestModel
+              // .jobName on save, so filling it with the numeric id meant
+              // reopening an order showed "34" and saving it overwrote the
+              // real name with that number.
               idController: TextEditingController(
-                  text: job.jobId?.toString() ?? ''),
+                  text: job.jobName ?? job.jobId?.toString() ?? ''),
               index: index,
               sequences: sequences,
               selectedSequence: job.sequence?.id,
+              // Everything the form used to drop on the floor. The DAO
+              // already reads these back from job_machine_states,
+              // job_preemption and job_task_machine_times; they just had
+              // nowhere to go until AddJobWidget gained these parameters.
+              initialMachineFinalStates: job.machineFinalStates,
+              initialPreemptionMatrix: job.preemptionMatrix,
+              initialTaskMachineTimes: job.taskMachineTimes?.map(
+                (taskId, byMachine) => MapEntry(
+                  taskId,
+                  byMachine.map(
+                    (machineId, times) =>
+                        MapEntry(machineId, times.toMinutesMap()),
+                  ),
+                ),
+              ),
             ));
             index++;
           }

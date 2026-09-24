@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
@@ -63,6 +64,37 @@ class FlowShopOutput {
             machinesScheduling.map((machineId, entry) => MapEntry(
                 machineId,
                 [ProcessingSegment(entry.value2.start, entry.value2.end)]));
+}
+
+/// A whole job's route through the flow shop, priced but not committed.
+///
+/// Produced by `FlowShop._simulateJob`, written by `_commitPlacement`. The
+/// two `*After` maps hold the per-machine state the route would leave behind
+/// so that simulating a candidate touches nothing until it actually wins.
+class _FlowShopPlacement {
+  final FlowShopInput job;
+  final DateTime startTime;
+  final DateTime endTime;
+  final Map<int, Tuple2<int, Range>> scheduling;
+  final Map<int, List<ProcessingSegment>> segmentsByMachine;
+  final Map<int, List<ProcessingSegment>> setupSegmentsByMachine;
+
+  /// New earliest-free time per machine this route touched.
+  final Map<int, DateTime> availabilityAfter;
+
+  /// New continuous-use streak per machine this route touched.
+  final Map<int, Duration> continuousUsageAfter;
+
+  const _FlowShopPlacement({
+    required this.job,
+    required this.startTime,
+    required this.endTime,
+    required this.scheduling,
+    required this.segmentsByMachine,
+    required this.setupSegmentsByMachine,
+    required this.availabilityAfter,
+    required this.continuousUsageAfter,
+  });
 }
 
 class FlowShop {
@@ -153,7 +185,9 @@ class FlowShop {
       case "CDS":
         cdsAlgorithm();
         break;
+      // The DB grants MINSLACK here and MS elsewhere; same rule.
       case "MINSLACK":
+      case "MS":
         msRule();
         break;
       case "CR":
@@ -187,90 +221,31 @@ class FlowShop {
         return wsptB.compareTo(wsptA);
       });
 
-  void eddaRule() => dynamicRule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptaRule() => dynamicRule(
-        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
-      );
-  void lptaRule() => dynamicRule(
-        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
-      );
-  void fifoaRule() => dynamicRule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void wsptaRule() => dynamicRule((a, b) {
-        double wsptA = a.priority / max(1, _totalProcessingTime(a));
-        double wsptB = b.priority / max(1, _totalProcessingTime(b));
-        return wsptB.compareTo(wsptA);
-      });
+  // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
+  //
+  // These used to hand `dynamicRule` a comparator built from immutable job
+  // fields only. The loop re-sorted on every iteration, but re-sorting by a
+  // key that never changes returns the same order — so the "dynamic" rules
+  // produced exactly the schedule their static counterparts did.
+  //
+  // They now compare the job's EFFECTIVE route span at each decision point:
+  // see _runDynamic.
 
-  void msRule() {
-    int totalProcessingTimeAccumulated = 0;
-    List<FlowShopInput> remainingJobs = List.from(inputJobs);
+  void eddaRule() => _runDynamic(DispatchCriterion.edd);
+  void sptaRule() => _runDynamic(DispatchCriterion.spt);
+  void lptaRule() => _runDynamic(DispatchCriterion.lpt);
+  void fifoaRule() => _runDynamic(DispatchCriterion.fifo);
+  void wsptaRule() => _runDynamic(DispatchCriterion.wspt);
 
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        int slackA = _calculateSlack(a, totalProcessingTimeAccumulated);
-        int slackB = _calculateSlack(b, totalProcessingTimeAccumulated);
-        return slackA.compareTo(slackB);
-      });
-
-      FlowShopInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      totalProcessingTimeAccumulated += _totalProcessingTime(selectedJob);
-    }
-  }
-
-  void crRule() {
-    int totalProcessingTimeAccumulated = 0;
-    List<FlowShopInput> remainingJobs = List.from(inputJobs);
-
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        double crA = _calculateCR(a, totalProcessingTimeAccumulated);
-        double crB = _calculateCR(b, totalProcessingTimeAccumulated);
-        return crA.compareTo(crB);
-      });
-
-      FlowShopInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      totalProcessingTimeAccumulated += _totalProcessingTime(selectedJob);
-    }
-  }
-
-  void atcRule() {
-    DateTime currentTime = startDate;
-    List<FlowShopInput> remainingJobs = List.from(inputJobs);
-    output.clear();
-    int elapsedTime = 0;
-    double K = 3.0;
-
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(
-        (a, b) => _calculateATCPriority(
-          b,
-          currentTime,
-          elapsedTime,
-          K,
-        ).compareTo(_calculateATCPriority(a, currentTime, elapsedTime, K)),
-      );
-      FlowShopInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      elapsedTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
-    }
-  }
-
-  double _calculateATCPriority(
-    FlowShopInput job,
-    DateTime currentTime,
-    int elapsedTime,
-    double k,
-  ) {
-    int processingTime = _totalProcessingTime(job);
-    double avgProcessingTime = max(1, processingTime) / job.taskSequence.length;
-    double timeDiff = job.dueDate.difference(currentTime).inMinutes.toDouble();
-    double slackTime = (timeDiff - processingTime - elapsedTime).clamp(0, double.infinity);
-    double expFactor = exp(-slackTime / (k * avgProcessingTime));
-    return (job.priority / max(1, processingTime)) * expFactor;
-  }
+  // MS, CR and ATCS are dynamic by definition — their index depends on the
+  // clock t — so they run through the same event-driven dispatch as the
+  // *_ADAPTADO rules. MS and CR used to measure t with DateTime.now(), the
+  // wall clock when the button was pressed, so the same order could
+  // schedule differently from one minute to the next; the ATC index had no
+  // setup term and no release gate.
+  void msRule() => _runDynamic(DispatchCriterion.ms);
+  void crRule() => _runDynamic(DispatchCriterion.cr);
+  void atcRule() => _runDynamic(DispatchCriterion.atcs);
 
   void _schedule(int Function(FlowShopInput, FlowShopInput) comparator) {
     inputJobs.sort(comparator);
@@ -279,23 +254,138 @@ class FlowShop {
     }
   }
 
-  void dynamicRule(int Function(FlowShopInput, FlowShopInput) comparator) {
-    List<FlowShopInput> remainingJobs = List.from(inputJobs);
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(comparator);
-      FlowShopInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
+  /// Event-driven dispatch for the *_ADAPTADO rules.
+  ///
+  /// The decision point is the moment the route's entry machine frees up.
+  /// Among the jobs released by then, each is simulated end-to-end through
+  /// its whole route via [_simulateJob], so the span being compared is what
+  /// the job really costs — every changeover along the route plus every
+  /// split a shift boundary, maintenance window or rest cap forces.
+  void _runDynamic(DispatchCriterion criterion) {
+    if (inputJobs.isEmpty) return;
+
+    final pending = List<FlowShopInput>.from(inputJobs);
+    final AtcsParameters? atcs =
+        criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
+    final sequenced = <FlowShopInput>[];
+
+    while (pending.isNotEmpty) {
+      final DateTime decisionTime = _entryMachineFreeAt(pending);
+
+      final selected = selectNext<FlowShopInput>(
+        pending: pending,
+        decisionTime: decisionTime,
+        releaseTime: (job) => job.availableDate,
+        criterion: criterion,
+        atcs: atcs,
+        evaluate: (job, at) {
+          final placement = _simulateJob(job, notBefore: at);
+          final span = placement.endTime.difference(at);
+          return DispatchCandidate(
+            job: job,
+            start: placement.startTime,
+            end: placement.endTime,
+            span: span.isNegative ? Duration.zero : span,
+            dueDate: job.dueDate,
+            releaseDate: job.availableDate,
+            priority: job.priority,
+            jobId: job.jobId,
+            setup: placement.setupSegmentsByMachine.values.fold(
+              Duration.zero,
+              (sum, segments) => sum + segmentsDuration(segments),
+            ),
+          );
+        },
+      );
+
+      if (selected == null) {
+        // Nothing released yet — jump the clock forward instead of spinning.
+        // The machines stay where they are; only this job's own start is
+        // held back, which _simulateJob handles via notBefore.
+        final DateTime next =
+            earliestRelease(pending, (job) => job.availableDate)!;
+        if (next.isAfter(decisionTime)) {
+          _pendingClock = next;
+          continue;
+        }
+        // Unreachable in practice: a release at or before the decision time
+        // means that job was a candidate. If it ever happens, schedule what
+        // is left in order rather than dropping it from the plan.
+        for (final job in pending) {
+          _commitPlacement(_simulateJob(job, notBefore: decisionTime));
+          sequenced.add(job);
+        }
+        pending.clear();
+        break;
+      }
+
+      // Re-simulate the winner so what gets committed is what was judged.
+      // _simulateJob is pure, so this recomputes rather than re-decides.
+      _commitPlacement(_simulateJob(selected.job, notBefore: decisionTime));
+      sequenced.add(selected.job);
+      pending.remove(selected.job);
     }
+
+    inputJobs = sequenced;
+  }
+
+  /// Clock floor used while waiting for the next job release.
+  DateTime? _pendingClock;
+
+  /// When the next dispatch decision happens: the earliest moment the entry
+  /// machine of any pending job's route becomes free.
+  ///
+  /// The minimum, not the maximum — waiting for the last machine would stall
+  /// the loop behind one no pending job is queued on. Floored by
+  /// [_pendingClock] so a decision point never moves backwards while the loop
+  /// is waiting on a future release.
+  DateTime _entryMachineFreeAt(List<FlowShopInput> pending) {
+    final DateTime floor = _pendingClock ?? startDate;
+    DateTime? earliest;
+
+    for (final job in pending) {
+      if (job.taskSequence.isEmpty) continue;
+      final int entryMachineId = job.taskSequence.first.value2;
+      final DateTime freeAt = machinesAvailability[entryMachineId] ?? startDate;
+      if (earliest == null || freeAt.isBefore(earliest)) earliest = freeAt;
+    }
+
+    if (earliest == null || earliest.isBefore(floor)) return floor;
+    return earliest;
   }
 
   /* ---------- Core scheduling (assignment) ---------- */
 
   void _assignJobToMachines(FlowShopInput job) {
+    _commitPlacement(_simulateJob(job, notBefore: null));
+  }
+
+  /// Walks [job] through its whole machine route and returns the resulting
+  /// placement WITHOUT committing it.
+  ///
+  /// No field is written here: `machinesAvailability`, `_machineLastJob`,
+  /// `_machineLastSequence` and `_machineContinuousUsage` are only read, and
+  /// `computeSegments` is a pure function of its arguments. That makes it
+  /// safe to price several contenders and keep only the winner.
+  ///
+  /// No per-machine bookkeeping copy is needed because a flow shop route
+  /// touches each machine exactly once, so nothing this job does to one
+  /// machine can affect its own later steps.
+  ///
+  /// [notBefore], when given, holds the job back to the decision clock of a
+  /// dynamic rule, so every contender is priced from the same instant.
+  _FlowShopPlacement _simulateJob(FlowShopInput job, {DateTime? notBefore}) {
     DateTime jobStartTime = job.availableDate;
+    if (notBefore != null && notBefore.isAfter(jobStartTime)) {
+      jobStartTime = notBefore;
+    }
     DateTime? actualStartTime;
     Map<int, Tuple2<int, Range>> scheduling = {};
     Map<int, List<ProcessingSegment>> segmentsByMachine = {};
     Map<int, List<ProcessingSegment>> setupSegmentsByMachine = {};
+    // Per-machine state this route would leave behind, applied only on commit.
+    Map<int, DateTime> availabilityAfter = {};
+    Map<int, Duration> continuousUsageAfter = {};
 
     for (var task in job.taskSequence) {
       int taskId = task.value1;
@@ -353,24 +443,47 @@ class FlowShop {
       scheduling[machineId] = Tuple2(taskId, Range(schedule.startDate, adjustedEnd));
       segmentsByMachine[machineId] = schedule.segments;
       setupSegmentsByMachine[machineId] = setupSegments;
-      machinesAvailability[machineId] = adjustedEnd;
-      _machineLastSequence[machineId] = job.sequenceId;
-      _machineLastJob[machineId] = job.jobId;
-      _machineContinuousUsage[machineId] = schedule.segments.length > 1
+      availabilityAfter[machineId] = adjustedEnd;
+      continuousUsageAfter[machineId] = schedule.segments.length > 1
           ? schedule.segments.last.duration
           : continuousUsage + schedule.segments.single.duration;
       jobStartTime = adjustedEnd;
     }
 
+    return _FlowShopPlacement(
+      job: job,
+      startTime: actualStartTime ?? job.availableDate,
+      endTime: jobStartTime,
+      scheduling: scheduling,
+      segmentsByMachine: segmentsByMachine,
+      setupSegmentsByMachine: setupSegmentsByMachine,
+      availabilityAfter: availabilityAfter,
+      continuousUsageAfter: continuousUsageAfter,
+    );
+  }
+
+  /// Applies a placement produced by [_simulateJob] to the real schedule.
+  void _commitPlacement(_FlowShopPlacement placement) {
+    final job = placement.job;
+
+    placement.availabilityAfter.forEach((machineId, endTime) {
+      machinesAvailability[machineId] = endTime;
+      _machineLastSequence[machineId] = job.sequenceId;
+      _machineLastJob[machineId] = job.jobId;
+    });
+    placement.continuousUsageAfter.forEach((machineId, usage) {
+      _machineContinuousUsage[machineId] = usage;
+    });
+
     output.add(
       FlowShopOutput(
         job.jobId,
-        actualStartTime ?? job.availableDate,
+        placement.startTime,
         job.dueDate,
-        jobStartTime,
-        scheduling,
-        segmentsByMachine: segmentsByMachine,
-        setupSegmentsByMachine: setupSegmentsByMachine,
+        placement.endTime,
+        placement.scheduling,
+        segmentsByMachine: placement.segmentsByMachine,
+        setupSegmentsByMachine: placement.setupSegmentsByMachine,
       ),
     );
   }
@@ -487,17 +600,54 @@ class FlowShop {
     return current;
   }
 
-  int _calculateSlack(FlowShopInput job, int accumulatedTime) {
-    int totalProcessingTime = _totalProcessingTime(job);
-    DateTime currentTime = DateTime.now();
-    int slack = job.dueDate.difference(currentTime).inMinutes - totalProcessingTime - accumulatedTime;
-    return slack < 0 ? 0 : slack;
-  }
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]). A candidate here is a whole route, so p̄
+  /// and s̄ are per route. The makespan estimate is the bottleneck machine's
+  /// load plus its share of the changeovers.
+  AtcsParameters _atcsParameters() {
+    final int n = inputJobs.length;
+    final double meanProcessing = inputJobs.fold<double>(
+            0, (sum, job) => sum + _totalProcessingTime(job)) /
+        n;
+    final double meanSetup = meanPairwiseSetupMinutes<FlowShopInput>(
+      inputJobs,
+      (from, to) => to.taskSequence.fold<Duration>(
+        Duration.zero,
+        (sum, task) =>
+            sum +
+            _getSetupDuration(
+              task.value2,
+              to.sequenceId,
+              from.sequenceId,
+              currentJobId: to.jobId,
+              previousJobId: from.jobId,
+            ),
+      ),
+    );
 
-  double _calculateCR(FlowShopInput job, int accumulatedTime) {
-    int remainingTime = max(job.dueDate.difference(DateTime.now()).inMinutes - accumulatedTime, 0);
-    int processingTime = _totalProcessingTime(job);
-    return processingTime > 0 ? remainingTime / processingTime : double.infinity;
+    final Map<int, double> load = {};
+    for (final job in inputJobs) {
+      for (final task in job.taskSequence) {
+        final Duration? p = job.taskTimesInMachines[task.value1];
+        if (p == null) continue;
+        load[task.value2] = (load[task.value2] ?? 0) + p.inSeconds / 60.0;
+      }
+    }
+    final double bottleneck = load.values.fold(0.0, (a, b) => max(a, b));
+    final int machineCount = max(load.length, 1);
+    final double workMinutes = bottleneck + n * meanSetup / machineCount;
+
+    return AtcsParameters.calibrate(
+      start: startDate,
+      dueDates: inputJobs.map((job) => job.dueDate),
+      meanProcessingMinutes: meanProcessing,
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        PreemptionEngine(workingSchedule: workingSchedule),
+        startDate,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
   }
 
   /* ---------- CDS & Johnson helpers ---------- */

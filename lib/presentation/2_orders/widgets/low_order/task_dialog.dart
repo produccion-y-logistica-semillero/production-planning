@@ -66,13 +66,10 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Order ID", order.orderId.toString()),
           _buildInfoRow(
             "La orden está compuesta por",
-
-            order.orderJobs!
-                .map((j) => j.sequence!.name)
-                .join(", "),
+            order.orderJobs!.map((j) => j.sequence!.name).join(", "),
           ),
           _buildInfoRow("Nombre de Job", job.jobName ?? "Job ${job.jobId}"),
-          _buildInfoRow("Secuencia", task.sequenceName),
+          _buildInfoRow("Ruta de Proceso", task.sequenceName),
           _buildInfoRow("ID tarea", task.taskId.toString()),
           if (task.setupSegments.isNotEmpty)
             _buildInfoRow(
@@ -83,7 +80,7 @@ class TaskDialog extends StatelessWidget {
             "Tiempo procesamiento",
             _formatProcessingDuration(_actualProcessingDuration(task)),
           ),
-         /* _buildInfoRow(
+          /* _buildInfoRow(
             "Número ejecución",
             "${taskInfo.execOrder} de ${job.sequence!.tasks!.length}",
           ),*/

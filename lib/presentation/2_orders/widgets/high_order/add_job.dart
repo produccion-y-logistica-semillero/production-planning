@@ -99,6 +99,26 @@ class AddJobWidget extends StatefulWidget {
   final int index;
   int? selectedSequence;
 
+  // ── Values restored when an existing order is reopened for editing ───────
+  //
+  // Without these the form rebuilds every station from the sequence and the
+  // machine defaults, so a saved job came back with its A-J state blank, its
+  // interruptibility reset to the sequence default, its per-station times
+  // recomputed and its machine reset to the first candidate. Worse, saving
+  // that emptied form wrote the blanks back over the stored values.
+  //
+  // Null (the create-a-new-order case) keeps the previous behaviour exactly.
+
+  /// machineTypeId → state letter (A-J) the job leaves the machine in.
+  final Map<int, String>? initialMachineFinalStates;
+
+  /// machineId → 1 interruptible / 0 not.
+  final Map<int, int>? initialPreemptionMatrix;
+
+  /// taskId → machineId → {'processing','preparation','rest'} in minutes.
+  /// Also tells us which machine each station was actually saved on.
+  final Map<int, Map<int, Map<String, int>>>? initialTaskMachineTimes;
+
   final GlobalKey<AddJobState> stateKey;
 
   AddJobWidget._({
@@ -112,6 +132,9 @@ class AddJobWidget extends StatefulWidget {
     required this.index,
     required this.sequences,
     this.selectedSequence,
+    this.initialMachineFinalStates,
+    this.initialPreemptionMatrix,
+    this.initialTaskMachineTimes,
   }) : super(key: stateKey);
 
   factory AddJobWidget({
@@ -125,6 +148,9 @@ class AddJobWidget extends StatefulWidget {
     required List<dartz.Tuple2<int, String>> sequences,
     int? selectedSequence,
     GlobalKey<AddJobState>? stateKey,
+    Map<int, String>? initialMachineFinalStates,
+    Map<int, int>? initialPreemptionMatrix,
+    Map<int, Map<int, Map<String, int>>>? initialTaskMachineTimes,
   }) {
     final key = stateKey ?? GlobalKey<AddJobState>();
     return AddJobWidget._(
@@ -138,6 +164,9 @@ class AddJobWidget extends StatefulWidget {
       index: index,
       sequences: sequences,
       selectedSequence: selectedSequence,
+      initialMachineFinalStates: initialMachineFinalStates,
+      initialPreemptionMatrix: initialPreemptionMatrix,
+      initialTaskMachineTimes: initialTaskMachineTimes,
     );
   }
 
@@ -246,6 +275,27 @@ class AddJobState extends State<AddJobWidget> {
     automaticStartHour = widget.automaticStartHour;
     automaticDueHour = widget.automaticDueHour;
     selectedSequenceValue = widget.selectedSequence;
+
+    // Seed the saved values BEFORE _loadSequence runs. Order matters:
+    // _loadSequence clears _machinesByType / _selectedMachines /
+    // _stationTimes but leaves these three maps alone, and it seeds
+    // _preemptionMatrix with putIfAbsent — so anything placed here survives
+    // and takes precedence over the sequence defaults.
+    if (widget.initialMachineFinalStates != null) {
+      _machineFinalStates.addAll(widget.initialMachineFinalStates!);
+    }
+    if (widget.initialPreemptionMatrix != null) {
+      _preemptionMatrix.addAll(widget.initialPreemptionMatrix!);
+    }
+    if (widget.initialTaskMachineTimes != null) {
+      widget.initialTaskMachineTimes!.forEach((taskId, byMachine) {
+        _explicitTaskMachineMinutes[taskId] = {
+          for (final entry in byMachine.entries)
+            entry.key: Map<String, int>.from(entry.value),
+        };
+      });
+    }
+
     if (selectedSequenceValue != null) {
       _loadSequence(selectedSequenceValue!);
     }
@@ -346,21 +396,43 @@ class AddJobState extends State<AddJobWidget> {
             final machineTypeId = task.machineTypeId;
             final machines = machinesMap[machineTypeId];
             if (machines != null && machines.isNotEmpty) {
-              final machine = machines.first;
+              // A reopened job remembers which machine it ran on: it is the
+              // key of its saved times for this task. Fall back to the first
+              // candidate for a new job, or if that machine is no longer a
+              // candidate for this station.
+              final int? savedMachineId =
+                  widget.initialTaskMachineTimes?[task.id]?.keys.firstOrNull;
+              final machine = machines.firstWhere(
+                (m) => m.id != null && m.id == savedMachineId,
+                orElse: () => machines.first,
+              );
               _selectedMachines[machineTypeId] = machine;
+
+              // Saved times win over the values recomputed from the machine's
+              // percentages — otherwise editing an order silently reset every
+              // processing time the user had adjusted by hand.
+              final savedTimes =
+                  widget.initialTaskMachineTimes?[task.id]?[machine.id];
 
               final times = initialTimes[machineTypeId];
               final baseProcessingMinutes =
                   times?.processing.inMinutes ?? task.processingUnits.inMinutes;
 
-              final processingMinutes =
+              final processingMinutes = savedTimes?['processing'] ??
                   (baseProcessingMinutes * machine.processingPercentage / 100)
                       .round();
               const preparationMinutes = 0; // comes from matrix — always 0 here
-              final restMinutes = times?.rest?.inMinutes ??
+              final restMinutes = savedTimes?['rest'] ??
+                  times?.rest?.inMinutes ??
                   (60 * machine.restPercentage / 100).round();
 
+              // Exactly one machine entry per task, same invariant
+              // _showStationTimeDialog maintains. The clear matters when a
+              // reopened job was seeded with a machine that is no longer a
+              // candidate for this station: without it the stale entry would
+              // survive alongside the new one and both would be saved.
               _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+              _explicitTaskMachineMinutes[task.id!]!.clear();
               _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
                 'processing': processingMinutes,
                 'preparation': preparationMinutes,
@@ -841,15 +913,16 @@ class AddJobState extends State<AddJobWidget> {
         ? Duration(minutes: existingTimes['processing'] ?? 0)
         : stationDefaults.processing;
 
-    // Rest time — still configurable here.
-    Duration restDuration = existingTimes != null
+    // Rest time is no longer editable per job: the machine's own rest policy
+    // (restPercentage / the machine inactivities dialog) is what every
+    // scheduling adapter actually reads. This value is carried through
+    // untouched so reopening a saved job does not zero out what it had.
+    final Duration restDuration = existingTimes != null
         ? Duration(minutes: existingTimes['rest'] ?? 0)
         : stationDefaults.rest ?? Duration.zero;
 
     final processingController =
         TextEditingController(text: _formatDuration(processingDuration));
-    final restController =
-        TextEditingController(text: _formatDuration(restDuration));
 
     // Without this, tapping into a pre-filled field (e.g. showing the
     // stale "00:05:00" default) places the cursor instead of selecting the
@@ -864,14 +937,6 @@ class AddJobState extends State<AddJobWidget> {
             baseOffset: 0, extentOffset: processingController.text.length);
       }
     });
-    final restFocusNode = FocusNode();
-    restFocusNode.addListener(() {
-      if (restFocusNode.hasFocus) {
-        restController.selection = TextSelection(
-            baseOffset: 0, extentOffset: restController.text.length);
-      }
-    });
-
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -908,21 +973,6 @@ class AddJobState extends State<AddJobWidget> {
                       hintText: 'HH:MM:SS', border: OutlineInputBorder()),
                   inputFormatters: [_HhMmSsTextInputFormatter()],
                 ),
-                const SizedBox(height: 16),
-
-                // ── rest time ─────────────────────────────────────────────
-                const Text('Tiempo de Descanso:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: restController,
-                  focusNode: restFocusNode,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
-                  inputFormatters: [_HhMmSsTextInputFormatter()],
-                ),
-
                 // ── info note ─────────────────────────────────────────────
                 const SizedBox(height: 12),
                 Container(
@@ -966,7 +1016,8 @@ class AddJobState extends State<AddJobWidget> {
 
     if (result == true) {
       final processingMinutes = _parseTimeToMinutes(processingController.text);
-      final restMinutes = _parseTimeToMinutes(restController.text);
+      // Carried through unchanged — no longer editable here.
+      final restMinutes = restDuration.inMinutes;
 
       setState(() {
         if (selectedMachineId != null) {
@@ -995,7 +1046,6 @@ class AddJobState extends State<AddJobWidget> {
     }
 
     processingFocusNode.dispose();
-    restFocusNode.dispose();
   }
 
   // ── helpers (unchanged) ───────────────────────────────────────────────────

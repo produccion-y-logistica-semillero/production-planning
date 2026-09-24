@@ -208,6 +208,18 @@ class JobDaoSQLlite implements JobDao {
         );
       }
 
+      // Eliminar registros de job_task_machine_times para cada job.
+      // Faltaba: como actualizar una orden borra y reinserta sus jobs, cada
+      // edición dejaba aquí un juego completo de filas colgando de un job_id
+      // que ya no existe.
+      for (var job in jobs) {
+        await db.delete(
+          'job_task_machine_times',
+          where: 'job_id = ?',
+          whereArgs: [job['job_id']],
+        );
+      }
+
       // Eliminar jobs
       await db.delete(
         'jobs',

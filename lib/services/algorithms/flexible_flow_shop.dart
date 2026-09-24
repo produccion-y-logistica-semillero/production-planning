@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
@@ -48,6 +49,53 @@ class FlexibleFlowOutput {
             scheduling.map((stationId, entry) => MapEntry(
                 stationId,
                 [ProcessingSegment(entry.value2.start, entry.value2.end)]));
+}
+
+/// One task priced on one machine, not yet committed.
+class _FlexibleFlowTask {
+  final int machineId;
+  final List<ProcessingSegment> setupSegments;
+  final SegmentedSchedule schedule;
+
+  /// The machine's continuous-use streak once this task is done.
+  final Duration continuousUsageAfter;
+
+  const _FlexibleFlowTask({
+    required this.machineId,
+    required this.setupSegments,
+    required this.schedule,
+    required this.continuousUsageAfter,
+  });
+
+  /// When the machine starts working: setup if there is one, else processing.
+  DateTime get start =>
+      setupSegments.isNotEmpty ? setupSegments.first.start : schedule.startDate;
+}
+
+/// A whole job's route through the stations, priced but not committed.
+///
+/// The two `*After` maps hold the per-machine state the route would leave
+/// behind, applied only by `FlexibleFlowShop._commitPlacement`.
+class _FlexibleFlowPlacement {
+  final FlexibleFlowInput job;
+  final DateTime startTime;
+  final DateTime endTime;
+  final Map<int, Tuple2<int, Range>> scheduling;
+  final Map<int, List<ProcessingSegment>> segmentsByStation;
+  final Map<int, List<ProcessingSegment>> setupSegmentsByStation;
+  final Map<int, DateTime> availabilityAfter;
+  final Map<int, Duration> continuousUsageAfter;
+
+  const _FlexibleFlowPlacement({
+    required this.job,
+    required this.startTime,
+    required this.endTime,
+    required this.scheduling,
+    required this.segmentsByStation,
+    required this.setupSegmentsByStation,
+    required this.availabilityAfter,
+    required this.continuousUsageAfter,
+  });
 }
 
 class FlexibleFlowShop {
@@ -139,6 +187,14 @@ class FlexibleFlowShop {
           return scoreB.compareTo(scoreA);
         });
         break;
+      case "MINSLACK":
+        // The DB grants MINSLACK to some environments and MS to others; they
+        // are the same rule. Accepting both keeps a granted rule from
+        // silently producing an empty schedule.
+        msRule();
+        break;
+      default:
+        throw ArgumentError('Regla de despacho desconocida: "$rule"');
     }
   }
 
@@ -181,105 +237,181 @@ class FlexibleFlowShop {
   }
 
   void _assignJobToMachines(FlexibleFlowInput job) {
+    _commitPlacement(_simulateJob(job, notBefore: null));
+  }
+
+  /// Schedules ONE task of [jobId] on [machineId], setup then processing,
+  /// without writing anything.
+  ///
+  /// This is the single definition of what a task costs on a machine. Both
+  /// [_selectBestMachine] and [_simulateJob] go through it, which is what
+  /// keeps the machine chosen and the machine scheduled in agreement — they
+  /// used to disagree, because selection priced setup+processing as one
+  /// combined block while assignment scheduled them as two separate ones. A
+  /// boundary falling between the two, or an uninterruptible task, made the
+  /// combined estimate longer than reality and could hand the task to the
+  /// wrong machine.
+  _FlexibleFlowTask _scheduleTaskOn({
+    required int machineId,
+    required int jobId,
+    required DateTime earliestStart,
+    required Duration processingTime,
+    required bool interruptible,
+  }) {
+    final DateTime machineFree = machinesAvailability[machineId] ?? startDate;
+    DateTime startTime =
+        earliestStart.isAfter(machineFree) ? earliestStart : machineFree;
+    startTime = _adjustForWorkingSchedule(startTime);
+
+    final Duration setupDuration = _getSetupDuration(
+      machineId,
+      jobId,
+      _machineLastJob[machineId],
+    );
+
+    // Schedule setup as its own segmented block (through the preemption
+    // engine, so it's just as sensitive to work-shift/rest/maintenance
+    // boundaries as processing is), then start processing right after.
+    List<ProcessingSegment> setupSegments = const [];
+    DateTime processStart = startTime;
+    Duration continuousUsage =
+        _machineContinuousUsage[machineId] ?? Duration.zero;
+    if (setupDuration > Duration.zero) {
+      final setupSchedule = _engineFor(machineId).computeSegments(
+        earliestStart: startTime,
+        totalDuration: setupDuration,
+        priorContinuousUsage: continuousUsage,
+      );
+      setupSegments = setupSchedule.segments;
+      processStart = setupSchedule.completionTime;
+      continuousUsage = setupSegments.length > 1
+          ? setupSegments.last.duration
+          : continuousUsage + setupSegments.single.duration;
+    }
+
+    // Split processing into segments wherever the work-shift end, a
+    // maintenance window, or the continuous-use rest cap would otherwise
+    // fall inside this task's span on this machine.
+    final schedule = _engineFor(machineId).computeSegments(
+      earliestStart: processStart,
+      totalDuration: processingTime,
+      priorContinuousUsage: continuousUsage,
+      interruptible: interruptible,
+    );
+
+    return _FlexibleFlowTask(
+      machineId: machineId,
+      setupSegments: setupSegments,
+      schedule: schedule,
+      continuousUsageAfter: schedule.segments.length > 1
+          ? schedule.segments.last.duration
+          : continuousUsage + schedule.segments.single.duration,
+    );
+  }
+
+  /// Walks [job] through every station and returns the placement WITHOUT
+  /// committing it — no field is written, so contenders can be priced and
+  /// discarded. [_commitPlacement] does the writing.
+  _FlexibleFlowPlacement _simulateJob(
+    FlexibleFlowInput job, {
+    DateTime? notBefore,
+  }) {
     DateTime jobStartTime = job.availableDate;
+    if (notBefore != null && notBefore.isAfter(jobStartTime)) {
+      jobStartTime = notBefore;
+    }
     DateTime? actualStartTime;
     DateTime? finalEndTime;
 
     Map<int, Tuple2<int, Range>> scheduling = {};
     Map<int, List<ProcessingSegment>> segmentsByStation = {};
     Map<int, List<ProcessingSegment>> setupSegmentsByStation = {};
+    Map<int, DateTime> availabilityAfter = {};
+    Map<int, Duration> continuousUsageAfter = {};
 
     for (var task in job.taskSequence) {
       int stationId = task.value1;
       Map<int, Duration> machinesInStation = task.value2;
 
       final bool taskInterruptible = job.isTaskInterruptible(stationId);
-      Tuple2<int, int> selectedMachine = _selectBestMachine(
-          stationId, machinesInStation, job.jobId, jobStartTime, taskInterruptible);
-      int machineId = selectedMachine.value2;
-      Duration processingTime = machinesInStation[machineId]!;
-
-      DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable)
-          ? jobStartTime
-          : machineAvailable;
-
-      startTime = _adjustForWorkingSchedule(startTime);
-
-      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(
-        machineId,
+      final int machineId = _selectBestMachine(
+        machinesInStation,
         job.jobId,
-        previousJob,
+        jobStartTime,
+        taskInterruptible,
       );
 
-      // Schedule setup as its own segmented block (through the preemption
-      // engine, so it's just as sensitive to work-shift/rest/maintenance
-      // boundaries as processing is), then start processing right after.
-      List<ProcessingSegment> setupSegments = const [];
-      DateTime processStart = startTime;
-      Duration continuousUsage = _machineContinuousUsage[machineId] ?? Duration.zero;
-      if (setupDuration > Duration.zero) {
-        final setupSchedule = _engineFor(machineId).computeSegments(
-          earliestStart: startTime,
-          totalDuration: setupDuration,
-          priorContinuousUsage: continuousUsage,
-        );
-        setupSegments = setupSchedule.segments;
-        processStart = setupSchedule.completionTime;
-        continuousUsage = setupSegments.length > 1
-            ? setupSegments.last.duration
-            : continuousUsage + setupSegments.single.duration;
-      }
-
-      // Split processing into segments wherever the work-shift end, a
-      // maintenance window, or the continuous-use rest cap would otherwise
-      // fall inside this task's span on this machine.
-      final schedule = _engineFor(machineId).computeSegments(
-        earliestStart: processStart,
-        totalDuration: processingTime,
-        priorContinuousUsage: continuousUsage,
+      final placed = _scheduleTaskOn(
+        machineId: machineId,
+        jobId: job.jobId,
+        earliestStart: jobStartTime,
+        processingTime: machinesInStation[machineId]!,
         interruptible: taskInterruptible,
       );
-      final DateTime taskStart = schedule.startDate;
-      final DateTime endTime = schedule.completionTime;
+
+      final DateTime taskStart = placed.schedule.startDate;
+      final DateTime endTime = placed.schedule.completionTime;
 
       // Guarda el primer tiempo real de inicio
-      actualStartTime ??=
-          setupSegments.isNotEmpty ? setupSegments.first.start : taskStart;
+      actualStartTime ??= placed.start;
       // Guarda el último tiempo de finalización
       finalEndTime = endTime;
 
       scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
-      segmentsByStation[stationId] = schedule.segments;
-      setupSegmentsByStation[stationId] = setupSegments;
-      machinesAvailability[machineId] = endTime;
-      _machineLastJob[machineId] = job.jobId;
-      _machineContinuousUsage[machineId] = schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration;
+      segmentsByStation[stationId] = placed.schedule.segments;
+      setupSegmentsByStation[stationId] = placed.setupSegments;
+      availabilityAfter[machineId] = endTime;
+      continuousUsageAfter[machineId] = placed.continuousUsageAfter;
 
       jobStartTime = endTime;
     }
 
+    return _FlexibleFlowPlacement(
+      job: job,
+      startTime: actualStartTime ?? jobStartTime,
+      endTime: finalEndTime ?? jobStartTime,
+      scheduling: scheduling,
+      segmentsByStation: segmentsByStation,
+      setupSegmentsByStation: setupSegmentsByStation,
+      availabilityAfter: availabilityAfter,
+      continuousUsageAfter: continuousUsageAfter,
+    );
+  }
+
+  /// Applies a placement produced by [_simulateJob] to the real schedule.
+  void _commitPlacement(_FlexibleFlowPlacement placement) {
+    final job = placement.job;
+
+    placement.availabilityAfter.forEach((machineId, endTime) {
+      machinesAvailability[machineId] = endTime;
+      _machineLastJob[machineId] = job.jobId;
+    });
+    placement.continuousUsageAfter.forEach((machineId, usage) {
+      _machineContinuousUsage[machineId] = usage;
+    });
+
     output.add(FlexibleFlowOutput(
       job.jobId,
       job.dueDate,
-      actualStartTime!,
-      finalEndTime!,
-      scheduling,
-      segmentsByStation: segmentsByStation,
-      setupSegmentsByStation: setupSegmentsByStation,
+      placement.startTime,
+      placement.endTime,
+      placement.scheduling,
+      segmentsByStation: placement.segmentsByStation,
+      setupSegmentsByStation: placement.setupSegmentsByStation,
     ));
   }
 
 
-  Tuple2<int, int> _selectBestMachine(
-      int stationId,
-      Map<int, Duration> machinesInStation,
-      int jobId,
-      DateTime jobStartTime,
-      bool taskInterruptible,
+  /// Picks the machine in a station that finishes the task soonest.
+  ///
+  /// Prices every option through [_scheduleTaskOn] — the same code path the
+  /// task is actually scheduled with — so the machine chosen here is the one
+  /// that really is fastest, setup and preemptions included.
+  int _selectBestMachine(
+    Map<int, Duration> machinesInStation,
+    int jobId,
+    DateTime jobStartTime,
+    bool taskInterruptible,
   ) {
     int bestMachineId = -1;
     DateTime bestEndTime = DateTime(9999);
@@ -287,34 +419,33 @@ class FlexibleFlowShop {
 
     for (var entry in machinesInStation.entries) {
       final machineId = entry.key;
-      final processingTime = entry.value;
-      final machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable)
-          ? jobStartTime
-          : machineAvailable;
-      startTime = _adjustForWorkingSchedule(startTime);
 
-      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(machineId, jobId, previousJob);
-      final schedule = _engineFor(machineId).computeSegments(
-        earliestStart: startTime,
-        totalDuration: setupDuration + processingTime,
-        priorContinuousUsage: _machineContinuousUsage[machineId] ?? Duration.zero,
+      final placed = _scheduleTaskOn(
+        machineId: machineId,
+        jobId: jobId,
+        earliestStart: jobStartTime,
+        processingTime: entry.value,
         interruptible: taskInterruptible,
       );
-      DateTime taskStart = schedule.startDate;
-      DateTime endTime = schedule.completionTime;
+      final DateTime taskStart = placed.start;
+      final DateTime endTime = placed.schedule.completionTime;
 
+      // Earliest finish wins; ties go to the earliest start, then to the
+      // lowest machine id so the choice is deterministic.
       if (bestMachineId == -1 ||
           endTime.isBefore(bestEndTime) ||
-          (endTime.isAtSameMomentAs(bestEndTime) && taskStart.isBefore(bestStartTime))) {
+          (endTime.isAtSameMomentAs(bestEndTime) &&
+              taskStart.isBefore(bestStartTime)) ||
+          (endTime.isAtSameMomentAs(bestEndTime) &&
+              taskStart.isAtSameMomentAs(bestStartTime) &&
+              machineId < bestMachineId)) {
         bestMachineId = machineId;
         bestEndTime = endTime;
         bestStartTime = taskStart;
       }
     }
 
-    return Tuple2(stationId, bestMachineId);
+    return bestMachineId;
   }
 
   int _totalProcessingTime(FlexibleFlowInput job) {
@@ -409,125 +540,180 @@ class FlexibleFlowShop {
     return Duration.zero;
   }
 
-  void eddaRule() => _dynamicSchedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptaRule() => _dynamicSchedule(
-      (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)));
-  void lptaRule() => _dynamicSchedule(
-      (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)));
-  void fifoaRule() =>
-      _dynamicSchedule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void wsptaRule() => _dynamicSchedule((a, b) {
-        double wsptA = a.priority / _totalProcessingTime(a);
-        double wsptB = b.priority / _totalProcessingTime(b);
-        return wsptB.compareTo(wsptA);
-      });
+  // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
+  //
+  // `_dynamicSchedule` re-sorted the pending list on every iteration, but the
+  // comparators it received read only immutable job fields — so the order
+  // never changed and these produced the same schedule as the static rules.
+  // They now compare each contender's effective route span at the decision
+  // point: see _runDynamic.
+
+  void eddaRule() => _runDynamic(DispatchCriterion.edd);
+  void sptaRule() => _runDynamic(DispatchCriterion.spt);
+  void lptaRule() => _runDynamic(DispatchCriterion.lpt);
+  void fifoaRule() => _runDynamic(DispatchCriterion.fifo);
+  void wsptaRule() => _runDynamic(DispatchCriterion.wspt);
 
 
-  void msRule() {
-    int accumulatedProcessingTime = 0;
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
+  // MS, CR and ATCS are dynamic by definition — their index depends on the
+  // clock t — so they run through the same event-driven dispatch as the
+  // *_ADAPTADO rules. They used to re-sort against the end of the last
+  // committed job plus a running total of NOMINAL processing times, which
+  // ignored changeovers, interruptions and release dates, and ATC had no
+  // setup term.
+  void msRule() => _runDynamic(DispatchCriterion.ms);
+  void crRule() => _runDynamic(DispatchCriterion.cr);
+  void atcRule() => _runDynamic(DispatchCriterion.atcs);
 
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        int slackA = _calculateSlack(a, accumulatedProcessingTime, currentTime);
-        int slackB = _calculateSlack(b, accumulatedProcessingTime, currentTime);
-        return slackA.compareTo(slackB);
-      });
 
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      accumulatedProcessingTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
-    }
-  }
 
-  void crRule() {
-    int accumulatedProcessingTime = 0;
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
+  /// Event-driven dispatch for the *_ADAPTADO rules.
+  ///
+  /// The decision point is the earliest moment a machine of the first station
+  /// frees up. Each released contender is simulated across its whole route
+  /// via [_simulateJob], so the compared span carries every changeover and
+  /// every split forced by a shift end, maintenance window or rest cap.
+  void _runDynamic(DispatchCriterion criterion) {
+    if (inputJobs.isEmpty) return;
 
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        double crA = _calculateCR(a, accumulatedProcessingTime, currentTime);
-        double crB = _calculateCR(b, accumulatedProcessingTime, currentTime);
-        return crA.compareTo(crB);
-      });
+    final pending = List<FlexibleFlowInput>.from(inputJobs);
+    final AtcsParameters? atcs =
+        criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
+    final sequenced = <FlexibleFlowInput>[];
 
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      accumulatedProcessingTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
-    }
-  }
+    while (pending.isNotEmpty) {
+      final DateTime decisionTime = _firstStationFreeAt(pending);
 
-  void atcRule() {
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
-    output.clear();
-    int elapsedTime = 0;
-
-    double K = 3.0;
-
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(
-        (a, b) => _calculateATCPriority(b, currentTime, elapsedTime, K)
-            .compareTo(_calculateATCPriority(a, currentTime, elapsedTime, K)),
-
+      final selected = selectNext<FlexibleFlowInput>(
+        pending: pending,
+        decisionTime: decisionTime,
+        releaseTime: (job) => job.availableDate,
+        criterion: criterion,
+        atcs: atcs,
+        evaluate: (job, at) {
+          final placement = _simulateJob(job, notBefore: at);
+          final span = placement.endTime.difference(at);
+          return DispatchCandidate(
+            job: job,
+            start: placement.startTime,
+            end: placement.endTime,
+            span: span.isNegative ? Duration.zero : span,
+            dueDate: job.dueDate,
+            releaseDate: job.availableDate,
+            priority: job.priority,
+            jobId: job.jobId,
+            setup: placement.setupSegmentsByStation.values.fold(
+              Duration.zero,
+              (sum, segments) => sum + segmentsDuration(segments),
+            ),
+          );
+        },
       );
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      elapsedTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
+
+      if (selected == null) {
+        final DateTime next =
+            earliestRelease(pending, (job) => job.availableDate)!;
+        if (next.isAfter(decisionTime)) {
+          _pendingClock = next;
+          continue;
+        }
+        // Unreachable in practice: a release at or before the decision time
+        // means that job was a candidate. If it ever happens, schedule what
+        // is left in order rather than dropping it from the plan.
+        for (final job in pending) {
+          _commitPlacement(_simulateJob(job, notBefore: decisionTime));
+          sequenced.add(job);
+        }
+        pending.clear();
+        break;
+      }
+
+      // Re-simulate the winner so the committed placement is the one it was
+      // judged on. _simulateJob is pure, so this recomputes, not re-decides.
+      _commitPlacement(_simulateJob(selected.job, notBefore: decisionTime));
+      sequenced.add(selected.job);
+      pending.remove(selected.job);
     }
+
+    inputJobs = sequenced;
   }
 
-  double _calculateATCPriority(
-    FlexibleFlowInput job,
-    DateTime currentTime,
-    int elapsedTime,
-    double K,
-  ) {
-    int processingTime = _totalProcessingTime(job);
-    double avgProcessingTime = processingTime / job.taskSequence.length;
-    double timeDiff = job.dueDate.difference(currentTime).inMinutes.toDouble();
-    return (job.priority / processingTime) *
-        (exp(
-          -max(timeDiff - processingTime - elapsedTime, 0) /
-              (K * avgProcessingTime),
-        ));
-  }
+  /// Clock floor used while waiting for the next job release.
+  DateTime? _pendingClock;
 
+  /// Earliest moment any machine of any pending job's first station is free.
+  DateTime _firstStationFreeAt(List<FlexibleFlowInput> pending) {
+    final DateTime floor = _pendingClock ?? startDate;
+    DateTime? earliest;
 
-  void _dynamicSchedule(
-      int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
-
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(comparator);
-      FlexibleFlowInput job = remainingJobs.removeAt(0);
-      _assignJobToMachines(job);
+    for (final job in pending) {
+      if (job.taskSequence.isEmpty) continue;
+      for (final machineId in job.taskSequence.first.value2.keys) {
+        final DateTime freeAt = machinesAvailability[machineId] ?? startDate;
+        if (earliest == null || freeAt.isBefore(earliest)) earliest = freeAt;
+      }
     }
+
+    if (earliest == null || earliest.isBefore(floor)) return floor;
+    return earliest;
   }
 
-  double _calculateCR(
-      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
-    int remainingTime =
-        job.dueDate.difference(currentTime).inMinutes - accumulatedTime;
-    int processingTime = _totalProcessingTime(job);
-    return processingTime > 0
-        ? (remainingTime > 0 ? remainingTime / processingTime : double.infinity)
-        : double.infinity;
-  }
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]). A candidate here is a whole route, so p̄
+  /// and s̄ are per route, with each station's time and changeover averaged
+  /// over its machines. The makespan estimate is the busiest station's load
+  /// per machine plus its share of the changeovers.
+  AtcsParameters _atcsParameters() {
+    final int n = inputJobs.length;
+    final double meanProcessing = inputJobs.fold<double>(
+            0, (sum, job) => sum + _totalProcessingTime(job)) /
+        n;
+    final double meanSetup = meanPairwiseSetupMinutes<FlexibleFlowInput>(
+      inputJobs,
+      (from, to) {
+        Duration total = Duration.zero;
+        for (final task in to.taskSequence) {
+          final machineIds = task.value2.keys.toList();
+          if (machineIds.isEmpty) continue;
+          final Duration stationSetup = machineIds.fold<Duration>(
+            Duration.zero,
+            (sum, m) => sum + _getSetupDuration(m, to.jobId, from.jobId),
+          );
+          total += stationSetup ~/ machineIds.length;
+        }
+        return total;
+      },
+    );
 
-  int _calculateSlack(
-      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
-    int totalProcessingTime = _totalProcessingTime(job);
-    int slack = job.dueDate.difference(currentTime).inMinutes -
-        totalProcessingTime -
-        accumulatedTime;
+    final Map<int, double> stationLoad = {};
+    for (final job in inputJobs) {
+      for (final task in job.taskSequence) {
+        final machines = task.value2;
+        if (machines.isEmpty) continue;
+        final double mean = machines.values
+                .fold<double>(0, (sum, d) => sum + d.inSeconds / 60.0) /
+            machines.length;
+        // A station of k machines works through its queue k times faster.
+        stationLoad[task.value1] =
+            (stationLoad[task.value1] ?? 0) + mean / machines.length;
+      }
+    }
+    final double bottleneck =
+        stationLoad.values.fold(0.0, (a, b) => max(a, b));
+    final int stationCount = max(stationLoad.length, 1);
+    final double workMinutes = bottleneck + n * meanSetup / stationCount;
 
-    return slack < 0 ? 0 : slack;
+    return AtcsParameters.calibrate(
+      start: startDate,
+      dueDates: inputJobs.map((job) => job.dueDate),
+      meanProcessingMinutes: meanProcessing,
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        PreemptionEngine(workingSchedule: workingSchedule),
+        startDate,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
   }
 
   void cdsAlgorithm() {

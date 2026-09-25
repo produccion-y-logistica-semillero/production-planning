@@ -1,5 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/daos/implementations/job_dao_sqllite.dart';
+import 'package:production_planning/daos/implementations/order_dao_sqllite.dart';
 import 'package:production_planning/daos/interfaces/sequences_dao.dart';
 import 'package:production_planning/daos/interfaces/task_dependency_dao.dart';
 import 'package:production_planning/daos/interfaces/tasks_dao.dart';
@@ -104,6 +106,7 @@ class OrderRepositoryImpl implements OrderRepository {
           orderModel.regDate,
           jobsEntities,
           setupTimeMatrix: orderModel.setupTimeMatrix,
+          machineInitialStates: orderModel.machineInitialStates,
         ));
       }
 
@@ -232,6 +235,7 @@ class OrderRepositoryImpl implements OrderRepository {
         order.regDate,
         jobsEntities,
         setupTimeMatrix: order.setupTimeMatrix,
+        machineInitialStates: order.machineInitialStates,
       ));
     } on Failure catch (error) {
       return Left(error);
@@ -280,15 +284,41 @@ class OrderRepositoryImpl implements OrderRepository {
         return Left(LocalStorageFailure());
       }
 
-      await jobDao.deleteJobsFromOrder(order.orderId!);
-
-      if (order.orderJobs != null) {
-        for (var job in order.orderJobs!) {
-          await jobDao.insertJob(job, order.orderId!);
+      // jobDao and orderDao are both built from the same sqflite Database
+      // instance (SqlLiteFactory). Wrapping delete + reinsert + setup-matrix
+      // replace in one transaction on that shared connection means a save
+      // that fails partway rolls back completely instead of leaving the
+      // order's jobs deleted with nothing reinserted. When the concrete
+      // sqflite DAOs aren't in play (e.g. a test double), fall back to the
+      // previous sequential, non-atomic behaviour.
+      final job = jobDao;
+      final ord = orderDao;
+      if (job is JobDaoSQLlite && ord is OrderDaoSqlLite) {
+        await job.db.transaction((txn) async {
+          await job.deleteJobsFromOrder(order.orderId!, executor: txn);
+          if (order.orderJobs != null) {
+            for (var j in order.orderJobs!) {
+              await job.insertJob(j, order.orderId!, executor: txn);
+            }
+          }
+          await ord.updateSetupMatrix(order.orderId!, order.setupTimeMatrix,
+              executor: txn);
+          await ord.updateMachineInitialStates(
+              order.orderId!, order.machineInitialStates,
+              executor: txn);
+        });
+      } else {
+        await jobDao.deleteJobsFromOrder(order.orderId!);
+        if (order.orderJobs != null) {
+          for (var j in order.orderJobs!) {
+            await jobDao.insertJob(j, order.orderId!);
+          }
         }
+        await orderDao.updateSetupMatrix(
+            order.orderId!, order.setupTimeMatrix);
+        await orderDao.updateMachineInitialStates(
+            order.orderId!, order.machineInitialStates);
       }
-
-      await orderDao.updateSetupMatrix(order.orderId!, order.setupTimeMatrix);
 
       return const Right(true);
     } on Failure catch (error) {

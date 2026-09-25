@@ -963,6 +963,11 @@ class _GanttChartState extends State<GanttChart> {
         }
 
         final bool isSegmented = task.segments.length > 1;
+        // In "Por Job" the row already names the job, so each block names
+        // the machine it runs on instead.
+        final String baseLabel = _currentMode == GanttViewMode.byJob
+            ? task.machineName
+            : task.displayName;
         for (int segIndex = 0; segIndex < task.segments.length; segIndex++) {
           final segment = task.segments[segIndex];
           final double left = _calculateTaskLeft(segment.start, chartWidth);
@@ -970,8 +975,8 @@ class _GanttChartState extends State<GanttChart> {
           rowSegments.add(_PositionedSegment(
             task: task,
             label: isSegmented
-                ? '${task.displayName} (${segIndex + 1}/${task.segments.length})'
-                : task.displayName,
+                ? '$baseLabel (${segIndex + 1}/${task.segments.length})'
+                : baseLabel,
             left: left,
             right: right,
           ));

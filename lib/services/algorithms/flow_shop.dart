@@ -107,6 +107,10 @@ class FlowShop {
 
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
 
@@ -130,6 +134,7 @@ class FlowShop {
     String rule, {
     this.stateSetupMatrix,
     this.jobStates,
+    this.initialMachineState = const {},
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
@@ -495,14 +500,19 @@ class FlowShop {
     int? currentJobId,
     int? previousJobId,
   }) {
-    // State-based setup matrix (job final states on each machine).
-    if (stateSetupMatrix != null &&
-        jobStates != null &&
-        currentJobId != null &&
-        previousJobId != null) {
+    // State-based setup matrix (job final states on each machine). With no
+    // previous job on this machine yet, fall back to the machine's
+    // configured initial state for this order, so its first job can also
+    // pay a real changeover instead of always zero.
+    if (stateSetupMatrix != null && jobStates != null && currentJobId != null) {
       final machineStates = stateSetupMatrix![machineId];
       if (machineStates != null) {
-        final previousState = jobStates![previousJobId]?[machineId];
+        String? previousState;
+        if (previousJobId != null) {
+          previousState = jobStates![previousJobId]?[machineId];
+        } else {
+          previousState = initialMachineState[machineId];
+        }
         final currentState = jobStates![currentJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];

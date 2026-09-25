@@ -33,7 +33,8 @@ class OrdersService {
   }
 
   Future<Either<Failure, bool>> addOrder(List<NewOrderRequestModel> model,
-      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
+      Map<String, String>? machineInitialStates}) async {
     final List<JobEntity> jobs = model.asMap().entries.map((entry) {
       final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
@@ -71,7 +72,8 @@ class OrdersService {
     }
 
     final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs,
-        setupTimeMatrix: setupTimeMatrix);
+        setupTimeMatrix: setupTimeMatrix,
+        machineInitialStates: machineInitialStates);
     try {
       return await orderRepo.createOrder(newOrder);
     } catch (error, stack) {
@@ -87,7 +89,8 @@ class OrdersService {
 
   Future<Either<Failure, bool>> updateOrder(
       int orderId, List<NewOrderRequestModel> model,
-      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
+      Map<String, String>? machineInitialStates}) async {
     final List<JobEntity> jobs = model.asMap().entries.map((entry) {
       final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
@@ -120,7 +123,8 @@ class OrdersService {
     }).toList();
 
     final OrderEntity updatedOrder = OrderEntity(orderId, DateTime.now(), jobs,
-        setupTimeMatrix: setupTimeMatrix);
+        setupTimeMatrix: setupTimeMatrix,
+        machineInitialStates: machineInitialStates);
     try {
       return await orderRepo.updateOrder(updatedOrder);
     } catch (error, stack) {

@@ -120,7 +120,13 @@ class ParallelMachine {
   // Mirrors the structure used by Flow Shop / Flexible Job Shop / Open Shop.
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
 
-  // Tracks which job-state each machine processed last (null = cold start).
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
+
+  // Tracks which job-state each machine processed last. Seeded from
+  // [initialMachineState] below; null when a machine has no configured
+  // initial state (cold start, same as before this field existed).
   final Map<int, String?> _machineLastState = {};
 
   // Machine inactivity support.
@@ -149,13 +155,14 @@ class ParallelMachine {
     this.machines,
     String rule, {
     this.stateSetupMatrix,
+    this.initialMachineState = const {},
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
   }) {
     // Initialise cold-start tracking and a preemption engine per machine.
     for (final machineId in machines.keys) {
-      _machineLastState[machineId] = null;
+      _machineLastState[machineId] = initialMachineState[machineId];
       _machineContinuousUsage[machineId] = Duration.zero;
       final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
       _engineByMachine[machineId] = PreemptionEngine(

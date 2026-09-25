@@ -100,9 +100,16 @@ class SingleMachine {
   // buildMachineStateSetupMatrix helper can populate it.
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
 
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
+
   // Tracks the job-state of the job that last ran on the machine.
-  // Starts as null (cold start → no setup cost for the first job).
-  String? _lastJobState;
+  // Starts as the machine's configured initial state, so its first job can
+  // pay a real changeover instead of always zero; with no initial state
+  // configured, starts null (cold start → no setup cost for the first job),
+  // same as before this field existed.
+  late String? _lastJobState;
 
   // Machine inactivity support.
   // continueCapacity is interpreted as MINUTES of continuous processing
@@ -125,10 +132,12 @@ class SingleMachine {
     this.input,
     String rule, {
     this.stateSetupMatrix,
+    this.initialMachineState = const {},
     this.machineInactivities = const [],
     this.continueCapacity = 0,
     this.restTime,
   }) {
+    _lastJobState = initialMachineState[machineId];
     _preemptionEngine = PreemptionEngine(
       workingSchedule: workingSchedule,
       maintenanceWindows: machineInactivities,
@@ -364,7 +373,7 @@ class SingleMachine {
   /// prepends s_{prev → current} before every job's processing window.
   void _runSequence() {
     // Reset state tracking so re-entrant calls (e.g. from genetics) start clean.
-    _lastJobState = null;
+    _lastJobState = initialMachineState[machineId];
     _continuousUsage = Duration.zero;
     output.clear();
 
@@ -391,7 +400,7 @@ class SingleMachine {
   void _runDynamic(DispatchCriterion criterion) {
     // Same reset as _runSequence: the genetic and tabu searches re-enter the
     // scheduler repeatedly and must each start from a clean machine.
-    _lastJobState = null;
+    _lastJobState = initialMachineState[machineId];
     _continuousUsage = Duration.zero;
     output.clear();
 

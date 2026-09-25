@@ -33,6 +33,10 @@ class NewOrdersState extends NewOrderState {
 
   Map<String, Map<String, Map<String, int>>>? setupTimeMatrix;
 
+  /// Map<machineName, stateLetter> — the state (A-J) each machine starts
+  /// this program in, before its first job.
+  Map<String, String>? machineInitialStates;
+
   final DateRegistrationMode dateMode;
   final int leadTimeDays;
 
@@ -48,6 +52,7 @@ class NewOrdersState extends NewOrderState {
     required this.sequences,
     this.justSaved,
     this.setupTimeMatrix,
+    this.machineInitialStates,
     this.dateMode = DateRegistrationMode.manual,
     this.leadTimeDays = 3,
     this.automaticStartHour,
@@ -59,6 +64,7 @@ class NewOrdersState extends NewOrderState {
     List<Tuple2<int, String>>? sequences,
     bool? justSaved,
     Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
+    Map<String, String>? machineInitialStates,
     DateRegistrationMode? dateMode,
     int? leadTimeDays,
     Optional<TimeOfDay>? automaticStartHour,
@@ -68,6 +74,7 @@ class NewOrdersState extends NewOrderState {
     sequences: sequences ?? this.sequences,
     justSaved: justSaved ?? this.justSaved,
     setupTimeMatrix: setupTimeMatrix ?? this.setupTimeMatrix,
+    machineInitialStates: machineInitialStates ?? this.machineInitialStates,
     dateMode: dateMode ?? this.dateMode,
     leadTimeDays: leadTimeDays ?? this.leadTimeDays,
     automaticStartHour: automaticStartHour == null

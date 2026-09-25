@@ -92,6 +92,10 @@ class FlexibleJobShop {
 
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
@@ -107,6 +111,7 @@ class FlexibleJobShop {
     this.machineRestTime = const {},
     this.stateSetupMatrix,
     this.jobStates,
+    this.initialMachineState = const {},
   }) {
     _initializeMachineLastSequence();
 
@@ -182,13 +187,15 @@ class FlexibleJobShop {
     final currentJob = inputJobs.firstWhere((j) => j.jobId == currentJobId);
     final currentDbJobId = currentJob.dbJobId;
 
-    if (previousJobId != null &&
-        previousJobId > 0 &&
-        stateSetupMatrix != null &&
-        jobStates != null) {
+    if (stateSetupMatrix != null && jobStates != null) {
       final machineStates = stateSetupMatrix![machineId];
       if (machineStates != null) {
-        final previousState = jobStates![previousJobId]?[machineId];
+        String? previousState;
+        if (previousJobId != null && previousJobId > 0) {
+          previousState = jobStates![previousJobId]?[machineId];
+        } else {
+          previousState = initialMachineState[machineId];
+        }
         final currentState = jobStates![currentDbJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];
@@ -907,6 +914,11 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
           ),
         );
 
+  final initialMachineState = payload['initialMachineState'] == null
+      ? const <int, String>{}
+      : (payload['initialMachineState'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as String));
+
   final output = FlexibleJobShop(
     startDate,
     workingSchedule,
@@ -918,6 +930,7 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
     machineRestTime: machineRestTime,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    initialMachineState: initialMachineState,
   ).output;
 
   return output.map((out) {

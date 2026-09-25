@@ -115,6 +115,8 @@ class JobShopAdapter {
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machines, order.machineInitialStates);
 
     // Run Flexible Job Shop algorithm (highly optimized Non-delay & DAG-enabled)
     List<FlexibleJobOutput> output;
@@ -130,6 +132,7 @@ class JobShopAdapter {
         machineRestTime: machineRestTimeMap,
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
+        initialMachineState: initialMachineState,
       ).output;
     } catch (error, stack) {
       print('JobShopAdapter.jobShopAdapter error: ${error.toString()}');

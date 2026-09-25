@@ -240,12 +240,6 @@ class AddJobState extends State<AddJobWidget> {
 
   List<TaskEntity>? getSequenceTasks() => _sequenceDetails?.tasks;
 
-  String? getJobState() {
-    if (_machineFinalStates.isEmpty) return null;
-    final values = _machineFinalStates.values.toList();
-    return values.isNotEmpty ? values.first : null;
-  }
-
   /// Returns the display names of all currently selected machines.
   /// Used by the matrix dialog to populate its machine drop-down.
   List<String> getMachineNames() {
@@ -355,20 +349,17 @@ class AddJobState extends State<AddJobWidget> {
     if (sequence != null) {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
-      final Map<int, MachineStandardTimes> initialTimes = {};
-
-      for (final task in tasks) {
-        final current = bloc.getStandardTimesForType(task.machineTypeId);
-        final processingTime =
-            current.processing != MachineStandardTimes.defaults().processing
-                ? current.processing
-                : task.processingUnits;
-        final updated = current.copyWith(processing: processingTime);
-        initialTimes[task.machineTypeId] = updated;
-      }
-      initialTimes.forEach((key, value) {
-        bloc.updateStandardTimesForType(key, value);
-      });
+      // Per-job, per-station baseline: the task's own nominal processing
+      // time. This used to be seeded from a bloc-level cache shared by
+      // EVERY job of the order (MachinesService._standardTimesCache), so
+      // editing — or even just opening — one job silently changed the
+      // baseline every other job on the same machine type computed from.
+      // Keeping it local to this call is what makes jobs independent.
+      final Map<int, MachineStandardTimes> initialTimes = {
+        for (final task in tasks)
+          task.machineTypeId:
+              MachineStandardTimes(processing: task.processingUnits),
+      };
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
@@ -422,9 +413,12 @@ class AddJobState extends State<AddJobWidget> {
                   (baseProcessingMinutes * machine.processingPercentage / 100)
                       .round();
               const preparationMinutes = 0; // comes from matrix — always 0 here
-              final restMinutes = savedTimes?['rest'] ??
-                  times?.rest?.inMinutes ??
-                  (60 * machine.restPercentage / 100).round();
+              // Rest is no longer a per-job field: what the scheduler uses
+              // is the machine's own rest policy (restPercentage /
+              // continueCapacity, set in the machine inactivities dialog).
+              // This column is kept at 0 for compatibility with rows saved
+              // before this change; nothing reads it.
+              const restMinutes = 0;
 
               // Exactly one machine entry per task, same invariant
               // _showStationTimeDialog maintains. The clear matters when a
@@ -788,7 +782,16 @@ class AddJobState extends State<AddJobWidget> {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text('Estado dejado en la máquina: '),
+              const Text('Estado (familia) del job en esta estación: '),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'La letra identifica la familia de producto de '
+                    'este job en esta estación. Se usa como fila/columna '
+                    'en la matriz de tiempos de alistamiento para calcular '
+                    'el cambio de referencia entre un job y el siguiente.',
+                child: Icon(Icons.info_outline,
+                    size: 16, color: Theme.of(context).colorScheme.primary),
+              ),
               const SizedBox(width: 8),
               DropdownButton<String>(
                 value: _machineFinalStates[machineTypeId],
@@ -858,9 +861,10 @@ class AddJobState extends State<AddJobWidget> {
 
     if (!mounted || selected == null) return;
 
-    final bloc = context.read<NewOrderBloc>();
     setState(() {
       _selectedMachines[task.machineTypeId] = selected;
+      // Local to THIS job/station — never fed back to a shared cache, so
+      // picking a machine on one job cannot change another job's baseline.
       final fallback = _stationTimes[task.machineTypeId];
       final updated =
           MachineStandardTimes.fromMachine(selected, fallback: fallback);
@@ -868,17 +872,14 @@ class AddJobState extends State<AddJobWidget> {
 
       // Update explicit times mapping for this task & machine
       final baseProcessingMinutes = updated.processing.inMinutes;
-      final restMinutes = updated.rest?.inMinutes ??
-          (60 * selected.restPercentage / 100).round();
       _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
       _explicitTaskMachineMinutes[task.id!]!.clear();
       _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
         'processing': baseProcessingMinutes,
         'preparation': 0, // setup times come from matrix
-        'rest': restMinutes,
+        'rest': 0, // real rest is the machine's own policy, not a job field
       };
 
-      bloc.updateStandardTimesForType(task.machineTypeId, updated);
       _syncStandardTimesToMachines(task.machineTypeId, updated);
     });
   }
@@ -892,7 +893,6 @@ class AddJobState extends State<AddJobWidget> {
 
   Future<void> _showStationTimeDialog(
       TaskEntity task, int machineTypeId) async {
-    final bloc = context.read<NewOrderBloc>();
     final machines = _machinesByType[machineTypeId] ?? [];
 
     final existingForTask = _explicitTaskMachineMinutes[task.id];
@@ -907,19 +907,11 @@ class AddJobState extends State<AddJobWidget> {
         existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
 
     final stationDefaults = _stationTimes[machineTypeId] ??
-        bloc.getStandardTimesForType(machineTypeId);
+        MachineStandardTimes(processing: task.processingUnits);
 
     Duration processingDuration = existingTimes != null
         ? Duration(minutes: existingTimes['processing'] ?? 0)
         : stationDefaults.processing;
-
-    // Rest time is no longer editable per job: the machine's own rest policy
-    // (restPercentage / the machine inactivities dialog) is what every
-    // scheduling adapter actually reads. This value is carried through
-    // untouched so reopening a saved job does not zero out what it had.
-    final Duration restDuration = existingTimes != null
-        ? Duration(minutes: existingTimes['rest'] ?? 0)
-        : stationDefaults.rest ?? Duration.zero;
 
     final processingController =
         TextEditingController(text: _formatDuration(processingDuration));
@@ -1016,8 +1008,6 @@ class AddJobState extends State<AddJobWidget> {
 
     if (result == true) {
       final processingMinutes = _parseTimeToMinutes(processingController.text);
-      // Carried through unchanged — no longer editable here.
-      final restMinutes = restDuration.inMinutes;
 
       setState(() {
         if (selectedMachineId != null) {
@@ -1030,17 +1020,15 @@ class AddJobState extends State<AddJobWidget> {
           _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
             'processing': processingMinutes,
             'preparation': 0, // comes from matrix — always 0 here
-            'rest': restMinutes,
+            'rest': 0, // real rest is the machine's own policy
           };
         }
         _stationTimes[machineTypeId] = MachineStandardTimes(
           processing: Duration(minutes: processingMinutes),
           preparation: Duration.zero, // from matrix
-          rest: Duration(minutes: restMinutes),
+          rest: Duration.zero,
         );
       });
-      bloc.updateStandardTimesForType(
-          machineTypeId, _stationTimes[machineTypeId]!);
       _syncStandardTimesToMachines(
           machineTypeId, _stationTimes[machineTypeId]!);
     }

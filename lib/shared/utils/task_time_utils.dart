@@ -92,8 +92,77 @@ Map<int, Map<String, Map<String, int>>>? buildMachineStateSetupMatrix(
     }
   }
 
+  // A machine of a station with no matrix of its own inherits the matrix
+  // registered for another machine of the SAME machine type — the station's
+  // default — instead of always getting zero setup. Only machines that
+  // matched nothing above are filled this way; an explicit match always
+  // wins.
+  final Map<int, Map<String, Map<String, int>>> defaultByType = {};
+  for (final machine in machines) {
+    final typeId = machine.machineTypeId;
+    if (machine.id == null || typeId == null) continue;
+    final own = result[machine.id!];
+    if (own != null) {
+      defaultByType.putIfAbsent(typeId, () => own);
+    }
+  }
+  for (final machine in machines) {
+    if (machine.id == null || result.containsKey(machine.id)) continue;
+    final typeId = machine.machineTypeId;
+    final fallback = typeId == null ? null : defaultByType[typeId];
+    if (fallback != null) {
+      print('  - machine "${machine.name}" (id=${machine.id}) inherits the '
+          'setup matrix of another machine of type $typeId');
+      result[machine.id!] = fallback;
+    }
+  }
+
   print('  - result: ${result.isEmpty ? "EMPTY (no matches)" : "${result.length} machines matched"}');
   return result.isEmpty ? null : result;
+}
+
+/// Converts an order-level machine-initial-state map (keyed by machine
+/// name, as saved with the order) into one keyed by machine id — the shape
+/// every scheduling algorithm's `initialMachineState` parameter expects.
+///
+/// A machine with no entry of its own inherits the state registered for
+/// another machine of the SAME machine type, same fallback as
+/// [buildMachineStateSetupMatrix].
+Map<int, String> resolveMachineInitialStates(
+  List<MachineEntity> machines,
+  Map<String, String>? orderMachineInitialStates,
+) {
+  if (orderMachineInitialStates == null || orderMachineInitialStates.isEmpty) {
+    return const {};
+  }
+
+  final normalized = <String, String>{
+    for (final entry in orderMachineInitialStates.entries)
+      _normalizeMachineName(entry.key): entry.value,
+  };
+
+  final result = <int, String>{};
+  for (final machine in machines) {
+    if (machine.id == null) continue;
+    final state = normalized[_normalizeMachineName(machine.name)];
+    if (state != null) result[machine.id!] = state;
+  }
+
+  final Map<int, String> defaultByType = {};
+  for (final machine in machines) {
+    final typeId = machine.machineTypeId;
+    if (machine.id == null || typeId == null) continue;
+    final own = result[machine.id!];
+    if (own != null) defaultByType.putIfAbsent(typeId, () => own);
+  }
+  for (final machine in machines) {
+    if (machine.id == null || result.containsKey(machine.id)) continue;
+    final typeId = machine.machineTypeId;
+    final fallback = typeId == null ? null : defaultByType[typeId];
+    if (fallback != null) result[machine.id!] = fallback;
+  }
+
+  return result;
 }
 
 /// Builds machine state mapping for each job keyed by actual machine id.

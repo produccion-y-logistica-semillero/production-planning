@@ -1617,6 +1617,20 @@ class SQLLiteDatabaseProvider {
     await _ensureOrderSetupMatrixSchema(_database!);
     await _ensureMachinesSchema(_database!);
 
+    // The state (A-J) each machine starts a program in, before its first
+    // job. Without this the first job on every machine always paid zero
+    // setup, since there was no "previous state" to compare it against.
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS order_machine_initial_states (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          machine_name TEXT NOT NULL,
+          state_char TEXT NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders(order_id),
+          UNIQUE(order_id, machine_name)
+      );
+    ''');
+
     return _database!;
   }
 

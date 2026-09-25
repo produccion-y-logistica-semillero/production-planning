@@ -2,7 +2,6 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
-import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
@@ -25,6 +24,18 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     this.seqService,
     this.machinesService,
   ) : super(NewOrdersInitialState());
+
+  // Several methods here (loadOrderForEdit, saveOrder, updateOrder, ...)
+  // await a DB round trip before emitting. If the page that owns this bloc
+  // is popped while one is in flight, BlocProvider closes it before the
+  // callback runs, and a bare emit() then throws "Cannot emit new states
+  // after calling close" — a widget-lifecycle race, not a data error.
+  // Silently dropping the state once closed is the standard fix.
+  @override
+  void emit(NewOrderState state) {
+    if (isClosed) return;
+    super.emit(state);
+  }
 
   // ─── Sequences ─────────────────────────────────────────────────────────────
 
@@ -112,11 +123,29 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       List<Tuple2<int, String>> sequences = currentState.sequences;
 
       final sourceJob = jobs.firstWhere((job) => job.index == index);
+      final sourceState = sourceJob.stateKey.currentState;
 
       int nextIndex = jobs.isNotEmpty
           ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b) + 1
           : 1;
       final nextJobId = _getNextJobId(jobs);
+
+      // Deep-copy the source job's live parameters (times, A-J states,
+      // preemption) into the clone's initial* maps. Without this the clone
+      // started blank and, on save, recomputed its baseline from whatever
+      // machine type it shared with another job. Deep copies so editing the
+      // clone can never mutate the source job's own maps.
+      final Map<int, String>? clonedFinalStates =
+          sourceState?.getMachineFinalStates();
+      final Map<int, int>? clonedPreemptionMatrix =
+          sourceState?.getPreemptionMatrix();
+      final clonedTaskMachineTimes = sourceState
+          ?.getExplicitTaskMachineMinutes()
+          .map((taskId, byMachine) => MapEntry(
+                taskId,
+                byMachine.map((machineId, times) =>
+                    MapEntry(machineId, Map<String, int>.from(times))),
+              ));
 
       jobs.add(AddJobWidget(
         availableDate: sourceJob.availableDate,
@@ -130,12 +159,21 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         index: nextIndex,
         sequences: sequences,
         selectedSequence: sourceJob.selectedSequence,
+        initialMachineFinalStates: clonedFinalStates == null
+            ? null
+            : Map<int, String>.from(clonedFinalStates),
+        initialPreemptionMatrix: clonedPreemptionMatrix == null
+            ? null
+            : Map<int, int>.from(clonedPreemptionMatrix),
+        initialTaskMachineTimes: clonedTaskMachineTimes,
       ));
 
-      emit(NewOrdersState(
-        jobs: jobs,
-        sequences: sequences,
-      ));
+      // copyWith — not a bare NewOrdersState — so the order-level state
+      // (setupTimeMatrix, dateMode, leadTimeDays, automatic hours) survives
+      // the duplicate. Losing setupTimeMatrix here meant a save right after
+      // duplicating a job called updateSetupMatrix(orderId, null), which
+      // deleted the whole order's setup matrix.
+      emit(currentState.copyWith(jobs: jobs));
     }
   }
 
@@ -171,17 +209,6 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     );
   }
 
-  MachineStandardTimes getStandardTimesForType(int machineTypeId) {
-    return machinesService.getStandardTimesForType(machineTypeId);
-  }
-
-  Future<void> updateStandardTimesForType(
-    int machineTypeId,
-    MachineStandardTimes times,
-  ) async {
-    machinesService.updateStandardTimesForType(machineTypeId, times);
-  }
-
   // TODO: Implementar updateMachineTimes en MachinesService
   // Future<void> updateMachineTimes({
   //   required int machineId,
@@ -199,6 +226,12 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       Map<String, Map<String, Map<String, int>>> matrix) {
     if (state is NewOrdersState) {
       emit((state as NewOrdersState).copyWith(setupTimeMatrix: matrix));
+    }
+  }
+
+  void setMachineInitialStates(Map<String, String> states) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState).copyWith(machineInitialStates: states));
     }
   }
 
@@ -353,6 +386,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         response = await orderService.addOrder(
           jobs,
           setupTimeMatrix: currentState.setupTimeMatrix,
+          machineInitialStates: currentState.machineInitialStates,
         );
       } catch (error, stack) {
         print('NewOrderBloc.saveOrder error: ${error.toString()}');
@@ -403,6 +437,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         orderId,
         jobs,
         setupTimeMatrix: currentState.setupTimeMatrix,
+        machineInitialStates: currentState.machineInitialStates,
       );
 
       response.fold(
@@ -487,6 +522,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
           jobs: jobs,
           sequences: sequences,
           setupTimeMatrix: order.setupTimeMatrix,
+          machineInitialStates: order.machineInitialStates,
         ));
       },
     );

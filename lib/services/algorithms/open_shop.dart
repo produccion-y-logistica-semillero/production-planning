@@ -99,6 +99,11 @@ class OpenShop {
 
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job. Used only when a machine has no prior job yet;
+  /// once one has run, its own left-behind state takes over.
+  final Map<int, String> initialMachineState;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
   List<OpenShopOutput> output = [];
@@ -114,6 +119,7 @@ class OpenShop {
     this.machineRestTime = const {},
     this.stateSetupMatrix,
     this.jobStates,
+    this.initialMachineState = const {},
   }) {
     _initializeMachineLastSequence();
     final r = rule.toUpperCase();
@@ -369,20 +375,23 @@ class OpenShop {
   }
 
   /// Changeover [machineId] needs before [job], out of the state the last
-  /// job it ran left it in. Reads machine state only.
+  /// job it ran left it in — or, if nothing has run on it yet, the
+  /// machine's configured initial state for this order. Reads machine
+  /// state only.
   Duration _setupFor(int machineId, OpenShopInput job) {
+    if (stateSetupMatrix == null || jobStates == null) return Duration.zero;
     final int? previousJobId = _machineLastJob[machineId];
-    if (previousJobId == null ||
-        previousJobId <= 0 ||
-        stateSetupMatrix == null ||
-        jobStates == null) {
-      return Duration.zero;
+    String? previousState;
+    if (previousJobId != null && previousJobId > 0) {
+      previousState = jobStates![previousJobId]?[machineId];
+    } else {
+      previousState = initialMachineState[machineId];
     }
+    if (previousState == null) return Duration.zero;
     final machineStates = stateSetupMatrix![machineId];
     if (machineStates == null) return Duration.zero;
-    final previousState = jobStates![previousJobId]?[machineId];
     final currentState = jobStates![job.dbJobId]?[machineId];
-    if (previousState == null || currentState == null) return Duration.zero;
+    if (currentState == null) return Duration.zero;
     final setupMinutes = machineStates[previousState]?[currentState];
     return setupMinutes != null
         ? Duration(minutes: setupMinutes)
@@ -904,6 +913,11 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
           ),
         );
 
+  final initialMachineState = payload['initialMachineState'] == null
+      ? const <int, String>{}
+      : (payload['initialMachineState'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as String));
+
   final output = OpenShop(
     startDate,
     workingSchedule,
@@ -913,6 +927,7 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
     machineInactivities: machineInactivities,
     machineContinueCapacity: machineContinueCapacity,
     machineRestTime: machineRestTime,
+    initialMachineState: initialMachineState,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
   ).output;

@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
@@ -91,6 +92,10 @@ class FlexibleJobShop {
 
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
   final Map<int, int?> _machineLastSequence = {};
   final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
@@ -106,6 +111,7 @@ class FlexibleJobShop {
     this.machineRestTime = const {},
     this.stateSetupMatrix,
     this.jobStates,
+    this.initialMachineState = const {},
   }) {
     _initializeMachineLastSequence();
 
@@ -132,6 +138,8 @@ class FlexibleJobShop {
       case "ATCS":
         scheduleFlexibleJobShopATCS();
         break;
+      // The DB grants MS here and MINSLACK elsewhere; same rule.
+      case "MINSLACK":
       case "MS":
         scheduleFlexibleJobShopMS();
         break;
@@ -148,8 +156,8 @@ class FlexibleJobShop {
     // Simple genetics-like heuristic: combine CR and WSPT into a score
     print('FlexibleJobShop: starting scheduling (GENETICS)');
     _schedule((a, b) {
-      final scoreA = _geneticsScore(a.job, a.duration);
-      final scoreB = _geneticsScore(b.job, b.duration);
+      final scoreA = _geneticsScore(a.job, a.duration, a.earliestStart);
+      final scoreB = _geneticsScore(b.job, b.duration, b.earliestStart);
       return scoreB.compareTo(scoreA);
     });
     print('FlexibleJobShop: scheduling finished (GENETICS)');
@@ -157,8 +165,9 @@ class FlexibleJobShop {
 
   int _safeMinutes(Duration duration) => max(duration.inMinutes, 1);
 
-  double _geneticsScore(FlexibleJobInput job, Duration duration) {
-    final cr = _calculateCR(job, duration, 0);
+  double _geneticsScore(
+      FlexibleJobInput job, Duration duration, DateTime now) {
+    final cr = _calculateCR(job, duration, now);
     final wspt = job.priority / _safeMinutes(duration);
     return (1 / max(cr, 0.0001)) + wspt;
   }
@@ -178,13 +187,15 @@ class FlexibleJobShop {
     final currentJob = inputJobs.firstWhere((j) => j.jobId == currentJobId);
     final currentDbJobId = currentJob.dbJobId;
 
-    if (previousJobId != null &&
-        previousJobId > 0 &&
-        stateSetupMatrix != null &&
-        jobStates != null) {
+    if (stateSetupMatrix != null && jobStates != null) {
       final machineStates = stateSetupMatrix![machineId];
       if (machineStates != null) {
-        final previousState = jobStates![previousJobId]?[machineId];
+        String? previousState;
+        if (previousJobId != null && previousJobId > 0) {
+          previousState = jobStates![previousJobId]?[machineId];
+        } else {
+          previousState = initialMachineState[machineId];
+        }
         final currentState = jobStates![currentDbJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];
@@ -248,119 +259,238 @@ class FlexibleJobShop {
     return totalMinutes;
   }
 
-  void scheduleFlexibleJobShopMS() {
-    int accumulatedProcessingTime = 0; // Acumulamos el tiempo aquí
+  void scheduleFlexibleJobShopMS() => _scheduleDynamic(DispatchCriterion.ms);
 
-    _schedule((a, b) {
-      final accumulatedProcessingTimeA =
-          _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
-      final accumulatedProcessingTimeB =
-          _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
+  void scheduleFlexibleJobShopCR() => _scheduleDynamic(DispatchCriterion.cr);
 
-      final slackA =
-          _calculateSlack(a.job, a.duration, accumulatedProcessingTimeA);
-      final slackB =
-          _calculateSlack(b.job, b.duration, accumulatedProcessingTimeB);
-
-      return slackA.compareTo(slackB);
-    });
-  }
-
-  int _accumulatedProcessingTimeForJob(
-      FlexibleJobInput job, int currentAccumulatedTime) {
-    int totalProcessingTime =
-        currentAccumulatedTime; // Empezamos desde el tiempo acumulado
-
-    final opIndex = jobOperationIndex[job.jobId]!;
-
-    for (int i = 0; i < opIndex; i++) {
-      final task = job.taskSequence[i];
-      if (task.value2.isEmpty) continue;
-      final sum = task.value2.values
-          .fold<int>(0, (total, duration) => total + duration.inMinutes);
-      final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
-      totalProcessingTime += avgDuration;
-    }
-
-    return totalProcessingTime;
-  }
-
-  double _calculateSlack(
-      FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
-    final dj = job.dueDate;
-    final pj = duration;
-    final slack = dj.difference(DateTime.now()).inMinutes -
-        _safeMinutes(pj) -
-        accumulatedProcessingTime;
-    return slack < 0 ? 0 : slack.toDouble();
-  }
-
-  void scheduleFlexibleJobShopCR() {
-    int accumulatedProcessingTime =
-        0; // Inicializamos el acumulado en cada llamada
-
-    _schedule((a, b) {
-      final accumulatedProcessingTimeA =
-          _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
-      final accumulatedProcessingTimeB =
-          _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
-
-      final crA = _calculateCR(a.job, a.duration, accumulatedProcessingTimeA);
-      final crB = _calculateCR(b.job, b.duration, accumulatedProcessingTimeB);
-
-      return crA.compareTo(crB);
-    });
-  }
-
-  double _calculateCR(
-      FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
-    final dj = job.dueDate;
-    final pj = duration;
-    final cr =
-        (dj.difference(DateTime.now()).inMinutes - accumulatedProcessingTime) /
-            _safeMinutes(pj);
+  /// Critical ratio used only by the GENETICS score, at [now] — the
+  /// schedule's clock, never the wall clock.
+  double _calculateCR(FlexibleJobInput job, Duration duration, DateTime now) {
+    final cr = job.dueDate.difference(now).inMinutes / _safeMinutes(duration);
     return cr < 0 ? 0 : cr;
   }
 
-  void scheduleFlexibleJobShopATCS() {
-    int accumulatedProcessingTime =
-        0; // Inicializamos el acumulado en cada llamada
+  void scheduleFlexibleJobShopATCS() =>
+      _scheduleDynamic(DispatchCriterion.atcs);
 
-    _schedule((a, b) {
-      final accumulatedProcessingTimeA =
-          _accumulatedProcessingTimeForJob(a.job, accumulatedProcessingTime);
-      final accumulatedProcessingTimeB =
-          _accumulatedProcessingTimeForJob(b.job, accumulatedProcessingTime);
+  // ── Dynamic literature rules (MS, CR, ATCS) ───────────────────────────────
+  //
+  // The literature defines all three in terms of the clock t. They used to
+  // read DateTime.now() — the wall clock when the button was pressed — so
+  // the same order could schedule differently from one minute to the next,
+  // and against any plan dated in the past every job looked late and tied
+  // at zero. They also charged the operation's NOMINAL duration, blind to
+  // changeovers and interruptions.
+  //
+  // Now each contending operation is priced through the preemption engine
+  // from the schedule's own clock — the instant it can start, which is the
+  // decision point of this non-delay loop — and compared with the shared
+  // criteria in dynamic_dispatch.dart. The job's other pending operations
+  // are charged against its due date as nominal work still to do.
 
-      final atcsA =
-          _calculateATCS(a.job, a.duration, accumulatedProcessingTimeA);
-      final atcsB =
-          _calculateATCS(b.job, b.duration, accumulatedProcessingTimeB);
-
-      return atcsB
-          .compareTo(atcsA); // Invertido para asignar el mayor ATCS primero
-    });
+  void _scheduleDynamic(DispatchCriterion criterion) {
+    final AtcsParameters? atcs =
+        criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
+    _schedule(
+      (a, b) {
+        final int cmp = compareCandidates<FlexibleJobInput>(
+          criterion,
+          a.dispatch as DispatchCandidate<FlexibleJobInput>,
+          b.dispatch as DispatchCandidate<FlexibleJobInput>,
+          // The loop only consults the rule among candidates that can start
+          // at the same instant, so this is the shared decision time.
+          decisionTime: a.earliestStart as DateTime,
+          atcs: atcs,
+        );
+        if (cmp != 0) return cmp;
+        // Operations of one job share its jobId, the last tie-break
+        // compareCandidates has; settle those too, since List.sort is not
+        // stable and two runs could otherwise disagree.
+        final int byTask = (a.taskId as int).compareTo(b.taskId as int);
+        if (byTask != 0) return byTask;
+        return (a.machineId as int).compareTo(b.machineId as int);
+      },
+      priceCandidates: true,
+    );
   }
 
-  double _calculateATCS(
-      FlexibleJobInput job, Duration duration, int accumulatedProcessingTime) {
-    final dj = job.dueDate;
-    final pj = duration;
-    final wj = job.priority
-        .toDouble(); // Asumimos que el "peso" es el valor de la prioridad del trabajo
-    final pPromedio =
-        _averageProcessingTime(); // Promedio de tiempos de procesamiento
+  /// Prices one operation of [job] on [machineId] from [at] as a
+  /// [DispatchCandidate], without committing anything.
+  DispatchCandidate<FlexibleJobInput> _dispatchCandidate(
+    FlexibleJobInput job,
+    int taskId,
+    int machineId,
+    Duration duration,
+    DateTime at,
+    Set<int> completed,
+  ) {
+    final placed = _priceOperation(
+      job: job,
+      taskId: taskId,
+      machineId: machineId,
+      duration: duration,
+      start: at,
+    );
+    final DateTime end = placed.schedule.completionTime;
+    final Duration span = end.difference(at);
+    return DispatchCandidate(
+      job: job,
+      start: placed.setupSegments.isNotEmpty
+          ? placed.setupSegments.first.start
+          : placed.schedule.startDate,
+      end: end,
+      span: span.isNegative ? Duration.zero : span,
+      dueDate: job.dueDate,
+      releaseDate: job.availableDate,
+      priority: job.priority,
+      jobId: job.jobId,
+      setup: segmentsDuration(placed.setupSegments),
+      remainingWork: _remainingWorkAfter(job, taskId, completed),
+    );
+  }
 
-    final maxSlack = max(
-        dj.difference(DateTime.now()).inMinutes -
-            _safeMinutes(pj) -
-            accumulatedProcessingTime,
-        0);
-    const k = 1.0; // Este parámetro k puede ser ajustado
-    final exponent = -(maxSlack / (k * pPromedio));
-    final atcs = (wj / _safeMinutes(pj)) * exp(exponent);
+  /// Nominal work [job] still has after [taskId]: every other operation not
+  /// yet completed, each at its mean duration over the machines that can run
+  /// it.
+  Duration _remainingWorkAfter(
+      FlexibleJobInput job, int taskId, Set<int> completed) {
+    Duration total = Duration.zero;
+    for (final task in job.taskSequence) {
+      if (task.value1 == taskId || completed.contains(task.value1)) continue;
+      if (task.value2.isEmpty) continue;
+      total += task.value2.values.fold(Duration.zero, (sum, d) => sum + d) ~/
+          task.value2.length;
+    }
+    return total;
+  }
 
-    return atcs;
+  /// Schedules one operation — setup out of the machine's current state,
+  /// then processing — through the preemption engine, WITHOUT committing
+  /// anything. The dynamic rules price every contender with it and the loop
+  /// commits the winner with it, so the two cannot disagree.
+  ({
+    List<ProcessingSegment> setupSegments,
+    SegmentedSchedule schedule,
+    Duration usageAfterSetup,
+  }) _priceOperation({
+    required FlexibleJobInput job,
+    required int taskId,
+    required int machineId,
+    required Duration duration,
+    required DateTime start,
+  }) {
+    final Duration setupDuration =
+        _getSetupDuration(machineId, job.jobId, _machineLastJob[machineId]);
+
+    // Setup is its own segmented block, as sensitive to work-shift, rest and
+    // maintenance boundaries as processing is; processing starts after it.
+    List<ProcessingSegment> setupSegments = const [];
+    DateTime processStart = start;
+    Duration continuousUsage =
+        _machineContinuousUsage[machineId] ?? Duration.zero;
+    if (setupDuration > Duration.zero) {
+      final setupSchedule = _engineFor(machineId).computeSegments(
+        earliestStart: start,
+        totalDuration: setupDuration,
+        priorContinuousUsage: continuousUsage,
+      );
+      setupSegments = setupSchedule.segments;
+      processStart = setupSchedule.completionTime;
+      continuousUsage = setupSegments.length > 1
+          ? setupSegments.last.duration
+          : continuousUsage + setupSegments.single.duration;
+    }
+
+    // Split processing wherever the work-shift end, a maintenance window or
+    // the continuous-use rest cap falls inside it.
+    final schedule = _engineFor(machineId).computeSegments(
+      earliestStart: processStart,
+      totalDuration: duration,
+      priorContinuousUsage: continuousUsage,
+      interruptible: job.isTaskInterruptible(taskId),
+    );
+
+    return (
+      setupSegments: setupSegments,
+      schedule: schedule,
+      usageAfterSetup: continuousUsage,
+    );
+  }
+
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]). A candidate here is one operation, so p̄
+  /// is the mean operation time and s̄ the mean changeover between two
+  /// distinct jobs on a machine they share. The makespan estimate is the
+  /// larger of the busiest machine's expected load and the longest job —
+  /// the shop can finish no sooner than either.
+  AtcsParameters _atcsParameters() {
+    final Map<int, double> load = {};
+    double longestJob = 0;
+    int operationCount = 0;
+    for (final job in inputJobs) {
+      double jobTotal = 0;
+      for (final task in job.taskSequence) {
+        final machines = task.value2;
+        if (machines.isEmpty) continue;
+        final double mean = machines.values
+                .fold<double>(0, (sum, d) => sum + d.inSeconds / 60.0) /
+            machines.length;
+        jobTotal += mean;
+        operationCount++;
+        // Spread the operation evenly over the machines that can run it.
+        for (final machineId in machines.keys) {
+          load[machineId] = (load[machineId] ?? 0) + mean / machines.length;
+        }
+      }
+      longestJob = max(longestJob, jobTotal);
+    }
+
+    final double meanSetup = _meanSetupMinutes(load.keys);
+    final int machineCount = max(load.length, 1);
+    final double bottleneck = load.values.fold(0.0, (a, b) => max(a, b)) +
+        operationCount * meanSetup / machineCount;
+    final double workMinutes = max(bottleneck, longestJob);
+
+    return AtcsParameters.calibrate(
+      start: startDate,
+      dueDates: inputJobs.map((job) => job.dueDate),
+      meanProcessingMinutes: _averageProcessingTime(),
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        PreemptionEngine(workingSchedule: workingSchedule),
+        startDate,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
+  }
+
+  /// s̄ at operation level: the mean changeover over every machine and every
+  /// ordered pair of distinct jobs that both have a state on it.
+  double _meanSetupMinutes(Iterable<int> machineIds) {
+    if (stateSetupMatrix == null || jobStates == null) return 0;
+    double total = 0;
+    int count = 0;
+    for (final machineId in machineIds) {
+      final matrix = stateSetupMatrix![machineId];
+      if (matrix == null) continue;
+      final onMachine = inputJobs
+          .where((job) => job.taskSequence
+              .any((task) => task.value2.containsKey(machineId)))
+          .toList();
+      for (final from in onMachine) {
+        final fromState = jobStates![from.dbJobId]?[machineId];
+        if (fromState == null) continue;
+        for (final to in onMachine) {
+          if (identical(from, to)) continue;
+          final toState = jobStates![to.dbJobId]?[machineId];
+          final minutes = toState == null ? null : matrix[fromState]?[toState];
+          if (minutes == null) continue;
+          total += minutes;
+          count++;
+        }
+      }
+    }
+    return count == 0 ? 0 : total / count;
   }
 
   double _averageProcessingTime() {
@@ -421,7 +551,14 @@ class FlexibleJobShop {
     }
   }
 
-  void _schedule(int Function(dynamic, dynamic) comparator) {
+  /// Non-delay list scheduler: each round, the ready operations that can
+  /// start earliest compete and [comparator] picks among them.
+  ///
+  /// [priceCandidates] prices every contender through the preemption engine
+  /// and attaches it as `dispatch` — needed by the dynamic rules, skipped for
+  /// the static ones, which only read nominal fields.
+  void _schedule(int Function(dynamic, dynamic) comparator,
+      {bool priceCandidates = false}) {
     print('FlexibleJobShop._schedule: entering main loop');
     jobOperationIndex = {
       for (var job in inputJobs) job.jobId: 0,
@@ -486,8 +623,12 @@ class FlexibleJobShop {
             int taskId,
             int machineId,
             Duration duration,
-            DateTime earliestStart
+            DateTime earliestStart,
+            DispatchCandidate<FlexibleJobInput>? dispatch
           })> candidates = [];
+      // First pricing failure this round, rethrown only if it leaves no
+      // candidate at all — same policy as selectNext in dynamic_dispatch.dart.
+      SchedulingHorizonException? pricingFailure;
 
       for (var job in inputJobs) {
         final completed = completedTasks[job.jobId]!;
@@ -512,18 +653,37 @@ class FlexibleJobShop {
                 : jobReadyTime;
             final adjustedStart = _adjustForWorkingSchedule(earliestStart);
 
+            // Dynamic rules compare what the operation really costs from
+            // here, priced through the same code that commits it. One
+            // impossible machine must not sink the operation's other
+            // options, so a failure only drops this candidate.
+            DispatchCandidate<FlexibleJobInput>? dispatch;
+            if (priceCandidates) {
+              try {
+                dispatch = _dispatchCandidate(
+                    job, taskId, machineId, duration, adjustedStart, completed);
+              } on SchedulingHorizonException catch (e) {
+                pricingFailure ??= e;
+                continue;
+              }
+            }
+
             candidates.add((
               job: job,
               taskId: taskId,
               machineId: machineId,
               duration: duration,
-              earliestStart: adjustedStart
+              earliestStart: adjustedStart,
+              dispatch: dispatch,
             ));
           }
         }
       }
 
       if (candidates.isEmpty) {
+        // Every ready operation was unplaceable on every machine: that is
+        // the calendar's fault, and the user has to hear about it.
+        if (pricingFailure != null) throw pricingFailure;
         print(
             'FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
         break;
@@ -536,43 +696,18 @@ class FlexibleJobShop {
       });
 
       final selected = candidates.first;
-      final start = selected.earliestStart;
-
-      // Calcular tiempo de alistamiento
-      final int? previousJob =
-          _machineLastJob.putIfAbsent(selected.machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(
-          selected.machineId, selected.job.jobId, previousJob);
-
-      // Schedule setup as its own segmented block (through the preemption
-      // engine, so it's just as sensitive to work-shift/rest/maintenance
-      // boundaries as processing is), then start processing right after.
-      List<ProcessingSegment> setupSegments = const [];
-      DateTime processStart = start;
-      Duration continuousUsage =
-          _machineContinuousUsage[selected.machineId] ?? Duration.zero;
-      if (setupDuration > Duration.zero) {
-        final setupSchedule = _engineFor(selected.machineId).computeSegments(
-          earliestStart: start,
-          totalDuration: setupDuration,
-          priorContinuousUsage: continuousUsage,
-        );
-        setupSegments = setupSchedule.segments;
-        processStart = setupSchedule.completionTime;
-        continuousUsage = setupSegments.length > 1
-            ? setupSegments.last.duration
-            : continuousUsage + setupSegments.single.duration;
-      }
-
-      // Split processing into segments wherever the work-shift end, a
-      // maintenance window, or the continuous-use rest cap would otherwise
-      // fall inside this task's span on this machine.
-      final schedule = _engineFor(selected.machineId).computeSegments(
-        earliestStart: processStart,
-        totalDuration: selected.duration,
-        priorContinuousUsage: continuousUsage,
-        interruptible: selected.job.isTaskInterruptible(selected.taskId),
+      // Placed through the same code the dynamic rules priced candidates
+      // with, so what gets committed is exactly what was judged.
+      final placed = _priceOperation(
+        job: selected.job,
+        taskId: selected.taskId,
+        machineId: selected.machineId,
+        duration: selected.duration,
+        start: selected.earliestStart,
       );
+      final List<ProcessingSegment> setupSegments = placed.setupSegments;
+      final SegmentedSchedule schedule = placed.schedule;
+      final Duration continuousUsage = placed.usageAfterSetup;
       final DateTime taskStart = schedule.startDate;
       final DateTime adjustedEnd = schedule.completionTime;
 
@@ -779,6 +914,11 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
           ),
         );
 
+  final initialMachineState = payload['initialMachineState'] == null
+      ? const <int, String>{}
+      : (payload['initialMachineState'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as String));
+
   final output = FlexibleJobShop(
     startDate,
     workingSchedule,
@@ -790,6 +930,7 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
     machineRestTime: machineRestTime,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    initialMachineState: initialMachineState,
   ).output;
 
   return output.map((out) {

@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -417,9 +417,14 @@ class SQLLiteDatabaseProvider {
         }
 
         // 2: Parallel Machines
+        // Rules 15, 16, 19 and 20 are dropped on purpose: they duplicate the
+        // names of 7 (SPT_ADAPTADO), 6 (EDD_ADAPTADO), 10 (WSPT_ADAPTADO) and
+        // 12 (CR), which are already granted here. The DAO joins without
+        // DISTINCT, so granting both made each of those four appear twice in
+        // the rule dropdown.
         for (final r in [
           2, 3, 1, 14, 11, 12, 5, 6, 7, 10,
-          15, 16, 17, 18, 19, 20, 21, 22, 24, 25,
+          17, 18, 21, 22, 24, 25,
         ]) {
           addRule(2, r);
         }
@@ -1531,6 +1536,21 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 25);
           ''');
         }
+
+        if (oldVersion < 11) {
+          // Parallel Machines was granted two rule ids for the same rule
+          // name: 15/7 (SPT_ADAPTADO), 16/6 (EDD_ADAPTADO), 19/10
+          // (WSPT_ADAPTADO) and 20/12 (CR). The rules DAO joins without
+          // DISTINCT, so each of those appeared twice in the dropdown.
+          //
+          // Only the grant is removed, never the row in dispatch_rules:
+          // orders already saved against ids 15/16/19/20 must keep resolving
+          // their rule name.
+          await db.execute('''
+            DELETE FROM types_x_rules
+            WHERE environment_id = 2 AND dispatch_rule_id IN (15, 16, 19, 20);
+          ''');
+        }
       },
     );
 
@@ -1596,6 +1616,20 @@ class SQLLiteDatabaseProvider {
 
     await _ensureOrderSetupMatrixSchema(_database!);
     await _ensureMachinesSchema(_database!);
+
+    // The state (A-J) each machine starts a program in, before its first
+    // job. Without this the first job on every machine always paid zero
+    // setup, since there was no "previous state" to compare it against.
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS order_machine_initial_states (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          machine_name TEXT NOT NULL,
+          state_char TEXT NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders(order_id),
+          UNIQUE(order_id, machine_name)
+      );
+    ''');
 
     return _database!;
   }

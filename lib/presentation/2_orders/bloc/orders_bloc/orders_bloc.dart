@@ -9,6 +9,20 @@ class OrderBloc extends Cubit<OrdersState> {
   final OrdersService service;
   OrderBloc(this.service) : super(OrdersInitialState());
 
+  // fetchOrders/deleteOrderById/duplicateOrder all await a DB call before
+  // emitting. If the page that owns this bloc is popped (or, in dev mode,
+  // a hot reload tears the widget down) while that await is in flight,
+  // OrdersPage.dispose() closes this bloc before the callback runs, and
+  // the bare emit() then throws "Cannot emit new states after calling
+  // close" — a widget-lifecycle race, not a data error. Silently dropping
+  // the state once closed is the standard fix: nothing is listening to a
+  // closed bloc anyway.
+  @override
+  void emit(OrdersState state) {
+    if (isClosed) return;
+    super.emit(state);
+  }
+
   Future<void> fetchOrders() async {
     emit(OrdersLoadingState());
 

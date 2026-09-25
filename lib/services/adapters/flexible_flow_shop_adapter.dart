@@ -61,6 +61,8 @@ class FlexibleFlowShopAdapter {
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machines, order.machineInitialStates);
 
     // ── 4. Build FlexibleFlowInput list ───────────────────────────────────
     final List<FlexibleFlowInput> inputJobs = [];
@@ -132,6 +134,7 @@ class FlexibleFlowShopAdapter {
         rule.toUpperCase(),
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
+        initialMachineState: initialMachineState,
         machineInactivities: machineInactivitiesMap,
         machineContinueCapacity: machineContinueCapacityMap,
         machineRestTime: machineRestTimeMap,

@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
 
@@ -54,6 +55,36 @@ class SingleMachineOutput {
   }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
 }
 
+/// A fully computed placement for one job that has NOT been committed yet.
+///
+/// Produced by `SingleMachine._trial`, consumed by `SingleMachine._commit`.
+/// Keeping the two apart is what lets the dynamic rules compare several
+/// contenders and then schedule the winner with exactly the placement it was
+/// judged on, instead of computing it twice and hoping the two agree.
+class _SingleMachineTrial {
+  final SingleMachineInput job;
+  final List<ProcessingSegment> setupSegments;
+  final SegmentedSchedule schedule;
+
+  /// The machine's continuous-use streak after setup but before processing —
+  /// needed to fold the streak forward correctly on commit.
+  final Duration continuousUsageBeforeProcessing;
+
+  const _SingleMachineTrial({
+    required this.job,
+    required this.setupSegments,
+    required this.schedule,
+    required this.continuousUsageBeforeProcessing,
+  });
+
+  /// Where the machine actually starts working for this job: the setup, when
+  /// there is one, otherwise the processing itself.
+  DateTime get start =>
+      setupSegments.isNotEmpty ? setupSegments.first.start : schedule.startDate;
+
+  DateTime get end => schedule.completionTime;
+}
+
 class SingleMachine {
   final int machineId;
   final DateTime startDate;
@@ -69,9 +100,16 @@ class SingleMachine {
   // buildMachineStateSetupMatrix helper can populate it.
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
 
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
+
   // Tracks the job-state of the job that last ran on the machine.
-  // Starts as null (cold start → no setup cost for the first job).
-  String? _lastJobState;
+  // Starts as the machine's configured initial state, so its first job can
+  // pay a real changeover instead of always zero; with no initial state
+  // configured, starts null (cold start → no setup cost for the first job),
+  // same as before this field existed.
+  late String? _lastJobState;
 
   // Machine inactivity support.
   // continueCapacity is interpreted as MINUTES of continuous processing
@@ -94,10 +132,12 @@ class SingleMachine {
     this.input,
     String rule, {
     this.stateSetupMatrix,
+    this.initialMachineState = const {},
     this.machineInactivities = const [],
     this.continueCapacity = 0,
     this.restTime,
   }) {
+    _lastJobState = initialMachineState[machineId];
     _preemptionEngine = PreemptionEngine(
       workingSchedule: workingSchedule,
       maintenanceWindows: machineInactivities,
@@ -118,11 +158,16 @@ class SingleMachine {
       case "FIFO_ADAPTADO": fifoRuleAdapted(); break;
       case "WSPT_ADAPTADO": wsptRuleAdapted(); break;
       case "MINSLACK": scheduleMinimumSlack(); break;
+      case "MS": scheduleMinimumSlack(); break;
       case "CR": scheduleCriticalRatio(); break;
+      case "ATCS": scheduleATCS(); break;
       case "GENETICS": scheduleGeneticAlgorithm(); break;
       case "TABU": scheduleTabuSearch(); break;
-      
-
+      default:
+        // Without this an unknown rule silently produced an empty schedule,
+        // which the UI renders as "no hay nada que programar" rather than as
+        // the configuration error it is.
+        throw ArgumentError('Regla de despacho desconocida: "$rule"');
     }
   }
 
@@ -163,12 +208,20 @@ class SingleMachine {
 
   // ── Core assignment ───────────────────────────────────────────────────────
 
-  /// Schedules [job] at [scheduleTime], prepending the setup duration
-  /// s_{_lastJobState → job.jobState} before processing.
+  /// Simulates [job] starting no earlier than [at], WITHOUT committing
+  /// anything — no field of this class is written, nothing is appended to
+  /// [output].
   ///
-  /// Returns the updated schedule pointer (= end of this job's processing).
-  DateTime _assignJob(SingleMachineInput job, DateTime scheduleTime) {
-    // 1. Compute setup duration for this transition.
+  /// This is safe to call repeatedly on competing candidates because
+  /// [PreemptionEngine.computeSegments] is a pure function of its arguments;
+  /// all the state that evolves during scheduling lives here and is passed
+  /// in explicitly ([_lastJobState], [_continuousUsage]).
+  ///
+  /// The dynamic (*_ADAPTADO) rules use it to compare contenders; [_assignJob]
+  /// uses it to compute the placement it then commits, so the schedule a
+  /// candidate was chosen for is exactly the schedule it gets.
+  _SingleMachineTrial _trial(SingleMachineInput job, DateTime at) {
+    // 1. Setup for the transition out of the machine's current state.
     final setup = _setupDuration(_lastJobState, job.jobState);
 
     // 2. If there is a setup cost, schedule it as its own segmented block
@@ -176,11 +229,11 @@ class SingleMachine {
     //    work-shift/rest/maintenance boundaries as processing is), then
     //    start processing right after it ends.
     List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = scheduleTime;
+    DateTime processStart = at;
     Duration continuousUsage = _continuousUsage;
     if (setup > Duration.zero) {
       final setupSchedule = _preemptionEngine.computeSegments(
-        earliestStart: scheduleTime,
+        earliestStart: at,
         totalDuration: setup,
         priorContinuousUsage: continuousUsage,
       );
@@ -200,6 +253,20 @@ class SingleMachine {
       priorContinuousUsage: continuousUsage,
       interruptible: job.interruptible,
     );
+
+    return _SingleMachineTrial(
+      job: job,
+      setupSegments: setupSegments,
+      schedule: schedule,
+      continuousUsageBeforeProcessing: continuousUsage,
+    );
+  }
+
+  /// Commits a placement produced by [_trial]: appends the output row and
+  /// advances the machine's state. Returns the new schedule pointer.
+  DateTime _commit(_SingleMachineTrial trial) {
+    final job = trial.job;
+    final schedule = trial.schedule;
     final DateTime end = schedule.completionTime;
     final Duration delay = end.isAfter(job.dueDate)
         ? end.difference(job.dueDate)
@@ -209,18 +276,26 @@ class SingleMachine {
       job.jobId, job.machineDuration, schedule.startDate, end, job.dueDate,
       delay,
       segments: schedule.segments,
-      setupSegments: setupSegments,
+      setupSegments: trial.setupSegments,
     ));
 
-    // 4. Remember this job's state and continuous-usage streak for the
-    //    next iteration (a pause during this job already reset the streak).
+    // Remember this job's state and continuous-usage streak for the next
+    // iteration (a pause during this job already reset the streak).
     _lastJobState = job.jobState;
     _continuousUsage = schedule.segments.length > 1
         ? schedule.segments.last.duration
-        : continuousUsage + schedule.segments.single.duration;
+        : trial.continuousUsageBeforeProcessing +
+            schedule.segments.single.duration;
 
     return end;
   }
+
+  /// Schedules [job] at [scheduleTime], prepending the setup duration
+  /// s_{_lastJobState → job.jobState} before processing.
+  ///
+  /// Returns the updated schedule pointer (= end of this job's processing).
+  DateTime _assignJob(SingleMachineInput job, DateTime scheduleTime) =>
+      _commit(_trial(job, scheduleTime));
 
   /// Pushes [dt] to the start of the next working day if it falls outside
   /// working hours (i.e. at or after day-end).
@@ -264,43 +339,30 @@ class SingleMachine {
     _runSequence();
   }
 
-  // The *Adapted variants re-sort and then call _runSequence directly.
-  void eddRuleAdapted() {
-    input.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    _runSequence();
-  }
+  // ── Dynamic rules ─────────────────────────────────────────────────────────
+  //
+  // These do NOT pre-sort. They decide one job at a time, at the moment the
+  // machine frees up, among the jobs released by then, comparing each
+  // contender's EFFECTIVE span — setup out of the machine's current state
+  // plus processing plus whatever the preemption engine stretches it by. See
+  // _runDynamic and lib/services/scheduling/dynamic_dispatch.dart.
+  //
+  // MS, CR and ATCS belong here too: the literature defines their index in
+  // terms of the clock t. They used to be sorted once — MS and CR against
+  // each job's release date, ATCS against nominal processing times with no
+  // release gate and no setup term — which froze the very quantity they
+  // measure. Now t is the schedule's clock at each decision, so a machine
+  // paused for maintenance eats into every pending job's slack.
 
-  void sptRuleAdapted() {
-    input.sort((a, b) => a.machineDuration.compareTo(b.machineDuration));
-    _runSequence();
-  }
+  void eddRuleAdapted() => _runDynamic(DispatchCriterion.edd);
+  void sptRuleAdapted() => _runDynamic(DispatchCriterion.spt);
+  void lptRuleAdapted() => _runDynamic(DispatchCriterion.lpt);
+  void fifoRuleAdapted() => _runDynamic(DispatchCriterion.fifo);
+  void wsptRuleAdapted() => _runDynamic(DispatchCriterion.wspt);
 
-  void lptRuleAdapted() {
-    input.sort((a, b) => b.machineDuration.compareTo(a.machineDuration));
-    _runSequence();
-  }
-
-  void fifoRuleAdapted() {
-    input.sort((a, b) => a.availableDate.compareTo(b.availableDate));
-    _runSequence();
-  }
-
-  void wsptRuleAdapted() {
-    input.sort((a, b) =>
-        (b.priority / b.machineDuration.inMinutes)
-            .compareTo(a.priority / a.machineDuration.inMinutes));
-    _runSequence();
-  }
-
-  void scheduleMinimumSlack() {
-    input.sort((a, b) => _slack(a).compareTo(_slack(b)));
-    _runSequence();
-  }
-
-  void scheduleCriticalRatio() {
-    input.sort((a, b) => _criticalRatio(a).compareTo(_criticalRatio(b)));
-    _runSequence();
-  }
+  void scheduleMinimumSlack() => _runDynamic(DispatchCriterion.ms);
+  void scheduleCriticalRatio() => _runDynamic(DispatchCriterion.cr);
+  void scheduleATCS() => _runDynamic(DispatchCriterion.atcs);
 
   // ── Sequential runner ─────────────────────────────────────────────────────
 
@@ -311,7 +373,7 @@ class SingleMachine {
   /// prepends s_{prev → current} before every job's processing window.
   void _runSequence() {
     // Reset state tracking so re-entrant calls (e.g. from genetics) start clean.
-    _lastJobState = null;
+    _lastJobState = initialMachineState[machineId];
     _continuousUsage = Duration.zero;
     output.clear();
 
@@ -323,15 +385,127 @@ class SingleMachine {
     }
   }
 
+  // ── Dynamic runner ────────────────────────────────────────────────────────
+
+  /// Event-driven dispatch: instead of freezing an order up front, decide the
+  /// next job each time the machine frees up.
+  ///
+  /// At every decision point only jobs already released compete, and each
+  /// contender is simulated through the preemption engine so the quantity
+  /// being compared is its real occupancy of the machine — including the
+  /// changeover out of whatever state the previous job left, and including
+  /// any split caused by a shift boundary, maintenance window or rest cap.
+  /// That is what makes a job with a short nominal processing time but an
+  /// expensive setup lose to one that runs clean.
+  void _runDynamic(DispatchCriterion criterion) {
+    // Same reset as _runSequence: the genetic and tabu searches re-enter the
+    // scheduler repeatedly and must each start from a clean machine.
+    _lastJobState = initialMachineState[machineId];
+    _continuousUsage = Duration.zero;
+    output.clear();
+
+    if (input.isEmpty) return;
+
+    final pending = List<SingleMachineInput>.from(input);
+    final DateTime firstRelease =
+        earliestRelease(pending, (job) => job.availableDate)!;
+    DateTime scheduleTime = _getStartTime(firstRelease);
+    final AtcsParameters? atcs = criterion == DispatchCriterion.atcs
+        ? _atcsParameters(scheduleTime)
+        : null;
+
+    // Rebuilt in dispatch order so `input` reflects the sequence actually
+    // scheduled — callers (and the genetic algorithm) read it as the result.
+    final sequenced = <SingleMachineInput>[];
+
+    while (pending.isNotEmpty) {
+      final selected = selectNext<SingleMachineInput>(
+        pending: pending,
+        decisionTime: scheduleTime,
+        releaseTime: (job) => job.availableDate,
+        criterion: criterion,
+        atcs: atcs,
+        evaluate: (job, at) {
+          final trial = _trial(job, at);
+          return DispatchCandidate(
+            job: job,
+            start: trial.start,
+            end: trial.end,
+            span: trial.end.difference(at).isNegative
+                ? Duration.zero
+                : trial.end.difference(at),
+            dueDate: job.dueDate,
+            releaseDate: job.availableDate,
+            priority: job.priority,
+            jobId: job.jobId,
+            setup: segmentsDuration(trial.setupSegments),
+          );
+        },
+      );
+
+      if (selected == null) {
+        // Nothing is released yet — jump the clock to the next release
+        // rather than spinning. earliestRelease is non-null here because
+        // pending is not empty.
+        final DateTime next =
+            earliestRelease(pending, (job) => job.availableDate)!;
+        final DateTime advanced = _getStartTime(next);
+        if (advanced.isAfter(scheduleTime)) {
+          scheduleTime = advanced;
+          continue;
+        }
+        // Unreachable in practice: a release at or before the current clock
+        // means that job was a candidate. Guard anyway — this runs on the UI
+        // isolate, so a spin here would freeze the app. Schedule what is left
+        // in order rather than looping or dropping it.
+        for (final job in pending) {
+          scheduleTime = _assignJob(job, scheduleTime);
+          sequenced.add(job);
+        }
+        pending.clear();
+        break;
+      }
+
+      // Re-run the trial so the committed placement is computed against the
+      // same machine state it was judged on. _trial is pure, so this is a
+      // recomputation, not a second decision.
+      final job = selected.job;
+      scheduleTime = _assignJob(job, scheduleTime);
+      sequenced.add(job);
+      pending.remove(job);
+    }
+
+    input = sequenced;
+  }
+
   // ── Metric helpers ────────────────────────────────────────────────────────
 
-  int _slack(SingleMachineInput job) =>
-      job.dueDate.difference(job.availableDate).inMinutes -
-      job.machineDuration.inMinutes;
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]). The makespan estimate is the textbook
+  /// single-machine one, Σp_j + n·s̄, turned into calendar time on this
+  /// machine so it is comparable with the due dates.
+  AtcsParameters _atcsParameters(DateTime start) {
+    final int n = input.length;
+    final double meanProcessing = input.fold<double>(
+            0, (sum, job) => sum + job.machineDuration.inSeconds / 60.0) /
+        n;
+    final double meanSetup = meanPairwiseSetupMinutes<SingleMachineInput>(
+      input,
+      (from, to) => _setupDuration(from.jobState, to.jobState),
+    );
+    final double workMinutes = n * (meanProcessing + meanSetup);
 
-  double _criticalRatio(SingleMachineInput job) {
-    final remaining = job.dueDate.difference(job.availableDate).inMinutes;
-    return remaining / job.machineDuration.inMinutes;
+    return AtcsParameters.calibrate(
+      start: start,
+      dueDates: input.map((job) => job.dueDate),
+      meanProcessingMinutes: meanProcessing,
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        _preemptionEngine,
+        start,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
   }
 
   // ── Genetic algorithm ─────────────────────────────────────────────────────

@@ -53,6 +53,8 @@ class SingleMachineAdapter {
     // per-machine inside machineFinalStates.
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, [machineEntity]);
+    final Map<int, String> initialMachineState = resolveMachineInitialStates(
+        [machineEntity], order.machineInitialStates);
 
     // ── 5. Build SingleMachineInput list ───────────────────────────────────
     final List<SingleMachineInput> inputJobs = [];
@@ -106,6 +108,7 @@ class SingleMachineAdapter {
       inputJobs,
       rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix,
+      initialMachineState: initialMachineState,
       machineInactivities: machineEntity.scheduledInactivities,
       continueCapacity: machineEntity.continueCapacity,
       restTime: restTime,

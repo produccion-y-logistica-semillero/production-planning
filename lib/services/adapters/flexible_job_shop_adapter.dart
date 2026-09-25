@@ -135,6 +135,8 @@ class FlexibleJobShopAdapter {
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machines, order.machineInitialStates);
 
     // Ejecutar el algoritmo Flexible Job Shop en un isolate
     final payload = <String, dynamic>{
@@ -190,6 +192,7 @@ class FlexibleJobShopAdapter {
           MapEntry(machineId, duration?.inMilliseconds)),
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
+      'initialMachineState': initialMachineState,
     };
 
     List<Map<String, dynamic>> rawOutput;

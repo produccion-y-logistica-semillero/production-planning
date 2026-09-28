@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
+import 'package:dartz/dartz.dart' as dartz;
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_params_dialog.dart';
+
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
+
+
 
 class AlgorithmPickerPage extends StatefulWidget {
   final int orderId;
@@ -17,6 +23,7 @@ class AlgorithmPickerPage extends StatefulWidget {
 class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   late final GanttBloc _ganttBloc;
   final List<int> _selectedIndexes = [];
+  TabuParams? _tabuParams;
   bool _selectAll = false;
   bool _isLoading = true;
 
@@ -67,6 +74,20 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     });
   }
 
+
+  Future<void> _configureTabu() async {
+    final params = await showDialog<TabuParams>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => TabuParamsDialog(
+        initial: _tabuParams ?? const TabuParams(),
+      ),
+    );
+    if (params == null) return; // cancelo
+    setState(() => _tabuParams = params);
+  }
+
+
   void _onCalculate() {
     if (_selectedIndexes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +109,14 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     }
 
     // Retornar los índices seleccionados
-    Navigator.pop(context, List<int>.from(_selectedIndexes));
+        Navigator.pop(
+      context,
+      dartz.Tuple2<List<int>, TabuParams?>(
+        List<int>.from(_selectedIndexes),
+        _tabuParams,
+      ),
+    );
+
   }
 
   @override
@@ -312,6 +340,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                     itemBuilder: (context, index) {
                       final rule = rules[index];
                       final isSelected = _selectedIndexes.contains(index);
+                      final bool isTabu =_labelForRule(rule, index).toUpperCase() == 'TABU' &&env.name.toUpperCase() == 'PARALLEL MACHINES';
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -345,6 +374,20 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                           ),
                           value: isSelected,
                           onChanged: (v) => _toggleSingle(index, v, rules.length),
+                          secondary: isTabu
+                              ? IconButton(
+                                  icon: Icon(
+                                    Icons.tune,
+                                    color: _tabuParams == null
+                                        ? colorScheme.onSurfaceVariant
+                                        : colorScheme.primary,
+                                  ),
+                                  tooltip: _tabuParams == null
+                                      ? 'Configurar parametros (usando valores por defecto)'
+                                      : 'Parametros personalizados activos',
+                                  onPressed: _configureTabu,
+                                )
+                              : null,
 
                           activeColor: colorScheme.primary,
                           shape: RoundedRectangleBorder(
@@ -446,5 +489,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
       ),
     );
   }
+
 }
+
+
 

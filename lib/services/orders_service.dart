@@ -17,6 +17,7 @@ import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 
 class OrdersService {
   final OrderRepository orderRepo;
@@ -633,7 +634,7 @@ class OrdersService {
   // ------------------------------------------------------------------------
 
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
-      scheduleOrder(Tuple3<int, String, String> sch) async {
+      scheduleOrder(Tuple3<int, String, String> sch,{TabuParams? tabuParams,}) async {
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
               orderRepository: orderRepo,
@@ -641,7 +642,7 @@ class OrdersService {
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .parallelMachineAdapter(sch.value1, sch.value2)),
+          .parallelMachineAdapter(sch.value1, sch.value2, tabuParams: tabuParams)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
               machineRepository: machineRepo,
               orderRepository: orderRepo)

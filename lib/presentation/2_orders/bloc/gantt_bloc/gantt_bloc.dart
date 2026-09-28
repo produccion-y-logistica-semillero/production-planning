@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/services/orders_service.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 
 class GanttBloc extends Cubit<GanttState> {
   final OrdersService service;
@@ -37,10 +38,9 @@ class GanttBloc extends Cubit<GanttState> {
   }
 
   /// Selecciona una regla por su ID
-  void selectRule(int ruleId) async {
+  void selectRule(int ruleId ,{TabuParams? tabuParams}) async {
     if (state.orderId == null || state.enviroment == null) {
       print("ERROR: No se puede seleccionar regla sin orderId o environment");
-
       return;
     }
 
@@ -63,8 +63,8 @@ class GanttBloc extends Cubit<GanttState> {
         state.orderId!,
         selectedRule.value2,
         state.enviroment!.name,
-      ));
-
+      ),
+      tabuParams: tabuParams,);
       response.fold(
             (failure) {
           print("ERROR: Fallo en la planificación para regla $ruleId");
@@ -120,7 +120,7 @@ class GanttBloc extends Cubit<GanttState> {
   }
 
   /// Asigna una orden y selecciona una regla por índice en una sola operación
-  Future<void> assignOrderAndSelectRuleByIndex(int orderId, int index) async {
+  Future<void> assignOrderAndSelectRuleByIndex(int orderId, int index,   {TabuParams? tabuParams}) async {
     try {
       print("INFO: Asignando orden $orderId y seleccionando regla índice $index");
 
@@ -139,7 +139,7 @@ class GanttBloc extends Cubit<GanttState> {
           if (index >= 0 && index < env.rules.length) {
             final ruleId = env.rules[index].value1;
             print("INFO: Regla encontrada con ID $ruleId");
-            selectRule(ruleId);
+            selectRule(ruleId,tabuParams: tabuParams,);
           } else {
             print("ERROR: Índice $index fuera de rango para ${env.rules.length} reglas");
 

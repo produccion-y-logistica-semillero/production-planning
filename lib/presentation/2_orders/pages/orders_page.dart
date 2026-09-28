@@ -10,6 +10,11 @@ import 'package:production_planning/presentation/2_orders/pages/order_metrics_pa
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 import 'package:production_planning/presentation/2_orders/pages/algorithm_picker_page.dart';
+import 'package:dartz/dartz.dart' as dartz;
+import 'package:production_planning/entities/tabu_params.dart';
+
+
+
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -236,23 +241,25 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> getMetrics(BuildContext context, int id) async {
-    final selected = await Navigator.of(context).push<List<int>>(
+    final result =
+        await Navigator.of(context).push<dartz.Tuple2<List<int>, TabuParams?>>(
       MaterialPageRoute(
         builder: (_) => AlgorithmPickerPage(orderId: id),
       ),
     );
 
-    if (selected != null && selected.isNotEmpty) {
+    if (result == null || result.value1.isEmpty) return;
+    if (!context.mounted) return;
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OrderMetrics(
-            orderId: id,
-            selectedRuleIndexes: selected,
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OrderMetrics(
+          orderId: id,
+          selectedRuleIndexes: result.value1,
+          tabuParams: result.value2,
         ),
-      );
-    }
+      ),
+    );
   }
 
   Future<void> _editOrder(BuildContext context, int id) async {

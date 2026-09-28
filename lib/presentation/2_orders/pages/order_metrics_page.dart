@@ -8,15 +8,18 @@ import 'package:production_planning/presentation/2_orders/pages/gantt_page.dart'
 import 'package:production_planning/presentation/2_orders/pages/gantt_data_table_page.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
   final List<int>? selectedRuleIndexes;
+    final TabuParams? tabuParams;
 
   const OrderMetrics({
     super.key,
     required this.orderId,
     this.selectedRuleIndexes,
+    this.tabuParams,
   });
 
   @override
@@ -36,7 +39,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
     _ganttBloc = GetIt.instance<GanttBloc>();
 
     // Cargar métricas
-    _metricsBloc.getTable(widget.orderId);
+    _metricsBloc.getTable(widget.orderId, tabuParams: widget.tabuParams);
     // Cargar environment para obtener nombres de reglas
     _ganttBloc.assignOrderId(widget.orderId);
   }
@@ -115,7 +118,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
-                      onPressed: () => _metricsBloc.getTable(widget.orderId),
+                      onPressed: () => _metricsBloc.getTable(widget.orderId,tabuParams: widget.tabuParams,),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Reintentar'),
                     ),
@@ -659,6 +662,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
     _ganttBloc.assignOrderAndSelectRuleByIndex(
       widget.orderId,
       originalIndex,
+      tabuParams: widget.tabuParams,
     );
 
     Navigator.push(
@@ -679,6 +683,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
     _ganttBloc.assignOrderAndSelectRuleByIndex(
       widget.orderId,
       originalIndex,
+      tabuParams: widget.tabuParams,
     );
 
     Navigator.push(

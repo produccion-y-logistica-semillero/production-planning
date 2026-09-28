@@ -12,6 +12,7 @@ import 'package:production_planning/services/adapters/metrics.dart';
 import '../../entities/job_entity.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 
 class ParallelMachineAdapter {
   final OrderRepository orderRepository;
@@ -23,7 +24,7 @@ class ParallelMachineAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule, {TabuParams? tabuParams}) async  {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -120,6 +121,8 @@ class ParallelMachineAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
+      tabuParams: tabuParams ?? const TabuParams(),
+
     ).output;
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────

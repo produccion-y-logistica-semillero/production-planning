@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
 
@@ -122,6 +123,7 @@ class ParallelMachine {
   /// How long each machine has run continuously since its last pause.
   final Map<int, Duration> _machineContinuousUsage = {};
   final Map<int, PreemptionEngine> _engineByMachine = {};
+  final TabuParams tabuParams;
 
   ParallelMachine(
     this.startDate,
@@ -133,6 +135,7 @@ class ParallelMachine {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
+    this.tabuParams = const TabuParams(),
   }) {
     // Initialise cold-start tracking and a preemption engine per machine.
     for (final machineId in machines.keys) {
@@ -196,7 +199,7 @@ class ParallelMachine {
         geneticsRule();
         break;
       case "TABU":        
-        tabuSearchRule();
+        tabuSearchRule(params: tabuParams);
       break;
 
 
@@ -679,52 +682,20 @@ class ParallelMachine {
   /// branch to prioritise the most delayed jobs when choosing what to move.
   /// 
   /// 
-  /// "¿Cuánto se retraso cada  trabajo?"
-  Map<ParallelInput, Duration> _machineJobDelays(
-    int machineId, List<ParallelInput> sequence) {
-  DateTime available = startDate;
-  String? lastState;
-  int processedCount = 0;
-  final Map<ParallelInput, Duration> delays = {};
-
-  for (final job in sequence) {
-    final Duration? processingTime = job.durationsInMachines[machineId];
-    if (processingTime == null) continue;
-
-    DateTime candidateStart =
-        job.availableDate.isAfter(available) ? job.availableDate : available;
-    candidateStart = _adjustForWorkingSchedule(candidateStart);
-
-    final String toState = job.stateOnMachine(machineId);
-    final Duration setup = _setupDuration(machineId, lastState, toState);
-    final DateTime processStart = setup > Duration.zero
-        ? _adjustForWorkingSchedule(candidateStart.add(setup))
-        : candidateStart;
-
-    final DateTime endTime = _adjustEndTimeWithInactivities(
-        machineId, processStart, processStart.add(processingTime));
-
-    delays[job] = endTime.isAfter(job.dueDate)
-        ? endTime.difference(job.dueDate)
-        : Duration.zero;
-
-    DateTime finalEnd = endTime;
-    final capacity = machineContinueCapacity[machineId] ?? 0;
-    final restTime = machineRestTime[machineId];
-    if (capacity > 0 && restTime != null) {
-      processedCount++;
-      if (processedCount >= capacity) {
-        finalEnd = endTime.add(restTime);
-        processedCount = 0;
-      }
+  /// ¿Cuánto flujo aporta cada trabajo?"
+  /// 
+  Map<ParallelInput, Duration> _machineRemovalGains(
+      int machineId, List<ParallelInput> sequence) {
+    final Duration base = _machineFlow(machineId, sequence);
+    final Map<ParallelInput, Duration> gains = {};
+    for (int k = 0; k < sequence.length; k++) {
+      final List<ParallelInput> without = List<ParallelInput>.from(sequence)
+        ..removeAt(k);
+      gains[sequence[k]] = base - _machineFlow(machineId, without);
     }
-
-    available = finalEnd;
-    lastState = job.stateOnMachine(machineId);
+    return gains;
   }
 
-  return delays;
-}
 
 Duration _totalFlow(Map<int, List<ParallelInput>> assignment) {
   Duration total = Duration.zero;
@@ -799,7 +770,17 @@ void _commitBestAssignment(Map<int, List<ParallelInput>> assignment) {
       lastState = job.stateOnMachine(machineId);
     }
   }
-}
+
+
+  for (final out in output) {
+    print('[TABU out] job=${out.jobId} maq=${out.machineId} '
+        'ini=${out.startDate} fin=${out.endDate} '
+        'segs=${out.segments.length} '
+        '${out.segments.map((s) => "${s.start}→${s.end}").join(" | ")}');
+  }
+  
+  }
+
 
 // ----------------------------------------------------------------------------
 // Asignación greedy por máquina a partir de una secuencia global — mismo
@@ -876,6 +857,31 @@ Map<int, List<ParallelInput>> _greedyAssign(List<ParallelInput> sequence) {
   return assignment;
 }
 
+
+Map<int, List<ParallelInput>> _randomAssign(
+    List<ParallelInput> jobs, Random random) {
+  final Map<int, List<ParallelInput>> assignment = {
+    for (final id in machines.keys) id: <ParallelInput>[],
+  };
+
+  final shuffled = List<ParallelInput>.from(jobs)..shuffle(random);
+
+  for (final job in shuffled) {
+    // CRÍTICO: solo máquinas donde el job realmente puede procesarse.
+    final eligible = job.durationsInMachines.keys
+        .where((m) => assignment.containsKey(m))
+        .toList();
+    if (eligible.isEmpty) continue;
+
+    final int machineId = eligible[random.nextInt(eligible.length)];
+    final seq = assignment[machineId]!;
+    seq.insert(random.nextInt(seq.length + 1), job);
+  }
+
+  return assignment;
+}
+
+
 Map<int, List<ParallelInput>> _deepCopyAssignment(
     Map<int, List<ParallelInput>> assignment) {
   return {
@@ -914,12 +920,19 @@ _TabuCandidate? _bestIntraMove({
   required int maxAttempts, // maximo numero que se puede probar 
 }) {
   final machineIds =
-      assignment.keys.where((m) => assignment[m]!.length > 1).toList() // Filtra únicamente las máquinas que tienen más de un trabajo. y mezla el orden de las maquinas 
-        ..shuffle(random);
+      assignment.keys.where((m) => assignment[m]!.length > 1).toList() ..shuffle(random); // Filtra únicamente las máquinas que tienen más de un trabajo. y mezla el orden de las maquinas  
   if (machineIds.isEmpty) return null;
 
-  int attempts = 0;
-  for (final machineId in machineIds) {
+  int usedAttempts = 0;
+  machineLoop:
+  for (int idx = 0; idx < machineIds.length; idx++) {
+    final int remainingAttempts = maxAttempts - usedAttempts;
+    if (remainingAttempts <= 0) break;
+    final int machinesLeft = machineIds.length - idx;
+    final int machineBudget =(remainingAttempts + machinesLeft - 1) ~/ machinesLeft; // ceil
+    int machineAttempts = 0;
+
+    final int machineId = machineIds[idx];
     final List<ParallelInput> seq = assignment[machineId]!; // obtiene los jobs de la maquina actual 
     final positions = List<int>.generate(seq.length, (i) => i)..shuffle(random); // revuelve los jobs 
 
@@ -930,12 +943,16 @@ _TabuCandidate? _bestIntraMove({
       final slots = List<int>.generate(without.length + 1, (k) => k)..shuffle(random); // lista de las posiciones donde se podria insertar 
 
       for (final j in slots) {
-        attempts++;
-        if (attempts > maxAttempts) return null;
+        // Reinsertar en su propia posición (j == i) reproduce la secuencia
+        // original: se descarta antes de gastar un intento.
+        if (j == i) continue;
+
+        if (machineAttempts >= machineBudget) continue machineLoop;
+        machineAttempts++;
+        usedAttempts++;
 
         final List<ParallelInput> trial = List<ParallelInput>.from(without) // guarda la secuencia en trial 
-          ..insert(j, moved); // se inserta el job en la posicion indicada 
-        if (_sameOrder(trial, seq)) continue; // revisa que no esten en el mismo campo 
+        ..insert(j, moved); // se inserta el job en la posicion indicada 
 
         final Duration newFlow = _machineFlow(machineId, trial); // calculo el flow de la maquina 
         final int deltaMinutes = newFlow.inMinutes - (flowCache[machineId]?.inMinutes ?? 0); // compara los tiempos de las soluciones 
@@ -968,8 +985,8 @@ _TabuCandidate? _bestIntraMove({
     }
   }
   return null;
-}
 
+}
 // ----------------------------------------------------------------------------
 // RAMA INTER-MÁQUINA — estrategia de mejor mejora.
 // Saca un job de su máquina origen, prueba las máquinas destino elegibles
@@ -1059,7 +1076,7 @@ _TabuCandidate? _bestInterMove({
 // ----------------------------------------------------------------------------
 // BUCLE PRINCIPAL
 // ----------------------------------------------------------------------------
-void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr hasta 4 segundos 
+void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4 segundos 
   if (inputJobs.length < 2) {
     _clearSchedule();
     _assignJobsToMachines();  // busac donde hayan varios trabajo
@@ -1067,39 +1084,62 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
   }
 
   final int n = inputJobs.length; // tamalno de jobs 
-  final Random random = Random(seed);
+  final Random random = Random(params.seed);
+  final Random startRandom = Random(params.seed + 1);
   final Stopwatch watch = Stopwatch()..start(); // cuenta el tiempo de ejecucion del tabu search 
 
-  final int maxIterations = min(1000, max(300, 20 * n)); // es el calculo de tamaño por el numero de jobs 
-  final int intraAttempts = max(20, 4 * n);
-  final int interJobSamples = max(3, n ~/ 8); // cuantos jobs se considran
-  const int maxDestinations = 3; // destinos que prueba el job 
 
-  final int tenureBase = sqrt(n).round().clamp(2, n); // cuanto un movimiento permanece tabu 
-  final int minTenure = max(2, tenureBase - 1);
-  final int maxTenure = tenureBase + 2;
-  final int shortTenure = max(1, tenureBase ~/ 2);
+    // Llegan desde la interfaz. Se acotan aqui para que un valor invalido
+  // no desactive silenciosamente una rama completa.
+  final int maxIterations   = params.maxIterations.clamp(1, 100000);
+  final int intraAttempts   = params.intraAttempts.clamp(1, 100000);
+  final int interJobSamples = params.interJobSamples.clamp(1, n);
+  final int maxDestinations = params.maxDestinations.clamp(1, 100);
+  final int timeBudgetMs    = params.timeBudgetMs.clamp(100, 600000);
+  final bool randomStart    = params.randomStart;
 
-  final int s1 = max(15, n); // estancamiento -> intensificar
-  final int s2 = max(30, 3 * n); // estancamiento -> diversificar
+  const int minTenure = 3;
+  const int maxTenure = 20;
+  const int shortTenure = 10;
+
+
+
+  const int s1 = 5; // estancamiento -> intensificar
+  const int s2 = 15; // estancamiento -> diversificar
 
   final Map<ParallelInput, int> uid = {
     for (int k = 0; k < n; k++) inputJobs[k]: k, // se le asigan ids unicos a cada trabajos 
   };
 
-  // --- Semillas: se evalúan las 9 reglas de despacho + orden recibido ---
-  Map<int, List<ParallelInput>> bestAssignment = _greedyAssign(inputJobs);
-  int bestTotalMinutes = _totalFlow(bestAssignment).inMinutes;
-  final int initialFitness = bestTotalMinutes;
+   // --- Semillas: se evalúan las 9 reglas de despacho + orden recibido ---
+  // Siempre se calculan, se usen o no como arranque: sirven de referencia.
+  Map<int, List<ParallelInput>> seedAssignment = _greedyAssign(inputJobs);
+  int seedTotalMinutes = _totalFlow(seedAssignment).inMinutes;
 
   for (final seedSequence in _seedSolutions()) {
-    final candidateAssignment = _greedyAssign(seedSequence); // se evalua cada solucion en greeedy
-    final candidateTotal = _totalFlow(candidateAssignment).inMinutes; // se le saca el flujo total 
-    if (candidateTotal < bestTotalMinutes) {
-      bestAssignment = candidateAssignment;
-      bestTotalMinutes = candidateTotal; // toma la mejor solucion de reglas 
+    final candidateAssignment = _greedyAssign(seedSequence);
+    final candidateTotal = _totalFlow(candidateAssignment).inMinutes;
+    if (candidateTotal < seedTotalMinutes) {
+      seedAssignment = candidateAssignment;
+      seedTotalMinutes = candidateTotal;
     }
   }
+
+  // --- Punto de partida efectivo ---
+  Map<int, List<ParallelInput>> bestAssignment;
+  int bestTotalMinutes;
+
+  if (randomStart) {
+    bestAssignment = _randomAssign(inputJobs, startRandom);
+    bestTotalMinutes = _totalFlow(bestAssignment).inMinutes;
+  } else {
+    bestAssignment = seedAssignment;
+    bestTotalMinutes = seedTotalMinutes;
+  }
+
+  final int initialFitness = bestTotalMinutes;
+
+
 
   Map<int, List<ParallelInput>> currentAssignment = // copia 
       _deepCopyAssignment(bestAssignment);
@@ -1117,7 +1157,7 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
 // en que job esta cada maquina 
   final Map<ParallelInput, Duration> jobDelay = {};
   for (final entry in currentAssignment.entries) {
-    jobDelay.addAll(_machineJobDelays(entry.key, entry.value));
+    jobDelay.addAll(_machineRemovalGains(entry.key, entry.value));
   }
   // calculo del retraso de cada Job
 
@@ -1173,11 +1213,11 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
     // --- Aplicar el movimiento elegido ---
     currentAssignment[chosen.machineA] = chosen.newSequenceA; // Actualiza la maquina 
     flowCache[chosen.machineA] = chosen.newFlowA; // actualiza el flow 
-    jobDelay.addAll(_machineJobDelays(chosen.machineA, chosen.newSequenceA)); // Actualiza los retrasos 
+    jobDelay.addAll(_machineRemovalGains(chosen.machineA, chosen.newSequenceA)); // Actualiza los retrasos 
     if (!chosen.isIntra) {
       currentAssignment[chosen.machineB!] = chosen.newSequenceB!;
       flowCache[chosen.machineB!] = chosen.newFlowB!; // Actualiza la lamquina a la que se le saca 
-      jobDelay.addAll(_machineJobDelays(chosen.machineB!, chosen.newSequenceB!));
+      jobDelay.addAll(_machineRemovalGains(chosen.machineB!, chosen.newSequenceB!));
       for (final job in chosen.newSequenceB!) {
         currentMachineOf[job] = chosen.machineB!;
       }
@@ -1218,19 +1258,23 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
       currentTotalMinutes = bestTotalMinutes;
       for (final entry in currentAssignment.entries) {
         flowCache[entry.key] = _machineFlow(entry.key, entry.value);
-        jobDelay.addAll(_machineJobDelays(entry.key, entry.value));
+        jobDelay.addAll(_machineRemovalGains(entry.key, entry.value));
         for (final job in entry.value) {
           currentMachineOf[job] = entry.key;
         }
       }
       intensifying = true;
     } else if (noImprove >= s2) { 
+      tabuList.clear();
       // Diversificar: penaliza los atributos más frecuentes y perturba.
       final frequentAttributes = moveFrequency.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
       for (final entry in frequentAttributes.take(5)) { // penaliza los 5 movimiento mas usados 
         tabuList[entry.key] = iter + maxTenure * 2;
       } // penaliza los movimientos muy frecuentes 
+
+      moveFrequency.updateAll((_, count) => count ~/ 2);
+      moveFrequency.removeWhere((_, count) => count == 0);
 
       currentAssignment = _deepCopyAssignment(bestAssignment);
       final machineIds = currentAssignment.keys.toList();
@@ -1239,8 +1283,7 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
         if (currentAssignment[from]!.isEmpty) continue;
         final job = currentAssignment[from]! // los jobs 
             .removeAt(random.nextInt(currentAssignment[from]!.length)); // remueve uno 
-        final eligibleTargets =
-            job.durationsInMachines.keys.where((m) => m != from).toList(); // mauinas donde se pueda trabajar 
+        final eligibleTargets =job.durationsInMachines.keys.where((m) => m != from  && currentAssignment.containsKey(m)).toList(); // mauinas donde se pueda trabajar 
         if (eligibleTargets.isEmpty) {
           currentAssignment[from]!.add(job);
           continue;
@@ -1252,22 +1295,19 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
 
       for (final entry in currentAssignment.entries) { // actualiza todo 
         flowCache[entry.key] = _machineFlow(entry.key, entry.value); 
-        jobDelay.addAll(_machineJobDelays(entry.key, entry.value));
+        jobDelay.addAll(_machineRemovalGains(entry.key, entry.value));
         for (final job in entry.value) {
           currentMachineOf[job] = entry.key;
         }
       }
       // recalcula el total 
       currentTotalMinutes = _totalFlow(currentAssignment).inMinutes;
-      // borra la lisat tabu  (REVISAR )
-      tabuList.clear();
       noImprove = 0;
       intensifying = false;
     }
 
     iter++;
   }
-
   // _assignJobsToMachines() would re-pick each job's machine on its own
   // greedy logic, discarding the inter-machine moves the search just made —
   // so the output is built directly from bestAssignment instead.
@@ -1285,6 +1325,11 @@ void tabuSearchRule({int seed = 20260806, int timeBudgetMs = 4000}) { // busacr 
           .toStringAsFixed(1);
   print('[TABU parallel intra/inter] n=$n · iteraciones=$iter · '
       '${watch.elapsedMilliseconds} ms');
+
+  print('[Iteraciones totales Criterio de parada] = $maxIterations ');
+
+  print('Randomizacion Activada: $randomStart');
+
   print('[TABU parallel intra/inter] flujo total: $initialFitness min → '
       '$bestTotalMinutes min ($mejora% de mejora)');
 }

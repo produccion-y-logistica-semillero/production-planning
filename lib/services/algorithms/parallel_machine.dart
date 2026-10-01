@@ -1098,9 +1098,9 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
   final int timeBudgetMs    = params.timeBudgetMs.clamp(100, 600000);
   final bool randomStart    = params.randomStart;
 
-  const int minTenure = 3;
-  const int maxTenure = 20;
-  const int shortTenure = 10;
+  const int minTenure = 5;
+  const int maxTenure = 12;
+  const int shortTenure = 2;
 
 
 

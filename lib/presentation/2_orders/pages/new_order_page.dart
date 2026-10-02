@@ -161,6 +161,18 @@ class NewOrderPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
+                      onPressed: () =>
+                          _showMachineInitialStatesDialog(context, state, colorScheme),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Definir estado inicial de máquinas'),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
                       onPressed: () {
                         if (!_validateForm(state)) {
                           _showValidationDialog(context, colorScheme);
@@ -209,48 +221,127 @@ class NewOrderPage extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SegmentedButton<DateRegistrationMode>(
-            segments: const [
-              ButtonSegment(
-                value: DateRegistrationMode.manual,
-                label: Text('Manual'),
-                icon: Icon(Icons.edit_calendar_rounded, size: 16),
+          Row(
+            children: [
+              SegmentedButton<DateRegistrationMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: DateRegistrationMode.manual,
+                    label: Text('Manual'),
+                    icon: Icon(Icons.edit_calendar_rounded, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: DateRegistrationMode.automatic,
+                    label: Text('Automático'),
+                    icon: Icon(Icons.auto_awesome_rounded, size: 16),
+                  ),
+                ],
+                selected: {state.dateMode},
+                onSelectionChanged: (selection) =>
+                    bloc.setDateMode(selection.first),
               ),
-              ButtonSegment(
-                value: DateRegistrationMode.automatic,
-                label: Text('Automático'),
-                icon: Icon(Icons.auto_awesome_rounded, size: 16),
-              ),
+              if (state.dateMode == DateRegistrationMode.automatic) ...[
+                const SizedBox(width: 12),
+                const Text('Plazo (días):'),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: leadTimeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(isDense: true),
+                    onSubmitted: (value) {
+                      final days = int.tryParse(value.trim());
+                      if (days != null && days > 0) {
+                        bloc.setLeadTimeDays(days);
+                      }
+                    },
+                    onEditingComplete: () {
+                      final days =
+                          int.tryParse(leadTimeController.text.trim());
+                      if (days != null && days > 0) {
+                        bloc.setLeadTimeDays(days);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ],
-            selected: {state.dateMode},
-            onSelectionChanged: (selection) =>
-                bloc.setDateMode(selection.first),
           ),
           if (state.dateMode == DateRegistrationMode.automatic) ...[
-            const SizedBox(width: 12),
-            const Text('Plazo (días):'),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 60,
-              child: TextField(
-                controller: leadTimeController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(isDense: true),
-                onSubmitted: (value) {
-                  final days = int.tryParse(value.trim());
-                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
-                },
-                onEditingComplete: () {
-                  final days = int.tryParse(leadTimeController.text.trim());
-                  if (days != null && days > 0) bloc.setLeadTimeDays(days);
-                },
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _selectOrderAutomaticHour(
+                  context,
+                  'Hora de inicio',
+                  state.automaticStartHour,
+                  bloc.setAutomaticStartHour,
+                  colorScheme,
+                ),
+                const SizedBox(width: 24),
+                _selectOrderAutomaticHour(
+                  context,
+                  'Hora de entrega',
+                  state.automaticDueHour,
+                  bloc.setAutomaticDueHour,
+                  colorScheme,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Aplican a todos los jobs de esta orden que no tengan su '
+              'propia hora. Si se dejan vacías, se usa la hora actual.',
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  /// Order-wide hour picker for automatic mode — mirrors the per-job
+  /// `_selectAutomaticHour` in `add_job.dart`, but writes to the bloc's
+  /// order-level default instead of a single job's override.
+  Widget _selectOrderAutomaticHour(
+    BuildContext context,
+    String label,
+    TimeOfDay? hour,
+    ValueChanged<TimeOfDay?> onPicked,
+    ColorScheme colorScheme,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
+        TextButton(
+          onPressed: () async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: hour ?? TimeOfDay.now(),
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: hour == null
+              ? const Text('Hora actual')
+              : Text("${hour.hour.toString().padLeft(2, '0')}:"
+                  "${hour.minute.toString().padLeft(2, '0')}"),
+        ),
+        if (hour != null)
+          IconButton(
+            icon: const Icon(Icons.clear, size: 16),
+            tooltip: 'Usar hora actual',
+            onPressed: () => onPicked(null),
+          ),
+      ],
     );
   }
 
@@ -416,6 +507,127 @@ class NewOrderPage extends StatelessWidget {
             );
           }
         );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Machine initial states dialog
+  // ---------------------------------------------------------------------------
+
+  /// The state (A-J) each candidate machine starts this program in, before
+  /// its first job. Without one, that machine's first job pays no setup —
+  /// there is nothing to compare it against, same as before this existed.
+  void _showMachineInitialStatesDialog(
+    BuildContext context,
+    NewOrderState state,
+    ColorScheme colorScheme,
+  ) {
+    if (state is! NewOrdersState) return;
+
+    final machineNameSet = <String>{};
+    for (final job in state.jobs) {
+      machineNameSet
+          .addAll(job.stateKey.currentState?.getMachineNames() ?? []);
+    }
+    final machineNames = machineNameSet.toList()..sort();
+
+    if (machineNames.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Estado inicial de máquinas'),
+          content: const Text(
+              'Seleccione al menos una máquina en un job antes de definir '
+              'su estado inicial.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    final bloc = BlocProvider.of<NewOrderBloc>(context);
+    final current =
+        Map<String, String>.from(state.machineInitialStates ?? {});
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Estado inicial de máquinas'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'La letra que cada máquina tiene antes de que llegue su '
+                      'primer job de esta orden. Se usa para calcular el '
+                      'alistamiento del primer job en esa máquina.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final machine in machineNames)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(machine)),
+                            DropdownButton<String?>(
+                              value: current[machine],
+                              hint: const Text('Sin estado'),
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('Sin estado'),
+                                ),
+                                ...letters.map((l) => DropdownMenuItem<String?>(
+                                    value: l, child: Text(l))),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == null) {
+                                    current.remove(machine);
+                                  } else {
+                                    current[machine] = value;
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cerrar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  bloc.setMachineInitialStates(current);
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        });
       },
     );
   }

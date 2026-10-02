@@ -37,6 +37,7 @@ class OrderDaoSqlLite implements OrderDao {
           orderId,
           DateTime.parse(map['reg_date']),
           setupTimeMatrix: matrix,
+          machineInitialStates: await _readMachineInitialStates(orderId),
         ));
       }
       return orders;
@@ -45,7 +46,7 @@ class OrderDaoSqlLite implements OrderDao {
       throw LocalStorageFailure();
     }
   }
-  
+
   @override
   Future<OrderModel> getOrderById(int id) async {
     try {
@@ -70,11 +71,27 @@ class OrderDaoSqlLite implements OrderDao {
         map['order_id'] as int,
         DateTime.parse(map['reg_date'] as String),
         setupTimeMatrix: matrix,
+        machineInitialStates: await _readMachineInitialStates(id),
       );
     } catch (error) {
       print('OrderDaoSqlLite.getOrderById error: ${error.toString()}');
       throw LocalStorageFailure();
     }
+  }
+
+  Future<Map<String, String>?> _readMachineInitialStates(int orderId,
+      {DatabaseExecutor? executor}) async {
+    final exec = executor ?? db;
+    final rows = await exec.query(
+      'order_machine_initial_states',
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+    );
+    if (rows.isEmpty) return null;
+    return {
+      for (final row in rows)
+        row['machine_name'] as String: row['state_char'] as String,
+    };
   }
 
   @override
@@ -104,6 +121,16 @@ class OrderDaoSqlLite implements OrderDao {
           }
         }
 
+        if (order.machineInitialStates != null) {
+          for (final entry in order.machineInitialStates!.entries) {
+            await txn.insert('order_machine_initial_states', {
+              'order_id': orderId,
+              'machine_name': entry.key,
+              'state_char': entry.value,
+            });
+          }
+        }
+
         return orderId;
       });
     } catch (error) {
@@ -114,34 +141,82 @@ class OrderDaoSqlLite implements OrderDao {
   
   @override
   Future<void> updateSetupMatrix(
-      int orderId, Map<String, Map<String, Map<String, int>>>? matrix) async {
+      int orderId, Map<String, Map<String, Map<String, int>>>? matrix,
+      {DatabaseExecutor? executor}) async {
     try {
-      await db.transaction((txn) async {
-        await txn.delete(
-          'order_setup_matrix',
-          where: 'order_id = ?',
-          whereArgs: [orderId],
-        );
-
-        if (matrix != null) {
-          for (var mEntry in matrix.entries) {
-            for (var entry in mEntry.value.entries) {
-              for (var subEntry in entry.value.entries) {
-                await txn.insert('order_setup_matrix', {
-                  'order_id': orderId,
-                  'machine_name': mEntry.key,
-                  'from_state': entry.key,
-                  'to_state': subEntry.key,
-                  'duration_minutes': subEntry.value,
-                });
-              }
-            }
-          }
-        }
-      });
+      // When an outer transaction is already running (updateOrder wraps
+      // this together with the job delete/reinsert), write onto it instead
+      // of opening a nested one.
+      if (executor != null) {
+        await _replaceSetupMatrix(executor, orderId, matrix);
+      } else {
+        await db.transaction(
+            (txn) => _replaceSetupMatrix(txn, orderId, matrix));
+      }
     } catch (error) {
       print('OrderDaoSqlLite.updateSetupMatrix error: ${error.toString()}');
       throw LocalStorageFailure();
+    }
+  }
+
+  Future<void> _replaceSetupMatrix(DatabaseExecutor txn, int orderId,
+      Map<String, Map<String, Map<String, int>>>? matrix) async {
+    await txn.delete(
+      'order_setup_matrix',
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+    );
+
+    if (matrix != null) {
+      for (var mEntry in matrix.entries) {
+        for (var entry in mEntry.value.entries) {
+          for (var subEntry in entry.value.entries) {
+            await txn.insert('order_setup_matrix', {
+              'order_id': orderId,
+              'machine_name': mEntry.key,
+              'from_state': entry.key,
+              'to_state': subEntry.key,
+              'duration_minutes': subEntry.value,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  @override
+  Future<void> updateMachineInitialStates(
+      int orderId, Map<String, String>? states,
+      {DatabaseExecutor? executor}) async {
+    try {
+      if (executor != null) {
+        await _replaceMachineInitialStates(executor, orderId, states);
+      } else {
+        await db.transaction(
+            (txn) => _replaceMachineInitialStates(txn, orderId, states));
+      }
+    } catch (error) {
+      print('OrderDaoSqlLite.updateMachineInitialStates error: '
+          '${error.toString()}');
+      throw LocalStorageFailure();
+    }
+  }
+
+  Future<void> _replaceMachineInitialStates(
+      DatabaseExecutor txn, int orderId, Map<String, String>? states) async {
+    await txn.delete(
+      'order_machine_initial_states',
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+    );
+    if (states != null) {
+      for (final entry in states.entries) {
+        await txn.insert('order_machine_initial_states', {
+          'order_id': orderId,
+          'machine_name': entry.key,
+          'state_char': entry.value,
+        });
+      }
     }
   }
 
@@ -150,6 +225,11 @@ class OrderDaoSqlLite implements OrderDao {
     try {
       await db.delete(
         'order_setup_matrix',
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+      await db.delete(
+        'order_machine_initial_states',
         where: 'order_id = ?',
         whereArgs: [orderId],
       );

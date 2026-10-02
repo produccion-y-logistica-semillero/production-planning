@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
@@ -8,9 +7,7 @@ import 'package:production_planning/presentation/0_machines/widgets/high_order_w
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
-
 class MachinesListPage extends StatelessWidget {
-
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
 
@@ -18,7 +15,6 @@ class MachinesListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     Color onSecondaryContainer =
         Theme.of(context).colorScheme.onSecondaryContainer;
 
@@ -29,7 +25,6 @@ class MachinesListPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-
               IconButton(
                   onPressed: () => printInfo(context,
                       title: "Manejo de tipos de maquinas",
@@ -61,7 +56,6 @@ class MachinesListPage extends StatelessWidget {
             ],
           ),
           BlocBuilder<MachineTypesBloc, MachineTypeState>(
-
               builder: (context, state) {
             //this is pending for customize, because right now is not showing success or error
             //messages, it simply shows again the list, we need to add success or error dialogs
@@ -86,8 +80,9 @@ class MachinesListPage extends StatelessWidget {
                 ),
             };
             //IF WE ARE IN THE INITIAL STATE, WE TRIGGER THE FETCHING OF THE MACHINES
-            if (state is MachineTypeInitial)
+            if (state is MachineTypeInitial) {
               BlocProvider.of<MachineTypesBloc>(context).retrieveMachineTypes();
+            }
 
             return Expanded(
               child: Container(
@@ -96,7 +91,6 @@ class MachinesListPage extends StatelessWidget {
               ),
             );
           })
-
         ],
       ),
     );
@@ -104,7 +98,6 @@ class MachinesListPage extends StatelessWidget {
 
   void _clickNewMachineType(BuildContext context) async {
     await showDialog(
-
         context: context,
         builder: (dialogContext) {
           return AddMachineTypeDialog(
@@ -121,6 +114,5 @@ class MachinesListPage extends StatelessWidget {
             },
           );
         });
-
   }
 }

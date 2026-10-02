@@ -110,80 +110,93 @@ class JobDaoSQLlite implements JobDao {
   }
 
   @override
-  Future<void> insertJob(JobEntity job, int orderId) async {
+  Future<void> insertJob(JobEntity job, int orderId,
+      {DatabaseExecutor? executor}) async {
     try {
       final hasAmountColumn = await _jobsTableHasAmountColumn();
-      await db.transaction((txn) async {
-        // map job data for data base
-        final jobMap = {
-          'sequence_id': job.sequence!.id,
-          'order_id': orderId,
-          'job_name': job.jobName,
-          'due_date': job.dueDate.toIso8601String(), // due date
-          'priority': job.priority,
-          'available_date': job.availableDate.toIso8601String(),
-          // Only needed on installs created before "amount" was removed;
-          // see _jobsTableHasAmountColumn.
-          if (hasAmountColumn) 'amount': 1,
-        };
-
-        // insert job to data base
-        final jobId = await txn.insert('jobs', jobMap);
-
-        // Insertar preemption matrix si existe
-        if (job.preemptionMatrix != null && job.preemptionMatrix!.isNotEmpty) {
-          for (var entry in job.preemptionMatrix!.entries) {
-            await txn.insert('job_preemption', {
-              'job_id': jobId,
-              'machine_id': entry.key,
-              'can_preempt': entry.value,
-            });
-          }
-        }
-        // Insertar tiempos por tarea/máquina si existen
-        if (job.taskMachineTimes != null && job.taskMachineTimes!.isNotEmpty) {
-          for (final entry in job.taskMachineTimes!.entries) {
-            final taskId = entry.key;
-            final inner = entry.value;
-            for (final e in inner.entries) {
-              final processingMinutes = e.value.processing.inMinutes;
-              final preparationMinutes = e.value.preparation.inMinutes;
-              final restMinutes = e.value.rest.inMinutes;
-              await txn.insert('job_task_machine_times', {
-                'job_id': jobId,
-                'task_id': taskId,
-                'machine_id': e.key,
-                'processing_minutes': processingMinutes,
-                'preparation_minutes': preparationMinutes,
-                'rest_minutes': restMinutes,
-              });
-            }
-          }
-        }
-        
-        // Insertar estados finales por máquina si existen
-        if (job.machineFinalStates != null && job.machineFinalStates!.isNotEmpty) {
-          for (var entry in job.machineFinalStates!.entries) {
-            await txn.insert('job_machine_states', {
-              'job_id': jobId,
-              'machine_type_id': entry.key,
-              'state_char': entry.value,
-            });
-          }
-        }
-      });
+      // When an outer transaction is already running (e.g. updateOrder's
+      // delete-then-reinsert), write onto it instead of opening a nested
+      // one — sqflite Transaction has no .transaction() of its own.
+      if (executor != null) {
+        await _insertJobRows(executor, job, orderId, hasAmountColumn);
+      } else {
+        await db.transaction(
+            (txn) => _insertJobRows(txn, job, orderId, hasAmountColumn));
+      }
     } catch (error) {
       print("ERROR AL INSERTAR JOB EN DAO: ${error.toString()}");
       throw LocalStorageFailure();
     }
   }
 
+  Future<void> _insertJobRows(DatabaseExecutor txn, JobEntity job,
+      int orderId, bool hasAmountColumn) async {
+    // map job data for data base
+    final jobMap = {
+      'sequence_id': job.sequence!.id,
+      'order_id': orderId,
+      'job_name': job.jobName,
+      'due_date': job.dueDate.toIso8601String(), // due date
+      'priority': job.priority,
+      'available_date': job.availableDate.toIso8601String(),
+      // Only needed on installs created before "amount" was removed;
+      // see _jobsTableHasAmountColumn.
+      if (hasAmountColumn) 'amount': 1,
+    };
+
+    // insert job to data base
+    final jobId = await txn.insert('jobs', jobMap);
+
+    // Insertar preemption matrix si existe
+    if (job.preemptionMatrix != null && job.preemptionMatrix!.isNotEmpty) {
+      for (var entry in job.preemptionMatrix!.entries) {
+        await txn.insert('job_preemption', {
+          'job_id': jobId,
+          'machine_id': entry.key,
+          'can_preempt': entry.value,
+        });
+      }
+    }
+    // Insertar tiempos por tarea/máquina si existen
+    if (job.taskMachineTimes != null && job.taskMachineTimes!.isNotEmpty) {
+      for (final entry in job.taskMachineTimes!.entries) {
+        final taskId = entry.key;
+        final inner = entry.value;
+        for (final e in inner.entries) {
+          final processingMinutes = e.value.processing.inMinutes;
+          final preparationMinutes = e.value.preparation.inMinutes;
+          final restMinutes = e.value.rest.inMinutes;
+          await txn.insert('job_task_machine_times', {
+            'job_id': jobId,
+            'task_id': taskId,
+            'machine_id': e.key,
+            'processing_minutes': processingMinutes,
+            'preparation_minutes': preparationMinutes,
+            'rest_minutes': restMinutes,
+          });
+        }
+      }
+    }
+
+    // Insertar estados finales por máquina si existen
+    if (job.machineFinalStates != null && job.machineFinalStates!.isNotEmpty) {
+      for (var entry in job.machineFinalStates!.entries) {
+        await txn.insert('job_machine_states', {
+          'job_id': jobId,
+          'machine_type_id': entry.key,
+          'state_char': entry.value,
+        });
+      }
+    }
+  }
 
   @override
-  Future<void> deleteJobsFromOrder(int orderId) async {
+  Future<void> deleteJobsFromOrder(int orderId,
+      {DatabaseExecutor? executor}) async {
+    final exec = executor ?? db;
     try {
       // Obtener job_ids antes de eliminar
-      final jobs = await db.query(
+      final jobs = await exec.query(
         'jobs',
         columns: ['job_id'],
         where: 'order_id = ?',
@@ -192,7 +205,7 @@ class JobDaoSQLlite implements JobDao {
 
       // Eliminar registros de job_preemption para cada job
       for (var job in jobs) {
-        await db.delete(
+        await exec.delete(
           'job_preemption',
           where: 'job_id = ?',
           whereArgs: [job['job_id']],
@@ -201,15 +214,27 @@ class JobDaoSQLlite implements JobDao {
 
       // Eliminar registros de job_machine_states para cada job
       for (var job in jobs) {
-        await db.delete(
+        await exec.delete(
           'job_machine_states',
           where: 'job_id = ?',
           whereArgs: [job['job_id']],
         );
       }
 
+      // Eliminar registros de job_task_machine_times para cada job.
+      // Faltaba: como actualizar una orden borra y reinserta sus jobs, cada
+      // edición dejaba aquí un juego completo de filas colgando de un job_id
+      // que ya no existe.
+      for (var job in jobs) {
+        await exec.delete(
+          'job_task_machine_times',
+          where: 'job_id = ?',
+          whereArgs: [job['job_id']],
+        );
+      }
+
       // Eliminar jobs
-      await db.delete(
+      await exec.delete(
         'jobs',
         where: 'order_id = ?',
         whereArgs: [orderId],

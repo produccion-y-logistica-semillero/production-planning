@@ -18,9 +18,15 @@ class _GanttRow {
   final String name;
   final List<PlanningTaskEntity> tasks;
 
+  /// Color shown as a dot next to this row's name — the machine's color in
+  /// "Por Máquina" view, the job's color in "Por Job" view. Null only when
+  /// the row somehow has no resolvable color.
+  final Color? accentColor;
+
   const _GanttRow({
     required this.name,
     required this.tasks,
+    this.accentColor,
   });
 }
 
@@ -32,12 +38,59 @@ class _PositionedSegment {
   final double left;
   final double right;
 
+  /// True for a sequence-dependent setup/changeover block that runs right
+  /// before the task's own processing — rendered with no fill and diagonal
+  /// stripes in the job's own color, so it reads as "preparing the machine
+  /// for this job" while never being mistaken for actual processing time.
+  final bool isSetup;
+
   const _PositionedSegment({
     required this.task,
     required this.label,
     required this.left,
     required this.right,
+    this.isSetup = false,
   });
+}
+
+/// Paints evenly-spaced diagonal stripes across the widget's bounds, used to
+/// mark setup/changeover bars as visually distinct from the solid job
+/// processing bars they share a color with.
+class _DiagonalStripesPainter extends CustomPainter {
+  final Color stripeColor;
+  final double spacing;
+  final double strokeWidth;
+
+  const _DiagonalStripesPainter({
+    required this.stripeColor,
+    this.spacing = 8.0,
+    this.strokeWidth = 2.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = stripeColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    // Diagonal lines at 45°, spaced evenly, spanning wide enough that the
+    // clip (applied by the caller) covers the whole bar regardless of its
+    // width — walk an offset from -size.height to size.width.
+    for (double x = -size.height; x < size.width; x += spacing) {
+      canvas.drawLine(
+        Offset(x, size.height),
+        Offset(x + size.height, 0),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DiagonalStripesPainter oldDelegate) =>
+      oldDelegate.stripeColor != stripeColor ||
+      oldDelegate.spacing != spacing ||
+      oldDelegate.strokeWidth != strokeWidth;
 }
 
 class GanttChart extends StatefulWidget {
@@ -80,7 +133,30 @@ class _GanttChartState extends State<GanttChart> {
   late int initialHour;
   late int endingHour;
 
+  /// Job color, keyed by jobId. Seeded from the jobId itself (see
+  /// [_assignJobColors]) so the same job keeps the same color across
+  /// rebuilds and across the side-by-side charts in gantt_page_container.
   final Map<int, Color> _jobColor = {};
+
+  /// Machine color, keyed by machineName — shown as a dot beside the row
+  /// name so each machine has a stable visual identity. Assigned by the
+  /// machine's position in [GanttChart.machines], not by a hash, so two
+  /// charts compared side by side agree.
+  final Map<String, Color> _machineColor = {};
+
+  /// Fixed, mutually distinguishable colors handed out to machines in order.
+  static const List<Color> _machinePalette = [
+    Color(0xFF1E88E5), // azul
+    Color(0xFFE65100), // naranja
+    Color(0xFF2E7D32), // verde
+    Color(0xFF6A1B9A), // morado
+    Color(0xFFC62828), // rojo
+    Color(0xFF00838F), // cian
+    Color(0xFF8D6E63), // café
+    Color(0xFFAD1457), // magenta
+    Color(0xFF558B2F), // oliva
+    Color(0xFF4527A0), // índigo
+  ];
 
   int? _selectedRule;
 
@@ -102,6 +178,9 @@ class _GanttChartState extends State<GanttChart> {
     if (endingHour <= initialHour) {
       endingHour = initialHour + 1;
     }
+
+    _assignMachineColors();
+    _assignJobColors();
 
     _calculateChartDateRange();
     _updateRows();
@@ -150,6 +229,39 @@ class _GanttChartState extends State<GanttChart> {
     super.dispose();
   }
 
+  /// Hands each machine a color from [_machinePalette] following the order
+  /// they arrive in, so the assignment is deterministic: the same machine
+  /// gets the same color on every rebuild and in every chart on screen.
+  void _assignMachineColors() {
+    for (int i = 0; i < widget.machines.length; i++) {
+      _machineColor[widget.machines[i].machineName] =
+          _machinePalette[i % _machinePalette.length];
+    }
+  }
+
+  /// Precomputes every job's color up front, seeding the generator with the
+  /// jobId itself. Doing it here rather than lazily while painting bars
+  /// matters for two reasons: the row-name panel is built before the bars in
+  /// the same frame and needs the color already resolved, and seeding keeps
+  /// a job's color identical across the charts that gantt_page_container
+  /// places side by side.
+  void _assignJobColors() {
+    for (final machine in widget.machines) {
+      for (final task in machine.tasks) {
+        _jobColor.putIfAbsent(task.jobId, () {
+          final random = Random(task.jobId);
+
+          return Color.fromARGB(
+            255,
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
+            random.nextInt(160) + 60,
+          );
+        });
+      }
+    }
+  }
+
   void _calculateChartDateRange() {
     DateTime? earliest;
     DateTime? latest;
@@ -166,6 +278,16 @@ class _GanttChartState extends State<GanttChart> {
 
         if (task.startDate.isBefore(earliest)) {
           earliest = task.startDate;
+        }
+
+        // startDate is the start of *processing*: a task's setup block runs
+        // before it, so it can fall outside the range startDate/endDate
+        // describe. Without this the earliest setup bar would be clamped
+        // onto the first displayed day instead of drawn where it belongs.
+        for (final setupSegment in task.setupSegments) {
+          if (setupSegment.start.isBefore(earliest!)) {
+            earliest = setupSegment.start;
+          }
         }
 
         if (task.endDate.isAfter(latest!)) {
@@ -215,6 +337,7 @@ class _GanttChartState extends State<GanttChart> {
         return _GanttRow(
           name: machine.machineName,
           tasks: machineTasks,
+          accentColor: _machineColor[machine.machineName],
         );
       }).toList();
     } else {
@@ -235,6 +358,7 @@ class _GanttChartState extends State<GanttChart> {
         return _GanttRow(
           name: label,
           tasks: tasks,
+          accentColor: _jobColor[entry.key],
         );
       }).toList();
     }
@@ -492,7 +616,7 @@ class _GanttChartState extends State<GanttChart> {
                 color: i.isEven
                     ? Theme.of(context)
                         .colorScheme
-                        .surfaceVariant
+                        .surfaceContainerHighest
                         .withOpacity(0.14)
                     : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(10),
@@ -502,14 +626,33 @@ class _GanttChartState extends State<GanttChart> {
                   width: 1,
                 ),
               ),
-              child: Text(
-                _rows[i].name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  if (_rows[i].accentColor != null) ...[
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _rows[i].accentColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  // Expanded so the name still gets a bounded width and its
+                  // ellipsis overflow keeps working next to the dot.
+                  Expanded(
+                    child: Text(
+                      _rows[i].name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -743,7 +886,7 @@ class _GanttChartState extends State<GanttChart> {
     double chartHeight,
     double rowHeight,
   ) {
-    final double rowSpacing = 5.0;
+    const double rowSpacing = 5.0;
     final double rowSlotHeight = rowHeight * _verticalZoom + rowSpacing;
     final List<Widget> backgrounds = [];
 
@@ -776,7 +919,7 @@ class _GanttChartState extends State<GanttChart> {
     double chartWidth,
     double rowHeight,
   ) {
-    final double rowSpacing = 5.0;
+    const double rowSpacing = 5.0;
     final double rowSlotHeight = rowHeight * _verticalZoom + rowSpacing;
     final bars = <Widget>[];
 
@@ -800,12 +943,31 @@ class _GanttChartState extends State<GanttChart> {
       final int rowIndex = i;
       final double top = (rowIndex * rowSlotHeight) + (rowSpacing / 2);
 
-      // Flatten every (task, segment) in this row and sort by start position,
-      // so each segment knows how much free space precedes the next one —
-      // needed to size/clip an external label without overlapping it.
+      // Flatten every (task, segment) in this row — both processing and
+      // setup/changeover segments — and sort by start position, so each
+      // segment knows how much free space precedes the next one — needed
+      // to size/clip an external label without overlapping it.
       final List<_PositionedSegment> rowSegments = [];
       for (final task in row.tasks) {
+        for (final setupSegment in task.setupSegments) {
+          final double left =
+              _calculateTaskLeft(setupSegment.start, chartWidth);
+          final double right = _calculateTaskLeft(setupSegment.end, chartWidth);
+          rowSegments.add(_PositionedSegment(
+            task: task,
+            label: 'Alistamiento — ${task.machineName}',
+            left: left,
+            right: right,
+            isSetup: true,
+          ));
+        }
+
         final bool isSegmented = task.segments.length > 1;
+        // In "Por Job" the row already names the job, so each block names
+        // the machine it runs on instead.
+        final String baseLabel = _currentMode == GanttViewMode.byJob
+            ? task.machineName
+            : task.displayName;
         for (int segIndex = 0; segIndex < task.segments.length; segIndex++) {
           final segment = task.segments[segIndex];
           final double left = _calculateTaskLeft(segment.start, chartWidth);
@@ -813,8 +975,8 @@ class _GanttChartState extends State<GanttChart> {
           rowSegments.add(_PositionedSegment(
             task: task,
             label: isSegmented
-                ? '${task.displayName} (${segIndex + 1}/${task.segments.length})'
-                : task.displayName,
+                ? '$baseLabel (${segIndex + 1}/${task.segments.length})'
+                : baseLabel,
             left: left,
             right: right,
           ));
@@ -826,19 +988,16 @@ class _GanttChartState extends State<GanttChart> {
         final ps = rowSegments[s];
         final task = ps.task;
 
-        if (!_jobColor.containsKey(task.jobId)) {
-          final random = Random();
+        // Colors are precomputed in _assignJobColors, but fall back to a
+        // neutral grey rather than throwing if a task somehow wasn't seen
+        // there (e.g. a machine list mutated after initState).
+        final Color jobColor = _jobColor[task.jobId] ?? Colors.blueGrey;
 
-          _jobColor[task.jobId] = Color.fromARGB(
-            255,
-            random.nextInt(160) + 60,
-            random.nextInt(160) + 60,
-            random.nextInt(160) + 60,
-          );
-        }
-
-        final color = _jobColor[task.jobId]!;
-        final bool isSegmented = task.segments.length > 1;
+        // A setup/changeover block is painted with no fill at all and only
+        // diagonal stripes in its job's color: it stays tied to the job the
+        // machine is being prepared for, while the empty background makes it
+        // impossible to confuse with the solid bar of actual processing.
+        final bool isSegmented = !ps.isSetup && task.segments.length > 1;
 
         final double width =
             (ps.right - ps.left).clamp(minBarWidth, chartWidth).toDouble();
@@ -849,6 +1008,22 @@ class _GanttChartState extends State<GanttChart> {
                 .clamp(0.0, 240.0)
                 .toDouble();
         final bool labelFitsInside = width >= insideLabelMinWidth;
+
+        final Widget insideLabel = FittedBox(
+          alignment: Alignment.centerLeft,
+          fit: BoxFit.scaleDown,
+          child: Text(
+            ps.label,
+            style: TextStyle(
+              // A setup bar has no fill, so white text on it would sit on
+              // the light row background and disappear — use the job's own
+              // color, which is dark enough to read there.
+              color: ps.isSetup ? jobColor : Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: taskLabelFontSize,
+            ),
+          ),
+        );
 
         // One bar per processing segment, so a task paused by a work-shift
         // boundary, scheduled maintenance, or the rest cap visibly shows the
@@ -866,50 +1041,73 @@ class _GanttChartState extends State<GanttChart> {
                     width: width,
                     height: rowHeight * _verticalZoom,
                     decoration: BoxDecoration(
-                      color: color,
+                      color: ps.isSetup ? Colors.transparent : jobColor,
                       borderRadius: BorderRadius.circular(6),
-                      border: isSegmented
-                          ? Border.all(color: Colors.white, width: 1)
-                          : null,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: Offset(1, 1),
-                        ),
-                      ],
+                      border: ps.isSetup
+                          ? Border.all(color: jobColor, width: 1.5)
+                          : isSegmented
+                              ? Border.all(color: Colors.white, width: 1)
+                              : null,
+                      // No shadow behind a setup bar: it would paint a solid
+                      // block under the transparent fill and defeat the
+                      // whole point of leaving the background showing.
+                      boxShadow: ps.isSetup
+                          ? null
+                          : const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 4,
+                                offset: Offset(1, 1),
+                              ),
+                            ],
                     ),
                     alignment: Alignment.centerLeft,
-                    padding: labelFitsInside
+                    // Setup bars take no padding here: it would inset the
+                    // ClipRRect below and leave the stripes short of the
+                    // bar's ends — plainly visible now that there is no fill
+                    // covering the gap. Their label is inset by its own
+                    // Padding inside the stack instead.
+                    padding: labelFitsInside && !ps.isSetup
                         ? const EdgeInsets.symmetric(horizontal: 10)
                         : EdgeInsets.zero,
-                    child: labelFitsInside
-                        ? FittedBox(
-                            alignment: Alignment.centerLeft,
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              ps.label,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: taskLabelFontSize,
-                              ),
+                    child: ps.isSetup
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(5),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                CustomPaint(
+                                  painter: _DiagonalStripesPainter(
+                                    stripeColor: jobColor,
+                                    spacing: 7,
+                                    strokeWidth: 1.5,
+                                  ),
+                                ),
+                                if (labelFitsInside)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: insideLabel,
+                                    ),
+                                  ),
+                              ],
                             ),
                           )
-                        : null,
+                        : (labelFitsInside ? insideLabel : null),
                   ),
                   if (!labelFitsInside && externalLabelWidth > 12)
                     Padding(
-                      padding:
-                          const EdgeInsets.only(left: externalLabelGap),
+                      padding: const EdgeInsets.only(left: externalLabelGap),
                       child: SizedBox(
                         width: externalLabelWidth,
                         child: Text(
                           ps.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.black87,
+                          style: TextStyle(
+                            color: ps.isSetup ? jobColor : Colors.black87,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),

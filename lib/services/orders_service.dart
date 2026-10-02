@@ -17,7 +17,9 @@ import 'package:production_planning/services/adapters/flow_shop_Adapter.dart';
 import 'package:production_planning/services/adapters/parallel_machine_adapter.dart';
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
+
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 
 class OrdersService {
   final OrderRepository orderRepo;
@@ -33,7 +35,8 @@ class OrdersService {
   }
 
   Future<Either<Failure, bool>> addOrder(List<NewOrderRequestModel> model,
-      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
+      Map<String, String>? machineInitialStates}) async {
     final List<JobEntity> jobs = model.asMap().entries.map((entry) {
       final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
@@ -71,7 +74,8 @@ class OrdersService {
     }
 
     final OrderEntity newOrder = OrderEntity(null, DateTime.now(), jobs,
-        setupTimeMatrix: setupTimeMatrix);
+        setupTimeMatrix: setupTimeMatrix,
+        machineInitialStates: machineInitialStates);
     try {
       return await orderRepo.createOrder(newOrder);
     } catch (error, stack) {
@@ -81,13 +85,15 @@ class OrdersService {
     }
   }
 
+
   Future<Either<Failure, bool>> deleteOrder(int id) async {
     return await orderRepo.deleteOrder(id);
   }
 
   Future<Either<Failure, bool>> updateOrder(
       int orderId, List<NewOrderRequestModel> model,
-      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix}) async {
+      {Map<String, Map<String, Map<String, int>>>? setupTimeMatrix,
+      Map<String, String>? machineInitialStates}) async {
     final List<JobEntity> jobs = model.asMap().entries.map((entry) {
       final jobModel = entry.value;
       Map<int, Map<int, MachineTimes>>? taskMachineTimes;
@@ -120,7 +126,8 @@ class OrdersService {
     }).toList();
 
     final OrderEntity updatedOrder = OrderEntity(orderId, DateTime.now(), jobs,
-        setupTimeMatrix: setupTimeMatrix);
+        setupTimeMatrix: setupTimeMatrix,
+        machineInitialStates: machineInitialStates);
     try {
       return await orderRepo.updateOrder(updatedOrder);
     } catch (error, stack) {
@@ -329,12 +336,11 @@ class OrdersService {
         final Map<int, int> predecessorCount = {};
 
         for (final dep in dependencies) {
-          if (dep.predecessor_id != null &&
-              dep.successor_id != null &&
+          if (dep.successor_id != null &&
               dep.predecessor_id != dep.successor_id &&
               taskIds.contains(dep.predecessor_id) &&
               taskIds.contains(dep.successor_id)) {
-            final successorId = dep.successor_id!;
+            final successorId = dep.successor_id;
             predecessorCount[successorId] =
                 (predecessorCount[successorId] ?? 0) + 1;
           }
@@ -635,32 +641,49 @@ class OrdersService {
 
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
       scheduleOrder(Tuple3<int, String, String> sch,{TabuParams? tabuParams,}) async {
+
+    // The preemption engine refuses to search forever when a machine's
+    // calendar admits no schedule (see SchedulingHorizonException). Turn
+    // that into a Failure carrying the reason, so the user is told what to
+    // fix instead of watching a spinner — or, in the five environments that
+    // run on the UI isolate, a frozen app.
+    try {
+      return await _dispatchSchedule(sch);
+    } on SchedulingHorizonException catch (e) {
+      print('scheduleOrder: orden imposible de planificar → $e');
+      return Left(UnschedulableOrderFailure(e.reason));
+    }
+  }
+  Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
+      _dispatchSchedule(Tuple3<int, String, String> sch, {
+    TabuParams? tabuParams,
+  })async {
+
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
-              orderRepository: orderRepo,
-              machineRepository: machineRepo)
+              orderRepository: orderRepo, machineRepository: machineRepo)
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .parallelMachineAdapter(sch.value1, sch.value2, tabuParams: tabuParams)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
-              machineRepository: machineRepo,
-              orderRepository: orderRepo)
+              machineRepository: machineRepo, orderRepository: orderRepo)
           .flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .flexibleFlowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE JOB SHOP' => await FlexibleJobShopAdapter(
-              machineRepository: machineRepo,
-              orderRepository: orderRepo)
-          .flexibleJobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+              machineRepository: machineRepo, orderRepository: orderRepo)
+          .flexibleJobShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
       'JOB SHOP' => await JobShopAdapter(
-              machineRepository: machineRepo,
-              orderRepository: orderRepo)
-            .jobShopAdapter(sch.value1, sch.value2).then((result) => result == null ? Left(LocalStorageFailure()) : Right(result)),
+              machineRepository: machineRepo, orderRepository: orderRepo)
+          .jobShopAdapter(sch.value1, sch.value2)
+          .then((result) =>
+              result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
-              machineRepository: machineRepo,
-              orderRepository: orderRepo)
+              machineRepository: machineRepo, orderRepository: orderRepo)
           .openShopAdapter(sch.value1, sch.value2)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),

@@ -43,13 +43,17 @@ class ParallelMachineAdapter {
     // environments that already support setup times.
     //
     // For Parallel Machines every machine is of the SAME type (that is the
-    // definition of the environment), so all machines share the same
-    // fromState → toState costs.  buildMachineStateSetupMatrix handles this
-    // transparently because it iterates over the provided machine list.
+    // definition of the environment). The matrix is still registered per
+    // machine NAME in the UI (one machine at a time), so a machine only
+    // gets its own entry when its name was picked there; the others
+    // inherit that entry as their station default — see
+    // buildMachineStateSetupMatrix's same-type fallback.
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
         buildMachineStateSetupMatrix(machineEntities, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machineEntities);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machineEntities, order.machineInitialStates);
 
     // ── 4. Build ParallelInput list ────────────────────────────────────────
     final List<ParallelInput> inputJobs = [];
@@ -118,6 +122,7 @@ class ParallelMachineAdapter {
       machineSlots,
       rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix, // <── passed through
+      initialMachineState: initialMachineState,
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
@@ -144,7 +149,10 @@ class ParallelMachineAdapter {
         retarded: out.dueDate.isBefore(out.endDate),
         jobId: job.jobId!,
         orderId: orderId,
+        machineName:
+            machineEntities.firstWhere((m) => m.id == out.machineId).name,
         segments: out.segments,
+        setupSegments: out.setupSegments,
       );
 
       machineTasksMap.putIfAbsent(out.machineId, () => []).add(planningTask);

@@ -24,7 +24,13 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
       // have its paused time counted as busy machine time.
       final taskDuration = task.segments
           .fold(Duration.zero, (sum, seg) => sum + seg.duration);
-      totalBusyTime += taskDuration;
+      // Setup/changeover time also occupies the machine, so it counts
+      // toward busy time (and thus reduces idle) the same as processing —
+      // but it's kept out of avarageProcessingTime, which represents pure
+      // job processing effort, not machine changeover overhead.
+      final setupDuration = task.setupSegments
+          .fold(Duration.zero, (sum, seg) => sum + seg.duration);
+      totalBusyTime += taskDuration + setupDuration;
 
       final jobId = task.jobId;
       processingTimeByJob[jobId] =

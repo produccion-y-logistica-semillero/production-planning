@@ -11,7 +11,9 @@ import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 
 void main() {
-  test('a task with two predecessors starts after the later of the two finishes', () {
+  test(
+      'a task with two predecessors starts after the later of the two finishes',
+      () {
     final start = DateTime(2026, 1, 5, 8, 0); // Monday 08:00
     const workingSchedule =
         Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 22, minute: 0));
@@ -27,9 +29,9 @@ void main() {
       1, // priority
       start, // availableDate
       [
-        Tuple2(1, {1: const Duration(hours: 2)}),
-        Tuple2(2, {2: const Duration(hours: 3)}),
-        Tuple2(3, {3: const Duration(hours: 1)}),
+        const Tuple2(1, {1: Duration(hours: 2)}),
+        const Tuple2(2, {2: Duration(hours: 3)}),
+        const Tuple2(3, {3: Duration(hours: 1)}),
       ],
       dependencies: [
         TaskDependencyEntity(successor_id: 3, predecessor_id: 1, sequenceId: 1),

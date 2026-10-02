@@ -37,8 +37,8 @@ class GanttDataTablePage extends StatelessWidget {
             }
 
             if (state is GanttPlanningError) {
-              return const _ErrorMessage(
-                message:
+              return _ErrorMessage(
+                message: state.message ??
                     'No fue posible obtener la planificación para la orden.',
               );
             }
@@ -67,7 +67,7 @@ class GanttDataTablePage extends StatelessWidget {
                 orElse: () => rules.first,
               );
 
-              return matchingRule.value2?.toString() ??
+              return matchingRule.value2.toString() ??
                   'Algoritmo ${matchingRule.value1}';
             }();
 

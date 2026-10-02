@@ -27,7 +27,13 @@ class GanttPlanningLoading extends GanttState{
 }
 
 class GanttPlanningError extends GanttState{
-  GanttPlanningError(super.orderId, super.enviroment, super.selectedRule);
+  /// Why the planning failed, when we know something more useful than
+  /// "algo salió mal" — e.g. the machine calendar makes the order
+  /// impossible. Null falls back to the generic message.
+  final String? message;
+
+  GanttPlanningError(super.orderId, super.enviroment, super.selectedRule,
+      {this.message});
 }
 
 class GanttPlanningSuccess extends GanttState{

@@ -8,8 +8,6 @@ import 'package:production_planning/services/algorithms/single_machine.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
-import 'package:production_planning/shared/functions/functions.dart';
-import '../../entities/job_entity.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
 
@@ -55,12 +53,15 @@ class SingleMachineAdapter {
     // per-machine inside machineFinalStates.
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, [machineEntity]);
+    final Map<int, String> initialMachineState = resolveMachineInitialStates(
+        [machineEntity], order.machineInitialStates);
 
     // ── 5. Build SingleMachineInput list ───────────────────────────────────
     final List<SingleMachineInput> inputJobs = [];
     for (final job in order.orderJobs!) {
       final taskId = job.sequence!.tasks![0].id!;
-      final explicit = getExplicitProcessingDuration(job, taskId, machineEntity);
+      final explicit =
+          getExplicitProcessingDuration(job, taskId, machineEntity);
 
       late final Duration duration;
       if (explicit != null) {
@@ -107,6 +108,7 @@ class SingleMachineAdapter {
       inputJobs,
       rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix,
+      initialMachineState: initialMachineState,
       machineInactivities: machineEntity.scheduledInactivities,
       continueCapacity: machineEntity.continueCapacity,
       restTime: restTime,
@@ -114,9 +116,8 @@ class SingleMachineAdapter {
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────
     final tasks = output.map((out) {
-      final jobSequence = order.orderJobs!
-          .firstWhere((j) => j.jobId == out.jobId)
-          .sequence!;
+      final jobSequence =
+          order.orderJobs!.firstWhere((j) => j.jobId == out.jobId).sequence!;
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final jobName = job.jobName ?? 'Job ${out.jobId}';
 
@@ -131,7 +132,9 @@ class SingleMachineAdapter {
         retarded: out.dueDate.isBefore(out.endDate),
         jobId: out.jobId,
         orderId: orderId,
+        machineName: machineEntity.name,
         segments: out.segments,
+        setupSegments: out.setupSegments,
       );
     }).toList();
 
@@ -149,8 +152,8 @@ class SingleMachineAdapter {
       machinesResult,
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-        return Tuple5(out.jobId, out.startDate, out.endDate, out.dueDate,
-            job.priority);
+        return Tuple5(
+            out.jobId, out.startDate, out.endDate, out.dueDate, job.priority);
       }).toList(),
     );
 

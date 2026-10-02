@@ -7,5 +7,7 @@ abstract class OrderDao {
   Future<int> insertOrder(OrderEntity order);
   Future<void> updateSetupMatrix(
       int orderId, Map<String, Map<String, Map<String, int>>>? matrix);
+  Future<void> updateMachineInitialStates(
+      int orderId, Map<String, String>? states);
   Future<void> deleteOrder(int orderId);
 }

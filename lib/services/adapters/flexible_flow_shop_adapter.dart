@@ -17,7 +17,6 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
-import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleFlowShopAdapter {
@@ -62,6 +61,8 @@ class FlexibleFlowShopAdapter {
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machines, order.machineInitialStates);
 
     // ── 4. Build FlexibleFlowInput list ───────────────────────────────────
     final List<FlexibleFlowInput> inputJobs = [];
@@ -133,6 +134,7 @@ class FlexibleFlowShopAdapter {
         rule.toUpperCase(),
         stateSetupMatrix: stateSetupMatrix,
         jobStates: jobStates,
+        initialMachineState: initialMachineState,
         machineInactivities: machineInactivitiesMap,
         machineContinueCapacity: machineContinueCapacityMap,
         machineRestTime: machineRestTimeMap,
@@ -176,7 +178,9 @@ class FlexibleFlowShopAdapter {
           retarded: out.dueDate.isBefore(timeRange.endDate),
           jobId: job.jobId!,
           orderId: orderId,
+          machineName: machines.firstWhere((m) => m.id == machineId).name,
           segments: out.segmentsByStation[taskId],
+          setupSegments: out.setupSegmentsByStation[taskId] ?? const [],
         );
 
         planningMachines
@@ -189,11 +193,10 @@ class FlexibleFlowShopAdapter {
     // ── 8. Metrics ────────────────────────────────────────────────────────
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
-          job.priority);
+      return Tuple5(
+          out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
     }).toList();
 
-    return Tuple2(
-        planningMachines, getMetricts(planningMachines, jobsDates));
+    return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
   }
 }

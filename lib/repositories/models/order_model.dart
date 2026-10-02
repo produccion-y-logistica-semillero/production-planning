@@ -6,7 +6,12 @@ class OrderModel {
   DateTime regDate;
   Map<String, Map<String, Map<String, int>>>? setupTimeMatrix;
 
-  OrderModel(this.orderId, this.regDate, {this.setupTimeMatrix});
+  /// Map<machineName, stateLetter> — the state (A-J) each machine starts
+  /// this program in, before its first job.
+  Map<String, String>? machineInitialStates;
+
+  OrderModel(this.orderId, this.regDate,
+      {this.setupTimeMatrix, this.machineInitialStates});
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     return OrderModel(
@@ -28,6 +33,7 @@ class OrderModel {
       regDate,
       jobs,
       setupTimeMatrix: setupTimeMatrix,
+      machineInitialStates: machineInitialStates,
     );
   }
 }

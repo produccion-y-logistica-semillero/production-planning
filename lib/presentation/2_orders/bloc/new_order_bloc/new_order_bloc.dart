@@ -2,7 +2,6 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
-import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/request_models/new_order_request_model.dart';
@@ -26,6 +25,18 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     this.machinesService,
   ) : super(NewOrdersInitialState());
 
+  // Several methods here (loadOrderForEdit, saveOrder, updateOrder, ...)
+  // await a DB round trip before emitting. If the page that owns this bloc
+  // is popped while one is in flight, BlocProvider closes it before the
+  // callback runs, and a bare emit() then throws "Cannot emit new states
+  // after calling close" — a widget-lifecycle race, not a data error.
+  // Silently dropping the state once closed is the standard fix.
+  @override
+  void emit(NewOrderState state) {
+    if (isClosed) return;
+    super.emit(state);
+  }
+
   // ─── Sequences ─────────────────────────────────────────────────────────────
 
   Future<void> retrieveSequences() async {
@@ -48,13 +59,19 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   /// Returns the next sequential job ID by finding the current maximum among
   /// all existing job `idController` values. Only present in file 9 — needed
   /// by both [addJob] and [duplicateJob].
+  ///
+  /// The field holds a free-text name, so most values will not parse as a
+  /// number (a job called "Job 1" parses to nothing). When none of them do,
+  /// fall back to the job count rather than to 0 — otherwise every job added
+  /// to an order whose jobs have text names would be numbered "1" and collide
+  /// with the previous one.
   int _getNextJobId(List<AddJobWidget> jobs) {
     final parsedIds = jobs
         .map((job) => int.tryParse(job.idController?.text ?? '') ?? 0)
         .where((id) => id > 0)
         .toList();
-    final maxId =
-        parsedIds.isNotEmpty ? parsedIds.reduce((a, b) => a > b ? a : b) : 0;
+    if (parsedIds.isEmpty) return jobs.length + 1;
+    final maxId = parsedIds.reduce((a, b) => a > b ? a : b);
     return maxId + 1;
   }
 
@@ -106,11 +123,29 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       List<Tuple2<int, String>> sequences = currentState.sequences;
 
       final sourceJob = jobs.firstWhere((job) => job.index == index);
+      final sourceState = sourceJob.stateKey.currentState;
 
       int nextIndex = jobs.isNotEmpty
           ? jobs.map((job) => job.index).reduce((a, b) => a > b ? a : b) + 1
           : 1;
       final nextJobId = _getNextJobId(jobs);
+
+      // Deep-copy the source job's live parameters (times, A-J states,
+      // preemption) into the clone's initial* maps. Without this the clone
+      // started blank and, on save, recomputed its baseline from whatever
+      // machine type it shared with another job. Deep copies so editing the
+      // clone can never mutate the source job's own maps.
+      final Map<int, String>? clonedFinalStates =
+          sourceState?.getMachineFinalStates();
+      final Map<int, int>? clonedPreemptionMatrix =
+          sourceState?.getPreemptionMatrix();
+      final clonedTaskMachineTimes = sourceState
+          ?.getExplicitTaskMachineMinutes()
+          .map((taskId, byMachine) => MapEntry(
+                taskId,
+                byMachine.map((machineId, times) =>
+                    MapEntry(machineId, Map<String, int>.from(times))),
+              ));
 
       jobs.add(AddJobWidget(
         availableDate: sourceJob.availableDate,
@@ -124,12 +159,21 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         index: nextIndex,
         sequences: sequences,
         selectedSequence: sourceJob.selectedSequence,
+        initialMachineFinalStates: clonedFinalStates == null
+            ? null
+            : Map<int, String>.from(clonedFinalStates),
+        initialPreemptionMatrix: clonedPreemptionMatrix == null
+            ? null
+            : Map<int, int>.from(clonedPreemptionMatrix),
+        initialTaskMachineTimes: clonedTaskMachineTimes,
       ));
 
-      emit(NewOrdersState(
-        jobs: jobs,
-        sequences: sequences,
-      ));
+      // copyWith — not a bare NewOrdersState — so the order-level state
+      // (setupTimeMatrix, dateMode, leadTimeDays, automatic hours) survives
+      // the duplicate. Losing setupTimeMatrix here meant a save right after
+      // duplicating a job called updateSetupMatrix(orderId, null), which
+      // deleted the whole order's setup matrix.
+      emit(currentState.copyWith(jobs: jobs));
     }
   }
 
@@ -165,17 +209,6 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     );
   }
 
-  MachineStandardTimes getStandardTimesForType(int machineTypeId) {
-    return machinesService.getStandardTimesForType(machineTypeId);
-  }
-
-  Future<void> updateStandardTimesForType(
-    int machineTypeId,
-    MachineStandardTimes times,
-  ) async {
-    machinesService.updateStandardTimesForType(machineTypeId, times);
-  }
-
   // TODO: Implementar updateMachineTimes en MachinesService
   // Future<void> updateMachineTimes({
   //   required int machineId,
@@ -196,6 +229,12 @@ class NewOrderBloc extends Cubit<NewOrderState> {
     }
   }
 
+  void setMachineInitialStates(Map<String, String> states) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState).copyWith(machineInitialStates: states));
+    }
+  }
+
   void setDateMode(DateRegistrationMode mode) {
     if (state is NewOrdersState) {
       emit((state as NewOrdersState).copyWith(dateMode: mode));
@@ -205,6 +244,22 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   void setLeadTimeDays(int days) {
     if (state is NewOrdersState && days > 0) {
       emit((state as NewOrdersState).copyWith(leadTimeDays: days));
+    }
+  }
+
+  /// Order-wide default hour for automatic mode. Pass `null` to clear it
+  /// (falls back to the current time at save, same as leaving it unset).
+  void setAutomaticStartHour(TimeOfDay? tod) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState)
+          .copyWith(automaticStartHour: Optional(tod)));
+    }
+  }
+
+  void setAutomaticDueHour(TimeOfDay? tod) {
+    if (state is NewOrdersState) {
+      emit((state as NewOrdersState)
+          .copyWith(automaticDueHour: Optional(tod)));
     }
   }
 
@@ -268,14 +323,30 @@ class NewOrderBloc extends Cubit<NewOrderState> {
   /// Resolves the (availableDate, dueDate) pair for [wid] according to the
   /// order's current [DateRegistrationMode]. In manual mode this simply
   /// returns whatever the user picked in the form. In automatic mode the
-  /// user-picked values (if any) are ignored: availableDate becomes "now"
-  /// (the order's registration moment) and dueDate is availableDate plus
-  /// the configured lead time.
+  /// user-picked dates (if any) are ignored: availableDate's day is "today"
+  /// and dueDate's day is "today" plus the configured lead time — but the
+  /// HOUR of each comes from, in order of precedence: the per-job override
+  /// (wid.automaticStartHour / wid.automaticDueHour), then the order-wide
+  /// default (currentState.automaticStartHour / automaticDueHour), then the
+  /// current time when none of those were set.
   Tuple2<DateTime, DateTime> _resolveDates(
       NewOrdersState currentState, AddJobWidget wid) {
     if (currentState.dateMode == DateRegistrationMode.automatic) {
-      final availableDate = DateTime.now();
-      final dueDate = availableDate.add(Duration(days: currentState.leadTimeDays));
+      final now = DateTime.now();
+      final startTod = wid.automaticStartHour ??
+          currentState.automaticStartHour ??
+          TimeOfDay.fromDateTime(now);
+      final dueTod = wid.automaticDueHour ??
+          currentState.automaticDueHour ??
+          TimeOfDay.fromDateTime(now);
+
+      final availableDate = DateTime(
+          now.year, now.month, now.day, startTod.hour, startTod.minute);
+      final dueBase =
+          availableDate.add(Duration(days: currentState.leadTimeDays));
+      final dueDate = DateTime(
+          dueBase.year, dueBase.month, dueBase.day, dueTod.hour, dueTod.minute);
+
       return Tuple2(availableDate, dueDate);
     }
     return Tuple2(wid.availableDate!, wid.dueDate!);
@@ -315,6 +386,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         response = await orderService.addOrder(
           jobs,
           setupTimeMatrix: currentState.setupTimeMatrix,
+          machineInitialStates: currentState.machineInitialStates,
         );
       } catch (error, stack) {
         print('NewOrderBloc.saveOrder error: ${error.toString()}');
@@ -365,6 +437,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
         orderId,
         jobs,
         setupTimeMatrix: currentState.setupTimeMatrix,
+        machineInitialStates: currentState.machineInitialStates,
       );
 
       response.fold(
@@ -416,11 +489,31 @@ class NewOrderBloc extends Cubit<NewOrderState> {
                   TimeOfDay.fromDateTime(job.dueDate ?? DateTime.now()),
               priorityController:
                   TextEditingController(text: job.priority.toString()),
+              // The name the user typed, not the database's auto-increment
+              // id. This field is submitted back as NewOrderRequestModel
+              // .jobName on save, so filling it with the numeric id meant
+              // reopening an order showed "34" and saving it overwrote the
+              // real name with that number.
               idController: TextEditingController(
-                  text: job.jobId?.toString() ?? ''),
+                  text: job.jobName ?? job.jobId?.toString() ?? ''),
               index: index,
               sequences: sequences,
               selectedSequence: job.sequence?.id,
+              // Everything the form used to drop on the floor. The DAO
+              // already reads these back from job_machine_states,
+              // job_preemption and job_task_machine_times; they just had
+              // nowhere to go until AddJobWidget gained these parameters.
+              initialMachineFinalStates: job.machineFinalStates,
+              initialPreemptionMatrix: job.preemptionMatrix,
+              initialTaskMachineTimes: job.taskMachineTimes?.map(
+                (taskId, byMachine) => MapEntry(
+                  taskId,
+                  byMachine.map(
+                    (machineId, times) =>
+                        MapEntry(machineId, times.toMinutesMap()),
+                  ),
+                ),
+              ),
             ));
             index++;
           }
@@ -429,6 +522,7 @@ class NewOrderBloc extends Cubit<NewOrderState> {
           jobs: jobs,
           sequences: sequences,
           setupTimeMatrix: order.setupTimeMatrix,
+          machineInitialStates: order.machineInitialStates,
         ));
       },
     );

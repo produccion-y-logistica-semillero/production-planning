@@ -56,6 +56,8 @@ class FlowShopAdapter {
         buildMachineStateSetupMatrix(machines, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machines);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machines, order.machineInitialStates);
 
     // ── 4. Build FlowShopInput list ────────────────────────────────────────
     final List<FlowShopInput> inputJobs = [];
@@ -123,6 +125,7 @@ class FlowShopAdapter {
       rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix,
       jobStates: jobStates,
+      initialMachineState: initialMachineState,
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
@@ -163,7 +166,10 @@ class FlowShopAdapter {
           retarded: out.dueDate.isBefore(out.endTime),
           orderId: orderId,
           jobId: out.jobId,
+          machineName: planningMachineEntity.machineName,
           segments: out.segmentsByMachine[machineScheduling.key],
+          setupSegments:
+              out.setupSegmentsByMachine[machineScheduling.key] ?? const [],
         ));
       }
     }

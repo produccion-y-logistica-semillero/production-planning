@@ -274,43 +274,24 @@ class FlexibleFlowShop {
       _machineLastJob[machineId],
     );
 
-    // Schedule setup as its own segmented block (through the preemption
-    // engine, so it's just as sensitive to work-shift/rest/maintenance
-    // boundaries as processing is), then start processing right after.
-    List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = startTime;
-    Duration continuousUsage =
-        _machineContinuousUsage[machineId] ?? Duration.zero;
-    if (setupDuration > Duration.zero) {
-      final setupSchedule = _engineFor(machineId).computeSegments(
-        earliestStart: startTime,
-        totalDuration: setupDuration,
-        priorContinuousUsage: continuousUsage,
-      );
-      setupSegments = setupSchedule.segments;
-      processStart = setupSchedule.completionTime;
-      continuousUsage = setupSegments.length > 1
-          ? setupSegments.last.duration
-          : continuousUsage + setupSegments.single.duration;
-    }
-
-    // Split processing into segments wherever the work-shift end, a
-    // maintenance window, or the continuous-use rest cap would otherwise
-    // fall inside this task's span on this machine.
-    final schedule = _engineFor(machineId).computeSegments(
-      earliestStart: processStart,
-      totalDuration: processingTime,
-      priorContinuousUsage: continuousUsage,
+    // Setup then processing, both through the preemption engine. The task's
+    // interruption flag governs the pair: interruptible → each may be split
+    // by a shift end / maintenance / rest cap; not interruptible → one
+    // contiguous block, processing starting the instant setup ends.
+    final placed = _engineFor(machineId).computeSetupAndProcessing(
+      earliestStart: startTime,
+      setupDuration: setupDuration,
+      processingDuration: processingTime,
+      priorContinuousUsage:
+          _machineContinuousUsage[machineId] ?? Duration.zero,
       interruptible: interruptible,
     );
 
     return _FlexibleFlowTask(
       machineId: machineId,
-      setupSegments: setupSegments,
-      schedule: schedule,
-      continuousUsageAfter: schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      continuousUsageAfter: placed.continuousUsageAfter,
     );
   }
 
@@ -662,7 +643,9 @@ class FlexibleFlowShop {
           }
 
           final DateTime end = placed.schedule.completionTime;
-          final Duration span = end.difference(earliestStart);
+          // Measured from the EFFECTIVE start (after maintenance, rest caps
+          // and non-interruptible waits), which is what the loop ranks on.
+          final Duration span = end.difference(placed.start);
           candidates.add((
             job: job,
             stationId: stationId,
@@ -694,15 +677,20 @@ class FlexibleFlowShop {
 
       // Non-delay: the pairing that can start soonest goes first; the
       // dispatch rule only breaks ties among pairings tied on start time,
-      // same as OpenShop._schedule.
+      // same as OpenShop._schedule. The start compared is the EFFECTIVE one
+      // the preemption engine returns — after maintenance, rest caps and the
+      // wait for a window that fits a non-interruptible block — so a job the
+      // calendar would hold back never beats one that can really run now. If
+      // nothing can start at the current instant the clock effectively jumps
+      // to the earliest effective start (Giffler & Thompson 1960, non-delay).
       candidates.sort((a, b) {
-        final cmpStart = a.earliestStart.compareTo(b.earliestStart);
+        final cmpStart = a.placed.start.compareTo(b.placed.start);
         if (cmpStart != 0) return cmpStart;
         final cmp = compareCandidates<FlexibleFlowInput>(
           criterion,
           a.dispatch,
           b.dispatch,
-          decisionTime: a.earliestStart,
+          decisionTime: a.placed.start,
           atcs: atcs,
         );
         if (cmp != 0) return cmp;

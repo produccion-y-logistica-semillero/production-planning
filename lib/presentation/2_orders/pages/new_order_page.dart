@@ -2,10 +2,58 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
 import 'package:production_planning/shared/functions/functions.dart';
+import 'package:production_planning/shared/utils/task_time_utils.dart';
+
+/// One station (machine type) of the order, with ALL its machines.
+class _OrderStation {
+  final String name;
+  final List<MachineEntity> machines;
+  const _OrderStation(this.name, this.machines);
+}
+
+/// Every station used by any job of the order, with every machine it has —
+/// not only the machines some job currently has selected. Machines are in
+/// id order, stations in machine-type-id order.
+Map<int, _OrderStation> _orderStations(NewOrdersState state) {
+  final names = <int, String>{};
+  final machines = <int, Map<int, MachineEntity>>{};
+  for (final job in state.jobs) {
+    final jobState = job.stateKey.currentState;
+    if (jobState == null) continue;
+    names.addAll(jobState.getStationNames());
+    jobState.getStationMachines().forEach((typeId, list) {
+      final byId = machines.putIfAbsent(typeId, () => {});
+      for (final m in list) {
+        if (m.id != null) byId[m.id!] = m;
+      }
+    });
+  }
+  final typeIds = machines.keys.toList()..sort();
+  return {
+    for (final typeId in typeIds)
+      typeId: _OrderStation(
+        names[typeId] ?? 'Estación $typeId',
+        machines[typeId]!.values.toList()
+          ..sort((a, b) => a.id!.compareTo(b.id!)),
+      ),
+  };
+}
+
+/// Where each machine's entry comes from (its own, a sibling's, or none),
+/// using the same rule the scheduler applies — see [stationDefaultSource].
+Map<String, String?> _entrySources(
+    Map<int, _OrderStation> stations, Set<String> namesWithOwnEntry) {
+  final result = <String, String?>{};
+  for (final station in stations.values) {
+    result.addAll(stationDefaultSource(station.machines, namesWithOwnEntry));
+  }
+  return result;
+}
 
 class NewOrderPage extends StatelessWidget {
   final int? editOrderId;
@@ -356,14 +404,33 @@ class NewOrderPage extends StatelessWidget {
   ) {
     if (state is! NewOrdersState) return;
 
-    final machineNameSet = <String>{};
-    for (final job in state.jobs) {
-      machineNameSet
-          .addAll(job.stateKey.currentState?.getMachineNames() ?? []);
+    // EVERY machine of every station the order uses, grouped by station —
+    // not only those some job has selected — so each one can get its own
+    // matrix. A machine without one uses its station's default: the matrix
+    // of the lowest-id sibling that has one (same rule as the scheduler).
+    final stations = _orderStations(state);
+    final stationOf = <String, String>{};
+    final machineNames = <String>[];
+    for (final station in stations.values) {
+      for (final m in station.machines) {
+        if (stationOf.containsKey(m.name)) continue;
+        stationOf[m.name] = station.name;
+        machineNames.add(m.name);
+      }
     }
-    final machineNames = machineNameSet.isEmpty
-        ? ['(seleccione máquinas primero)']
-        : (machineNameSet.toList()..sort());
+    // Machines selected in a job but whose station list is not loaded yet.
+    for (final job in state.jobs) {
+      for (final name
+          in job.stateKey.currentState?.getMachineNames() ?? const <String>[]) {
+        if (!stationOf.containsKey(name)) {
+          stationOf[name] = '';
+          machineNames.add(name);
+        }
+      }
+    }
+    if (machineNames.isEmpty) {
+      machineNames.add('(seleccione máquinas primero)');
+    }
 
     final stateSet = <String>{};
     for (final job in state.jobs) {
@@ -381,7 +448,13 @@ class NewOrderPage extends StatelessWidget {
     final controllers = <String, Map<String, TextEditingController>>{};
 
     void buildControllers(String machine) {
-      final matrix = existingMatrices[machine] ?? {};
+      // A machine with no matrix of its own starts from the one it inherits,
+      // so what the user sees is what the scheduler would use.
+      final String? source =
+          _entrySources(stations, existingMatrices.keys.toSet())[machine];
+      final matrix = existingMatrices[machine] ??
+          (source == null ? null : existingMatrices[source]) ??
+          {};
       for (final r in jobStates) {
         controllers[r] = {};
         for (final c in jobStates) {
@@ -417,39 +490,115 @@ class NewOrderPage extends StatelessWidget {
               });
             }
 
+            void copyFrom(String source) {
+              final matrix = existingMatrices[source] ?? {};
+              setState(() {
+                for (final r in jobStates) {
+                  for (final c in jobStates) {
+                    final val = matrix[r]?[c] ?? 0;
+                    controllers[r]![c]!.text = val == 0 ? '' : val.toString();
+                  }
+                }
+              });
+            }
+
+            final sources =
+                _entrySources(stations, existingMatrices.keys.toSet());
+            final String? selectedSource = sources[selectedMachine];
+            final String originNote = existingMatrices
+                    .containsKey(selectedMachine)
+                ? 'Esta máquina tiene matriz propia.'
+                : selectedSource != null
+                    ? 'Sin matriz propia: usa por defecto la de '
+                        '"$selectedSource" (misma estación). Al guardar, '
+                        'esta máquina pasa a tener matriz propia.'
+                    : 'Sin matriz: el alistamiento en esta máquina será 0 '
+                        'hasta que se registre una (aquí o en otra máquina '
+                        'de su estación).';
+            final copySources = existingMatrices.keys
+                .where((m) => m != selectedMachine)
+                .toList()
+              ..sort();
+
             return AlertDialog(
               title: const Text("Matriz de tiempos de alistamiento"),
               content: SizedBox(
                 width: double.maxFinite,
-                height: 460,
+                height: 520,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    DropdownButtonFormField<String>(
-                      value: selectedMachine,
-                      decoration: const InputDecoration(labelText: 'Máquina'),
-                      isExpanded: true,
-                      items: machineNames.map((m) {
-                        final isSaved = existingMatrices.containsKey(m);
-                        return DropdownMenuItem<String>(
-                          value: m,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(m),
-                              if (isSaved) ...[
-                                const SizedBox(width: 6),
-                                const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                              ],
-                            ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedMachine,
+                            decoration:
+                                const InputDecoration(labelText: 'Máquina'),
+                            isExpanded: true,
+                            items: machineNames.map((m) {
+                              final isSaved = existingMatrices.containsKey(m);
+                              final inherited = !isSaved && sources[m] != null;
+                              final station = stationOf[m] ?? '';
+                              return DropdownMenuItem<String>(
+                                value: m,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        station.isEmpty ? m : '$station · $m',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isSaved) ...[
+                                      const SizedBox(width: 6),
+                                      const Icon(Icons.check_circle,
+                                          color: Colors.green, size: 16),
+                                    ],
+                                    if (inherited) ...[
+                                      const SizedBox(width: 6),
+                                      Text('(hereda de ${sources[m]})',
+                                          style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 12)),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              if (v != null) switchMachine(v);
+                            },
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (v) {
-                        if (v != null) switchMachine(v);
-                      },
+                        ),
+                        const SizedBox(width: 8),
+                        PopupMenuButton<String>(
+                          tooltip: 'Copiar matriz de otra máquina',
+                          enabled: copySources.isNotEmpty,
+                          icon: const Icon(Icons.content_copy),
+                          onSelected: copyFrom,
+                          itemBuilder: (_) => copySources
+                              .map((m) => PopupMenuItem<String>(
+                                    value: m,
+                                    child: Text('Copiar matriz de $m'),
+                                  ))
+                              .toList(),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        originNote,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: colorScheme.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
                       'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
@@ -525,12 +674,27 @@ class NewOrderPage extends StatelessWidget {
   ) {
     if (state is! NewOrdersState) return;
 
-    final machineNameSet = <String>{};
-    for (final job in state.jobs) {
-      machineNameSet
-          .addAll(job.stateKey.currentState?.getMachineNames() ?? []);
+    // Every machine of every station the order uses (see _orderStations),
+    // plus any selected machine whose station list is not loaded yet.
+    final stations = _orderStations(state);
+    final stationOf = <String, String>{};
+    final machineNames = <String>[];
+    for (final station in stations.values) {
+      for (final m in station.machines) {
+        if (stationOf.containsKey(m.name)) continue;
+        stationOf[m.name] = station.name;
+        machineNames.add(m.name);
+      }
     }
-    final machineNames = machineNameSet.toList()..sort();
+    for (final job in state.jobs) {
+      for (final name
+          in job.stateKey.currentState?.getMachineNames() ?? const <String>[]) {
+        if (!stationOf.containsKey(name)) {
+          stationOf[name] = '';
+          machineNames.add(name);
+        }
+      }
+    }
 
     if (machineNames.isEmpty) {
       showDialog(
@@ -584,7 +748,31 @@ class NewOrderPage extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
                           children: [
-                            Expanded(child: Text(machine)),
+                            Expanded(
+                              child: Builder(builder: (_) {
+                                final station = stationOf[machine] ?? '';
+                                final source = _entrySources(stations,
+                                    current.keys.toSet())[machine];
+                                final inherited = !current.containsKey(machine) &&
+                                    source != null;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(station.isEmpty
+                                        ? machine
+                                        : '$station · $machine'),
+                                    if (inherited)
+                                      Text(
+                                        'Por defecto: ${current[source]} '
+                                        '(hereda de $source)',
+                                        style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 12),
+                                      ),
+                                  ],
+                                );
+                              }),
+                            ),
                             DropdownButton<String?>(
                               value: current[machine],
                               hint: const Text('Sin estado'),

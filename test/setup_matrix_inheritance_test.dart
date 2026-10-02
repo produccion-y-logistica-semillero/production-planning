@@ -106,4 +106,49 @@ void main() {
       expect(resolveMachineInitialStates(machines, {}), isEmpty);
     });
   });
+
+  group('station default is deterministic (lowest machine id)', () {
+    // Three machines of one station; Torno 3 and Torno 2 have their own
+    // matrix, Torno 4 has none. Loaded in a scrambled order on purpose.
+    final machines = [
+      _machine(3, 100, 'Torno 3'),
+      _machine(4, 100, 'Torno 4'),
+      _machine(2, 100, 'Torno 2'),
+    ];
+    final orderMatrix = {
+      'Torno 3': {
+        'A': {'B': 30},
+      },
+      'Torno 2': {
+        'A': {'B': 10},
+      },
+    };
+
+    test('a machine without a matrix inherits the lowest-id sibling, '
+        'whatever the load order', () {
+      final result = buildMachineStateSetupMatrix(machines, orderMatrix)!;
+      expect(result[4], orderMatrix['Torno 2']);
+      final reversed = buildMachineStateSetupMatrix(
+          machines.reversed.toList(), orderMatrix)!;
+      expect(reversed[4], orderMatrix['Torno 2']);
+    });
+
+    test('initial states follow the same rule', () {
+      final result = resolveMachineInitialStates(
+          machines, {'Torno 3': 'C', 'Torno 2': 'B'});
+      expect(result[4], 'B');
+    });
+
+    test('stationDefaultSource tells the UI where each entry comes from', () {
+      final sources =
+          stationDefaultSource(machines, orderMatrix.keys.toSet());
+      expect(sources, {
+        'Torno 3': 'Torno 3',
+        'Torno 2': 'Torno 2',
+        'Torno 4': 'Torno 2',
+      });
+      expect(stationDefaultSource(machines, {}),
+          {'Torno 3': null, 'Torno 4': null, 'Torno 2': null});
+    });
+  });
 }

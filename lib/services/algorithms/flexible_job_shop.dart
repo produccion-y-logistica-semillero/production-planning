@@ -297,9 +297,10 @@ class FlexibleJobShop {
           criterion,
           a.dispatch as DispatchCandidate<FlexibleJobInput>,
           b.dispatch as DispatchCandidate<FlexibleJobInput>,
-          // The loop only consults the rule among candidates that can start
-          // at the same instant, so this is the shared decision time.
-          decisionTime: a.earliestStart as DateTime,
+          // The loop only consults the rule among candidates whose
+          // EFFECTIVE start coincides, so that is the shared decision time.
+          decisionTime:
+              (a.dispatch as DispatchCandidate<FlexibleJobInput>).start,
           atcs: atcs,
         );
         if (cmp != 0) return cmp;
@@ -332,12 +333,17 @@ class FlexibleJobShop {
       start: at,
     );
     final DateTime end = placed.schedule.completionTime;
-    final Duration span = end.difference(at);
+    // Effective start: after every interruption the engine had to work
+    // around (maintenance, rest cap, waiting for a window that fits a
+    // non-interruptible block) — not just the shift-adjusted [at]. The
+    // non-delay loop ranks on it, and the span is measured from it.
+    final DateTime start = placed.setupSegments.isNotEmpty
+        ? placed.setupSegments.first.start
+        : placed.schedule.startDate;
+    final Duration span = end.difference(start);
     return DispatchCandidate(
       job: job,
-      start: placed.setupSegments.isNotEmpty
-          ? placed.setupSegments.first.start
-          : placed.schedule.startDate,
+      start: start,
       end: end,
       span: span.isNegative ? Duration.zero : span,
       dueDate: job.dueDate,
@@ -371,7 +377,7 @@ class FlexibleJobShop {
   ({
     List<ProcessingSegment> setupSegments,
     SegmentedSchedule schedule,
-    Duration usageAfterSetup,
+    Duration usageAfter,
   }) _priceOperation({
     required FlexibleJobInput job,
     required int taskId,
@@ -379,41 +385,24 @@ class FlexibleJobShop {
     required Duration duration,
     required DateTime start,
   }) {
-    final Duration setupDuration =
-        _getSetupDuration(machineId, job.jobId, _machineLastJob[machineId]);
-
-    // Setup is its own segmented block, as sensitive to work-shift, rest and
-    // maintenance boundaries as processing is; processing starts after it.
-    List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = start;
-    Duration continuousUsage =
-        _machineContinuousUsage[machineId] ?? Duration.zero;
-    if (setupDuration > Duration.zero) {
-      final setupSchedule = _engineFor(machineId).computeSegments(
-        earliestStart: start,
-        totalDuration: setupDuration,
-        priorContinuousUsage: continuousUsage,
-      );
-      setupSegments = setupSchedule.segments;
-      processStart = setupSchedule.completionTime;
-      continuousUsage = setupSegments.length > 1
-          ? setupSegments.last.duration
-          : continuousUsage + setupSegments.single.duration;
-    }
-
-    // Split processing wherever the work-shift end, a maintenance window or
-    // the continuous-use rest cap falls inside it.
-    final schedule = _engineFor(machineId).computeSegments(
-      earliestStart: processStart,
-      totalDuration: duration,
-      priorContinuousUsage: continuousUsage,
+    // Setup then processing through the preemption engine. The task's
+    // interruption flag governs the pair: interruptible → each may be split
+    // by a shift end / maintenance / rest cap; not interruptible → one
+    // contiguous block, processing starting the instant setup ends.
+    final placed = _engineFor(machineId).computeSetupAndProcessing(
+      earliestStart: start,
+      setupDuration:
+          _getSetupDuration(machineId, job.jobId, _machineLastJob[machineId]),
+      processingDuration: duration,
+      priorContinuousUsage:
+          _machineContinuousUsage[machineId] ?? Duration.zero,
       interruptible: job.isTaskInterruptible(taskId),
     );
 
     return (
-      setupSegments: setupSegments,
-      schedule: schedule,
-      usageAfterSetup: continuousUsage,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      usageAfter: placed.continuousUsageAfter,
     );
   }
 
@@ -689,8 +678,17 @@ class FlexibleJobShop {
         break;
       }
 
+      // Non-delay: the operation that can start earliest goes first, and the
+      // rule only decides among those tied on that start. For the dynamic
+      // rules the start is the EFFECTIVE one (after maintenance, rest caps
+      // and non-interruptible waits), so an operation the calendar would
+      // hold back never beats one that can really run now; if nothing can
+      // start at the current instant, the clock effectively jumps to the
+      // earliest effective start (Giffler & Thompson 1960, non-delay).
       candidates.sort((a, b) {
-        final cmpStart = a.earliestStart.compareTo(b.earliestStart);
+        final DateTime startA = a.dispatch?.start ?? a.earliestStart;
+        final DateTime startB = b.dispatch?.start ?? b.earliestStart;
+        final cmpStart = startA.compareTo(startB);
         if (cmpStart != 0) return cmpStart;
         return comparator(a, b);
       });
@@ -707,7 +705,6 @@ class FlexibleJobShop {
       );
       final List<ProcessingSegment> setupSegments = placed.setupSegments;
       final SegmentedSchedule schedule = placed.schedule;
-      final Duration continuousUsage = placed.usageAfterSetup;
       final DateTime taskStart = schedule.startDate;
       final DateTime adjustedEnd = schedule.completionTime;
 
@@ -717,9 +714,7 @@ class FlexibleJobShop {
       jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
       machinesAvailability[selected.machineId] = adjustedEnd;
-      _machineContinuousUsage[selected.machineId] = schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration;
+      _machineContinuousUsage[selected.machineId] = placed.usageAfter;
       completedTasks[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
       jobOperationIndex[selected.job.jobId] =

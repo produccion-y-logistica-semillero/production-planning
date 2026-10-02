@@ -58,6 +58,42 @@ String _normalizeMachineName(String machineName) {
   return machineName.trim().toLowerCase();
 }
 
+/// [machines] ordered by id (machines without one last), so "the first
+/// sibling with its own entry" is always the same machine.
+List<MachineEntity> _byId(List<MachineEntity> machines) =>
+    List<MachineEntity>.from(machines)
+      ..sort((a, b) => (a.id ?? 1 << 30).compareTo(b.id ?? 1 << 30));
+
+/// Where a machine's setup matrix (or initial state) comes from — the same
+/// rule [buildMachineStateSetupMatrix] and [resolveMachineInitialStates]
+/// apply, exposed for the order screen so it can show it to the user.
+///
+/// [stationMachines] are every machine of ONE station (same machine type).
+/// [namesWithOwnEntry] are the machine names that have their own entry.
+/// Returns, per machine name of the station: the machine's own name when it
+/// has its own entry, the name of the sibling it inherits from otherwise
+/// (the lowest-id sibling with its own entry), or null when no machine of
+/// the station has one.
+Map<String, String?> stationDefaultSource(
+  List<MachineEntity> stationMachines,
+  Set<String> namesWithOwnEntry,
+) {
+  final own = {for (final n in namesWithOwnEntry) _normalizeMachineName(n)};
+  String? fallback;
+  for (final machine in _byId(stationMachines)) {
+    if (own.contains(_normalizeMachineName(machine.name))) {
+      fallback = machine.name;
+      break;
+    }
+  }
+  return {
+    for (final machine in stationMachines)
+      machine.name: own.contains(_normalizeMachineName(machine.name))
+          ? machine.name
+          : fallback,
+  };
+}
+
 /// Converts an order-level setup matrix keyed by machine name into a matrix keyed by machine id.
 /// 
 /// DEBUG: Added logging to track machine name matching for troubleshooting matrix attachment failures.
@@ -96,9 +132,11 @@ Map<int, Map<String, Map<String, int>>>? buildMachineStateSetupMatrix(
   // registered for another machine of the SAME machine type — the station's
   // default — instead of always getting zero setup. Only machines that
   // matched nothing above are filled this way; an explicit match always
-  // wins.
+  // wins. When several siblings have their own matrix, the one with the
+  // LOWEST machine id is the default (see [stationDefaultSource]), so the
+  // result does not depend on the order machines were loaded in.
   final Map<int, Map<String, Map<String, int>>> defaultByType = {};
-  for (final machine in machines) {
+  for (final machine in _byId(machines)) {
     final typeId = machine.machineTypeId;
     if (machine.id == null || typeId == null) continue;
     final own = result[machine.id!];
@@ -149,7 +187,7 @@ Map<int, String> resolveMachineInitialStates(
   }
 
   final Map<int, String> defaultByType = {};
-  for (final machine in machines) {
+  for (final machine in _byId(machines)) {
     final typeId = machine.machineTypeId;
     if (machine.id == null || typeId == null) continue;
     final own = result[machine.id!];

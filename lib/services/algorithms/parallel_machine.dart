@@ -85,8 +85,8 @@ class _ParallelPlacement {
   final SegmentedSchedule schedule;
   final List<ProcessingSegment> setupSegments;
 
-  /// Continuous-use streak after setup, before processing.
-  final Duration continuousUsageAfterSetup;
+  /// Continuous-use streak once this job is done.
+  final Duration continuousUsageAfter;
 
   final Duration delay;
 
@@ -96,7 +96,7 @@ class _ParallelPlacement {
     required this.processStart,
     required this.schedule,
     required this.setupSegments,
-    required this.continuousUsageAfterSetup,
+    required this.continuousUsageAfter,
     required this.delay,
   });
 
@@ -287,8 +287,10 @@ class ParallelMachine {
 
   /// Event-driven dispatch across parallel machines.
   ///
-  /// The decision point is the earliest moment ANY machine frees up. Among
-  /// the jobs released by then, each is priced on its best machine through
+  /// The decision point is the earliest moment ANY machine frees up. Every
+  /// pending job is priced on its best machine (from its release, if later)
+  /// and only those that can effectively start earliest compete (non-delay,
+  /// see selectNext). Each is priced through
   /// [_bestPlacementFor] — which runs the preemption engine, so the span
   /// being compared already includes the changeover out of that machine's
   /// current state and any split caused by a shift end, maintenance window
@@ -339,19 +341,9 @@ class ParallelMachine {
       );
 
       if (selected == null) {
-        // No job is released yet at the earliest free machine. Advance the
-        // clock to the next release instead of spinning.
-        final DateTime next =
-            earliestRelease(pending, (job) => job.availableDate)!;
-        if (next.isAfter(decisionTime)) {
-          machineAvailable.updateAll(
-            (id, freeAt) => freeAt.isBefore(next) ? next : freeAt,
-          );
-          continue;
-        }
-        // Unreachable in practice: a release at or before the decision time
-        // means that job was a candidate. Guard anyway — this runs on the UI
-        // isolate, so a spin here would freeze the app.
+        // Unreachable in practice: selectNext only returns null for an empty
+        // list or when no job has any machine. Guard anyway — this runs on
+        // the UI isolate, so a spin here would freeze the app.
         for (final job in pending) {
           final fallback = _bestPlacementFor(job, notBefore: decisionTime);
           if (fallback != null) _commitPlacement(fallback);
@@ -361,10 +353,18 @@ class ParallelMachine {
         break;
       }
 
-      // Re-price the winner so the committed placement is the one it was
-      // judged on. _bestPlacementFor is pure, so this recomputes rather than
-      // re-decides.
-      chosen = _bestPlacementFor(selected.job, notBefore: decisionTime);
+      // selectNext is non-delay on effective starts: the winner can really
+      // begin at t*, the earliest instant any pending job can on its best
+      // machine — a job an interruption would hold back does not get to
+      // take a machine ahead of one that can run now, and when nothing can
+      // start at decisionTime the clock jumps to t*. Re-price the winner
+      // from the same instant it was judged from; _bestPlacementFor is
+      // pure, so this recomputes rather than re-decides.
+      chosen = _bestPlacementFor(
+        selected.job,
+        notBefore:
+            evaluationTime(selected.job, decisionTime, (j) => j.availableDate),
+      );
       if (chosen != null) _commitPlacement(chosen);
 
       sequenced.add(selected.job);
@@ -436,10 +436,10 @@ class ParallelMachine {
 
       // ── Sequence-dependent setup time ─────────────────────────────────
       // The machine needs s_{prevState → jobState} minutes of preparation
-      // before it can start processing this job.  Setup runs on the machine
-      // (occupies it) and, like processing, is scheduled through the
-      // preemption engine as its own segmented block, so it's just as
-      // sensitive to work-shift/rest/maintenance boundaries.
+      // before it can start processing this job. Setup and processing go
+      // through the preemption engine together: the job's interruption flag
+      // on this machine governs the pair (interruptible → each may be split;
+      // not interruptible → one contiguous block, no gap between them).
       final String toState = job.stateOnMachine(machineId);
       final Duration setup = _setupDuration(
         machineId,
@@ -447,32 +447,15 @@ class ParallelMachine {
         toState,
       );
 
-      List<ProcessingSegment> candidateSetupSegments = const [];
-      DateTime processStart = candidateStart;
-      Duration continuousUsageAfterSetup =
-          _machineContinuousUsage[machineId] ?? Duration.zero;
-      if (setup > Duration.zero) {
-        final setupSchedule = _engineByMachine[machineId]!.computeSegments(
-          earliestStart: candidateStart,
-          totalDuration: setup,
-          priorContinuousUsage: continuousUsageAfterSetup,
-        );
-        candidateSetupSegments = setupSchedule.segments;
-        processStart = setupSchedule.completionTime;
-        continuousUsageAfterSetup = candidateSetupSegments.length > 1
-            ? candidateSetupSegments.last.duration
-            : continuousUsageAfterSetup + candidateSetupSegments.single.duration;
-      }
-
-      // Split into segments wherever the work-shift end, a maintenance
-      // window, or the continuous-use rest cap falls inside this job's
-      // processing span on this candidate machine.
-      final schedule = _engineByMachine[machineId]!.computeSegments(
-        earliestStart: processStart,
-        totalDuration: processingTime,
-        priorContinuousUsage: continuousUsageAfterSetup,
+      final placed = _engineByMachine[machineId]!.computeSetupAndProcessing(
+        earliestStart: candidateStart,
+        setupDuration: setup,
+        processingDuration: processingTime,
+        priorContinuousUsage:
+            _machineContinuousUsage[machineId] ?? Duration.zero,
         interruptible: job.isInterruptibleOnMachine(machineId),
       );
+      final schedule = placed.processing;
       final DateTime endTime = schedule.completionTime;
       final Duration delay = endTime.isAfter(job.dueDate)
           ? endTime.difference(job.dueDate)
@@ -481,10 +464,10 @@ class ParallelMachine {
       final candidate = _ParallelPlacement(
         job: job,
         machineId: machineId,
-        processStart: processStart,
+        processStart: schedule.startDate,
         schedule: schedule,
-        setupSegments: candidateSetupSegments,
-        continuousUsageAfterSetup: continuousUsageAfterSetup,
+        setupSegments: placed.setupSegments,
+        continuousUsageAfter: placed.continuousUsageAfter,
         delay: delay,
       );
 
@@ -515,13 +498,7 @@ class ParallelMachine {
     // ── Update last-state so the next job on this machine sees the correct
     //    "from" state in the setup matrix.
     _machineLastState[machineId] = job.stateOnMachine(machineId);
-    // A pause anywhere within this job's segments already reset the
-    // continuity streak; otherwise accumulate onto the running streak
-    // that setup (if any) already left off at.
-    _machineContinuousUsage[machineId] = schedule.segments.length > 1
-        ? schedule.segments.last.duration
-        : placement.continuousUsageAfterSetup +
-            schedule.segments.single.duration;
+    _machineContinuousUsage[machineId] = placement.continuousUsageAfter;
 
     output.add(ParallelOutput(
       job.jobId,

@@ -304,18 +304,9 @@ class FlowShop {
       );
 
       if (selected == null) {
-        // Nothing released yet — jump the clock forward instead of spinning.
-        // The machines stay where they are; only this job's own start is
-        // held back, which _simulateJob handles via notBefore.
-        final DateTime next =
-            earliestRelease(pending, (job) => job.availableDate)!;
-        if (next.isAfter(decisionTime)) {
-          _pendingClock = next;
-          continue;
-        }
-        // Unreachable in practice: a release at or before the decision time
-        // means that job was a candidate. If it ever happens, schedule what
-        // is left in order rather than dropping it from the plan.
+        // Unreachable in practice: selectNext only returns null for an empty
+        // list (it throws when every job is unplaceable). If it ever
+        // happens, schedule what is left in order rather than dropping it.
         for (final job in pending) {
           _commitPlacement(_simulateJob(job, notBefore: decisionTime));
           sequenced.add(job);
@@ -324,9 +315,18 @@ class FlowShop {
         break;
       }
 
-      // Re-simulate the winner so what gets committed is what was judged.
-      // _simulateJob is pure, so this recomputes rather than re-decides.
-      _commitPlacement(_simulateJob(selected.job, notBefore: decisionTime));
+      // selectNext is non-delay on effective starts: the winner can really
+      // begin its route at t*, the earliest instant any pending job can on
+      // the entry machine, after setups and interruptions. A job an
+      // interruption would hold back does not take the line ahead of one
+      // that can start now, and if nothing can start at decisionTime the
+      // clock jumps to t*. Re-simulate from the same instant it was judged
+      // from; _simulateJob is pure, so this recomputes rather than decides.
+      _commitPlacement(_simulateJob(
+        selected.job,
+        notBefore:
+            evaluationTime(selected.job, decisionTime, (j) => j.availableDate),
+      ));
       sequenced.add(selected.job);
       pending.remove(selected.job);
     }
@@ -334,18 +334,15 @@ class FlowShop {
     inputJobs = sequenced;
   }
 
-  /// Clock floor used while waiting for the next job release.
-  DateTime? _pendingClock;
-
   /// When the next dispatch decision happens: the earliest moment the entry
   /// machine of any pending job's route becomes free.
   ///
   /// The minimum, not the maximum — waiting for the last machine would stall
-  /// the loop behind one no pending job is queued on. Floored by
-  /// [_pendingClock] so a decision point never moves backwards while the loop
-  /// is waiting on a future release.
+  /// the loop behind one no pending job is queued on. Releases and
+  /// interruptions after this instant are folded into each job's effective
+  /// start by selectNext, so no separate clock floor is needed.
   DateTime _entryMachineFreeAt(List<FlowShopInput> pending) {
-    final DateTime floor = _pendingClock ?? startDate;
+    final DateTime floor = startDate;
     DateTime? earliest;
 
     for (final job in pending) {
@@ -411,47 +408,28 @@ class FlowShop {
         previousJobId: previousJob,
       );
 
-      // Schedule setup as its own segmented block (through the preemption
-      // engine, so it's just as sensitive to work-shift/rest/maintenance
-      // boundaries as processing is), then start processing right after.
-      List<ProcessingSegment> setupSegments = const [];
-      DateTime processStart = startTime;
-      Duration continuousUsage = _machineContinuousUsage[machineId] ?? Duration.zero;
-      if (setupDuration > Duration.zero) {
-        final setupSchedule = _engineByMachine[machineId]!.computeSegments(
-          earliestStart: startTime,
-          totalDuration: setupDuration,
-          priorContinuousUsage: continuousUsage,
-        );
-        setupSegments = setupSchedule.segments;
-        processStart = setupSchedule.completionTime;
-        continuousUsage = setupSegments.length > 1
-            ? setupSegments.last.duration
-            : continuousUsage + setupSegments.single.duration;
-      }
-
-      // Split processing into segments wherever the work-shift end, a
-      // maintenance window, or the continuous-use rest cap would otherwise
-      // fall inside this task's span on this machine.
-      final schedule = _engineByMachine[machineId]!.computeSegments(
-        earliestStart: processStart,
-        totalDuration: duration,
-        priorContinuousUsage: continuousUsage,
+      // Setup then processing, both through the preemption engine. The
+      // task's interruption flag governs the pair: interruptible → each may
+      // be split by a shift end / maintenance / rest cap; not interruptible
+      // → one contiguous block, processing starting the instant setup ends.
+      final placed = _engineByMachine[machineId]!.computeSetupAndProcessing(
+        earliestStart: startTime,
+        setupDuration: setupDuration,
+        processingDuration: duration,
+        priorContinuousUsage:
+            _machineContinuousUsage[machineId] ?? Duration.zero,
         interruptible: job.isTaskInterruptible(taskId),
       );
+      final schedule = placed.processing;
       final DateTime adjustedEnd = schedule.completionTime;
 
-      actualStartTime ??= setupSegments.isNotEmpty
-          ? setupSegments.first.start
-          : schedule.startDate;
+      actualStartTime ??= placed.start;
 
       scheduling[machineId] = Tuple2(taskId, Range(schedule.startDate, adjustedEnd));
       segmentsByMachine[machineId] = schedule.segments;
-      setupSegmentsByMachine[machineId] = setupSegments;
+      setupSegmentsByMachine[machineId] = placed.setupSegments;
       availabilityAfter[machineId] = adjustedEnd;
-      continuousUsageAfter[machineId] = schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration;
+      continuousUsageAfter[machineId] = placed.continuousUsageAfter;
       jobStartTime = adjustedEnd;
     }
 

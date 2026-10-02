@@ -318,9 +318,9 @@ double atcsLogIndex<T>(DispatchCandidate<T> c, AtcsParameters params) {
 
 /// Earliest release date among [pending], or null when it is empty.
 ///
-/// Used to advance the clock when nothing is released yet at the current
-/// decision time — without it the dispatch loop would spin forever on a set
-/// of jobs that are all still in the future.
+/// [selectNext] already folds releases into each job's effective start, so
+/// the dispatch loops only use this to seed their clock at the first
+/// release.
 DateTime? earliestRelease<T>(
   List<T> pending,
   DateTime Function(T) releaseTime,
@@ -335,25 +335,59 @@ DateTime? earliestRelease<T>(
   return earliest;
 }
 
-/// Picks the next job to schedule at [decisionTime].
+/// The instant a dispatch loop at clock [decisionTime] should simulate [job]
+/// from: the clock itself, or the job's release if that is later.
 ///
-/// Only jobs whose release date has passed compete. Each of those is handed
-/// to [evaluate], which must simulate it WITHOUT committing anything — the
+/// Callers re-simulate the winner of [selectNext] from exactly this instant
+/// when they commit it, so what is committed is what was judged.
+DateTime evaluationTime<T>(
+  T job,
+  DateTime decisionTime,
+  DateTime Function(T) releaseTime,
+) {
+  final DateTime release = releaseTime(job);
+  return release.isAfter(decisionTime) ? release : decisionTime;
+}
+
+/// Picks the next job to schedule when the machine frees up at
+/// [decisionTime], as a NON-DELAY schedule generator (Giffler & Thompson,
+/// 1960; Baker, 1974, ch. 7) built on EFFECTIVE start times:
+///
+///   1. Every pending job is simulated by [evaluate] from
+///      `max(decisionTime, release)` — see [evaluationTime]. The simulation
+///      runs through the PreemptionEngine, so the candidate's `start` is
+///      when the machine could REALLY begin it: after the release, after
+///      any shift end or maintenance window, and after waiting for a window
+///      long enough for a non-interruptible task (with its setup).
+///   2. `t* = min start` over all of them.
+///   3. Only the jobs that can start exactly at `t*` compete, and the rule
+///      ([criterion]) chooses among them, evaluated at `t*`.
+///
+/// This answers "what if the job the rule prefers cannot start at t?": it
+/// does not get to hold the machine; the next candidate that CAN start at t
+/// is taken instead. And if no candidate can start at t at all, the clock
+/// effectively jumps to `t*`, the earliest effective start — which may be a
+/// job's release, the end of a maintenance window, the next shift, or the
+/// next window that fits an uninterruptible block, whichever comes first.
+/// The release gate is implied: a job released after `t*` can never start
+/// at `t*`.
+///
+/// [evaluate] must simulate WITHOUT committing anything — the
 /// PreemptionEngine is a pure function of its arguments, so simulating is
-/// just calling `computeSegments` and not writing the result back.
+/// just calling it and not writing the result back.
 ///
 /// [atcs] is required when [criterion] is [DispatchCriterion.atcs] and
 /// ignored otherwise.
 ///
-/// Returns null when [pending] is empty, when nothing is released yet (the
-/// caller should then advance its clock via [earliestRelease]), or when no
-/// released candidate turned out to be schedulable.
+/// Returns null only when [pending] is empty or no job is schedulable.
+/// The returned candidate's `span` is re-measured from `t*`, so every
+/// competitor was compared from the same instant.
 ///
 /// A candidate whose simulation throws [SchedulingHorizonException] is
 /// dropped rather than allowed to abort the whole schedule: one job with an
-/// impossible calendar should not sink the other twenty. If EVERY released
-/// candidate fails that way the exception is rethrown, because then the
-/// configuration really is unschedulable and silence would be worse.
+/// impossible calendar should not sink the other twenty. If EVERY candidate
+/// fails that way the exception is rethrown, because then the configuration
+/// really is unschedulable and silence would be worse.
 DispatchCandidate<T>? selectNext<T>({
   required List<T> pending,
   required DateTime decisionTime,
@@ -367,39 +401,64 @@ DispatchCandidate<T>? selectNext<T>({
   }
   if (pending.isEmpty) return null;
 
-  DispatchCandidate<T>? best;
+  final evaluated = <DispatchCandidate<T>>[];
   SchedulingHorizonException? firstFailure;
-  int releasedCount = 0;
 
   for (final job in pending) {
-    if (releaseTime(job).isAfter(decisionTime)) continue;
-    releasedCount++;
-
     final DispatchCandidate<T>? candidate;
     try {
-      candidate = evaluate(job, decisionTime);
+      candidate =
+          evaluate(job, evaluationTime(job, decisionTime, releaseTime));
     } on SchedulingHorizonException catch (e) {
       firstFailure ??= e;
       continue;
     }
-    if (candidate == null) continue;
+    if (candidate != null) evaluated.add(candidate);
+  }
 
+  if (evaluated.isEmpty) {
+    // Every job failed for the same structural reason — the calendar, not
+    // this particular job. Surface it instead of returning null, which the
+    // caller would read as "nothing left" and silently drop the jobs.
+    if (firstFailure != null) throw firstFailure;
+    return null;
+  }
+
+  // t*: the earliest instant any job can really start.
+  DateTime earliestStart = evaluated.first.start;
+  for (final c in evaluated) {
+    if (c.start.isBefore(earliestStart)) earliestStart = c.start;
+  }
+
+  DispatchCandidate<T>? best;
+  for (final c in evaluated) {
+    if (!c.start.isAtSameMomentAs(earliestStart)) continue;
+    final DispatchCandidate<T> atStar = _measuredFrom(c, earliestStart);
     if (best == null ||
-        compareCandidates(criterion, candidate, best,
-                decisionTime: decisionTime, atcs: atcs) <
+        compareCandidates(criterion, atStar, best,
+                decisionTime: earliestStart, atcs: atcs) <
             0) {
-      best = candidate;
+      best = atStar;
     }
   }
-
-  // Every released job failed for the same structural reason — the calendar,
-  // not this particular job. Surface it instead of returning null, which the
-  // caller would read as "nothing is ready yet" and loop on.
-  if (best == null && firstFailure != null && releasedCount > 0) {
-    throw firstFailure;
-  }
-
   return best;
+}
+
+/// [c] with its span re-measured from [at] (never negative).
+DispatchCandidate<T> _measuredFrom<T>(DispatchCandidate<T> c, DateTime at) {
+  final Duration span = c.end.difference(at);
+  return DispatchCandidate(
+    job: c.job,
+    start: c.start,
+    end: c.end,
+    span: span.isNegative ? Duration.zero : span,
+    dueDate: c.dueDate,
+    releaseDate: c.releaseDate,
+    priority: c.priority,
+    jobId: c.jobId,
+    setup: c.setup,
+    remainingWork: c.remainingWork,
+  );
 }
 
 /// Orders two candidates under [criterion]: negative when [a] goes first.

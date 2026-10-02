@@ -252,6 +252,24 @@ class AddJobState extends State<AddJobWidget> {
     return names.toList();
   }
 
+  /// Every machine of every station in this job's sequence — not only the
+  /// one currently selected — keyed by station (machine type id). The setup
+  /// matrix and initial-state dialogs use it so a matrix can be registered
+  /// for ANY machine of a station, including those no job has selected.
+  Map<int, List<MachineEntity>> getStationMachines() => {
+        for (final entry in _machinesByType.entries)
+          entry.key: List<MachineEntity>.from(entry.value),
+      };
+
+  /// Display name of each station in this job's sequence, keyed by machine
+  /// type id.
+  Map<int, String> getStationNames() => {
+        for (final task in _sequenceDetails?.tasks ?? const <TaskEntity>[])
+          task.machineTypeId: (task.machineName?.isNotEmpty ?? false)
+              ? task.machineName!
+              : task.description,
+      };
+
   /// Returns Map<machineTypeId, stateLetter> for the "Estado dejado" dropdowns.
   /// Used by the matrix dialog to determine the row/column labels.
   Map<int, String> getMachineFinalStates() =>

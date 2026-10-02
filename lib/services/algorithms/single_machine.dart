@@ -66,15 +66,15 @@ class _SingleMachineTrial {
   final List<ProcessingSegment> setupSegments;
   final SegmentedSchedule schedule;
 
-  /// The machine's continuous-use streak after setup but before processing —
-  /// needed to fold the streak forward correctly on commit.
-  final Duration continuousUsageBeforeProcessing;
+  /// The machine's continuous-use streak once this job is done — carried
+  /// into the next job on commit.
+  final Duration continuousUsageAfter;
 
   const _SingleMachineTrial({
     required this.job,
     required this.setupSegments,
     required this.schedule,
-    required this.continuousUsageBeforeProcessing,
+    required this.continuousUsageAfter,
   });
 
   /// Where the machine actually starts working for this job: the setup, when
@@ -224,41 +224,24 @@ class SingleMachine {
     // 1. Setup for the transition out of the machine's current state.
     final setup = _setupDuration(_lastJobState, job.jobState);
 
-    // 2. If there is a setup cost, schedule it as its own segmented block
-    //    (through the preemption engine, so it's just as sensitive to
-    //    work-shift/rest/maintenance boundaries as processing is), then
-    //    start processing right after it ends.
-    List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = at;
-    Duration continuousUsage = _continuousUsage;
-    if (setup > Duration.zero) {
-      final setupSchedule = _preemptionEngine.computeSegments(
-        earliestStart: at,
-        totalDuration: setup,
-        priorContinuousUsage: continuousUsage,
-      );
-      setupSegments = setupSchedule.segments;
-      processStart = setupSchedule.completionTime;
-      continuousUsage = setupSegments.length > 1
-          ? setupSegments.last.duration
-          : continuousUsage + setupSegments.single.duration;
-    }
-
-    // 3. Schedule processing after setup, splitting into segments wherever
-    //    the work-shift end, a maintenance window, or the continuous-use
-    //    rest cap would otherwise fall inside the job's processing span.
-    final schedule = _preemptionEngine.computeSegments(
-      earliestStart: processStart,
-      totalDuration: job.machineDuration,
-      priorContinuousUsage: continuousUsage,
+    // 2. Setup then processing, both through the preemption engine. The
+    //    job's interruption flag governs the pair: interruptible → each may
+    //    be split by a shift end / maintenance / rest cap; not
+    //    interruptible → one contiguous block, processing starting the
+    //    instant setup ends.
+    final placed = _preemptionEngine.computeSetupAndProcessing(
+      earliestStart: at,
+      setupDuration: setup,
+      processingDuration: job.machineDuration,
+      priorContinuousUsage: _continuousUsage,
       interruptible: job.interruptible,
     );
 
     return _SingleMachineTrial(
       job: job,
-      setupSegments: setupSegments,
-      schedule: schedule,
-      continuousUsageBeforeProcessing: continuousUsage,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      continuousUsageAfter: placed.continuousUsageAfter,
     );
   }
 
@@ -282,10 +265,7 @@ class SingleMachine {
     // Remember this job's state and continuous-usage streak for the next
     // iteration (a pause during this job already reset the streak).
     _lastJobState = job.jobState;
-    _continuousUsage = schedule.segments.length > 1
-        ? schedule.segments.last.duration
-        : trial.continuousUsageBeforeProcessing +
-            schedule.segments.single.duration;
+    _continuousUsage = trial.continuousUsageAfter;
 
     return end;
   }
@@ -390,8 +370,9 @@ class SingleMachine {
   /// Event-driven dispatch: instead of freezing an order up front, decide the
   /// next job each time the machine frees up.
   ///
-  /// At every decision point only jobs already released compete, and each
-  /// contender is simulated through the preemption engine so the quantity
+  /// At every decision point only the jobs that can EFFECTIVELY start
+  /// earliest compete (see selectNext), and each contender is simulated
+  /// through the preemption engine so the quantity
   /// being compared is its real occupancy of the machine — including the
   /// changeover out of whatever state the previous job left, and including
   /// any split caused by a shift boundary, maintenance window or rest cap.
@@ -444,20 +425,10 @@ class SingleMachine {
       );
 
       if (selected == null) {
-        // Nothing is released yet — jump the clock to the next release
-        // rather than spinning. earliestRelease is non-null here because
-        // pending is not empty.
-        final DateTime next =
-            earliestRelease(pending, (job) => job.availableDate)!;
-        final DateTime advanced = _getStartTime(next);
-        if (advanced.isAfter(scheduleTime)) {
-          scheduleTime = advanced;
-          continue;
-        }
-        // Unreachable in practice: a release at or before the current clock
-        // means that job was a candidate. Guard anyway — this runs on the UI
-        // isolate, so a spin here would freeze the app. Schedule what is left
-        // in order rather than looping or dropping it.
+        // Unreachable in practice: selectNext only returns null for an empty
+        // list (it throws when every job is unplaceable). Guard anyway —
+        // this runs on the UI isolate, so a spin here would freeze the app.
+        // Schedule what is left in order rather than looping or dropping it.
         for (final job in pending) {
           scheduleTime = _assignJob(job, scheduleTime);
           sequenced.add(job);
@@ -466,11 +437,17 @@ class SingleMachine {
         break;
       }
 
-      // Re-run the trial so the committed placement is computed against the
-      // same machine state it was judged on. _trial is pure, so this is a
-      // recomputation, not a second decision.
+      // selectNext is non-delay on effective starts: the winner is a job
+      // that can really begin at t* = the earliest instant any job can, so
+      // if the rule's favourite was held back by an interruption another
+      // job took the machine, and if nobody could start at scheduleTime the
+      // clock has jumped to t*. Re-run the trial from the same instant it
+      // was judged from, so the committed placement is the one compared.
       final job = selected.job;
-      scheduleTime = _assignJob(job, scheduleTime);
+      scheduleTime = _assignJob(
+        job,
+        evaluationTime(job, scheduleTime, (j) => j.availableDate),
+      );
       sequenced.add(job);
       pending.remove(job);
     }

@@ -1,135 +1,81 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
-import 'package:production_planning/entities/machine_type_entity.dart';
-import 'package:production_planning/presentation/1_sequences/request_models/new_task_model.dart';
+import 'package:production_planning/core/errors/failure.dart';
+import 'package:production_planning/entities/route_draft.dart';
+import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_state.dart';
-import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
-import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/services/machines_service.dart';
 import 'package:production_planning/services/sequences_service.dart';
 
-class SequencesBloc extends Cubit<SequencesState>{
-
+/// Drives the process-route screen: which mode it is in (view / create /
+/// edit), the stations offered in the palette, and saving.
+class SequencesBloc extends Cubit<SequencesState> {
   final SequencesService seqService;
-  final MachinesService  machinesService;
+  final MachinesService machinesService;
 
-  SequencesBloc(
-    this.seqService, this.machinesService
-
-  ): super(SequencesInitialState(false, null, false, false, null,/* */ null)) {
-
-    //initial state
+  SequencesBloc(this.seqService, this.machinesService)
+      : super(const SequencesState()) {
     retrieveSequencesMachine();
   }
 
-  void retrieveSequencesMachine() async{
-    emit(SequencesRetrievingMachines(state.isNewOrder, null, state.isSuccessModalVisible, state.isNoMachinesModalVisible, state.selectedMachines, state.dependencies));
+  Future<void> retrieveSequencesMachine() async {
     final response = await machinesService.getMachineTypes();
     response.fold(
-      (f) => emit(SequencesMachineFailure(state.isNewOrder, null, state.isSuccessModalVisible, state.isNoMachinesModalVisible, state.selectedMachines, state.dependencies)),
-      (machines) => emit(SequencesMachinesSuccess(state.isNewOrder,machines, state.isSuccessModalVisible, state.isNoMachinesModalVisible, state.selectedMachines, state.dependencies)) 
-      );
+      (_) => emit(state.copyWith(machinesFailed: true)),
+      (machines) =>
+          emit(state.copyWith(machines: machines, machinesFailed: false)),
+    );
   }
 
-  void selectMachine(MachineTypeEntity m)async{
-    //emit the state with the new machine selected
-    List<NewTaskModel> selectedMachines = [];
-    if(state.selectedMachines != null) selectedMachines = state.selectedMachines!;
-    final newTask = NewTaskModel(m.id!, const Duration(hours: 1, minutes: 0), "", m.name);
-    emit(SequencesMachineAdded(state.isNewOrder,state.machines, state.isSuccessModalVisible , state.isNoMachinesModalVisible,selectedMachines..add(newTask), state.dependencies));
+  /// Start a new, empty route.
+  void startNew() => _open(RouteEditorMode.create, const RouteDraft(name: ''));
+
+  /// Edit [sequence] in place.
+  void startEdit(SequenceEntity sequence) =>
+      _open(RouteEditorMode.edit, RouteDraft.fromSequence(sequence));
+
+  /// Start a new route as a copy of [sequence].
+  void startDuplicate(SequenceEntity sequence) => _open(
+      RouteEditorMode.create, RouteDraft.fromSequence(sequence).duplicate());
+
+  void _open(RouteEditorMode mode, RouteDraft draft) {
+    emit(state.copyWith(
+      mode: mode,
+      draft: draft,
+      draftVersion: state.draftVersion + 1,
+    ));
   }
 
-  void useMode(bool isNewOrder)async{
-    emit(SequencesModeChanged(isNewOrder, state.machines, state.isSuccessModalVisible, state.isNoMachinesModalVisible, state.selectedMachines, state.dependencies));
-  }
-  
+  /// Leave create/edit mode without saving.
+  void cancel() =>
+      emit(state.copyWith(mode: RouteEditorMode.view, clearDraft: true));
 
-
-void saveProcess(String processName, List<MachineTypeEntity> nodes, List<Connection> connections) async {
-  final List<NewTaskModel> tasks = nodes
-      .map((machine) => NewTaskModel(
-            machine.id!,
-            const Duration(hours: 1),
-            machine.description ?? "",
-            machine.name,
-          ))
-      .toList();
-  final List<Map<String, int>> dependencies = connections
-      .map((conn) => {
-            'predecessor_id': conn.source,
-            'successor_id': conn.target,
-          })
-      .toList();
-
-
-      print("....................SAVE PROCESS....................");
-      print("Saving process with name: $processName");
-      //Dependencies
-  print("Tasks: ${tasks.map((t) => t.description).join(', ')}");
-  print("Dependencies: ${dependencies.map((d) => '(${d['predecessor_id']}, ${d['successor_id']})').join(', ')}");
-
-  
-  final response = await seqService.addSequenceWithGraph(tasks, dependencies, processName);
-
-  response.fold(
-    (failure) {
-      
-      emit(SequencesMinimumStateChange(
-        state.isNewOrder,
-        state.machines,
-        state.isSuccessModalVisible,
-        true,
-        state.selectedMachines,
-        state.dependencies,
-      ));
-    },
-    (success) {
-      emit(SequencesProcessAdded(
-        state.isNewOrder,
-        state.machines,
-        true,
-        false,
-        state.selectedMachines,
-        state.dependencies,
-      ));
-      GetIt.instance.get<SeeProcessBloc>().retrieveSequences();
-    },
-  );
-}
-
-
-  void modelChanged(bool isVisible) async{
-    emit(SequencesMinimumStateChange(state.isNewOrder, state.machines, state.isSuccessModalVisible, isVisible, state.selectedMachines, state.dependencies));
+  /// How many jobs of saved programs use the route being edited (0 for a
+  /// new route).
+  Future<int> jobsUsingCurrentRoute() async {
+    final id = state.draft?.sequenceId;
+    if (state.mode != RouteEditorMode.edit || id == null) return 0;
+    final response = await seqService.countJobsUsing(id);
+    return response.fold((_) => 0, (n) => n);
   }
 
-  void machinesSuccessModalChanged(bool isVisible)async{
-    emit(SequencesMinimumStateChange(state.isNewOrder, state.machines, isVisible, state.isNoMachinesModalVisible, state.selectedMachines, state.dependencies));
-  }
-
-  void tsaskUpdated(int index, String description, String hour) async{
-    state.selectedMachines![index].description = description;
-
-    // hour comes from HourTextInput as "HH:MM". Parse defensively instead of
-    // assuming fixed character positions: an incomplete/malformed value used
-    // to throw here and silently abort the whole update (including the
-    // description change above), leaving the task's processing time stuck
-    // at whatever it was before with no feedback to the user.
-    final parts = hour.split(':');
-    if (parts.length == 2) {
-      final hours = int.tryParse(parts[0]);
-      final minutes = int.tryParse(parts[1]);
-      if (hours != null && minutes != null) {
-        state.selectedMachines![index].processingUnit =
-            Duration(hours: hours, minutes: minutes);
-      }
-    }
-
-    emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines, state.dependencies));
-  }
-
-  void taskRemoved(int index) async{
-    state.selectedMachines!.removeAt(index);
-    emit(SequencesMachineAdded(state.isNewOrder, state.machines, state.isSuccessModalVisible, state.isSuccessModalVisible, state.selectedMachines, state.dependencies));
+  /// Saves [draft] (create or edit, per the current mode). On success the
+  /// screen goes back to view mode; the route's id comes back so the caller
+  /// can select it.
+  Future<Either<Failure, int>> save(RouteDraft draft) async {
+    emit(state.copyWith(saving: true));
+    final toSave = state.mode == RouteEditorMode.edit
+        ? draft.copyWith(sequenceId: state.draft?.sequenceId)
+        : RouteDraft(name: draft.name, nodes: draft.nodes, arrows: draft.arrows);
+    final result = await seqService.saveRoute(toSave);
+    result.fold(
+      (_) => emit(state.copyWith(saving: false)),
+      (_) => emit(state.copyWith(
+        saving: false,
+        mode: RouteEditorMode.view,
+        clearDraft: true,
+      )),
+    );
+    return result;
   }
 }
-

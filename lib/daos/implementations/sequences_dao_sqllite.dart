@@ -10,9 +10,10 @@ class SequencesDaoSqllite implements SequencesDao{
   SequencesDaoSqllite(this.db);
 
   @override
-  Future<int> createSequence(SequenceModel sequence)async {
+  Future<int> createSequence(SequenceModel sequence,
+      {DatabaseExecutor? executor}) async {
     try{
-      int id = await db.insert("SEQUENCES", sequence.toJson());
+      int id = await (executor ?? db).insert("SEQUENCES", sequence.toJson());
       return id;
     }catch(e){
       throw LocalStorageFailure();
@@ -44,11 +45,34 @@ class SequencesDaoSqllite implements SequencesDao{
   }
   
   @override
-  Future<bool> deleteSequence(int id) async {
+  Future<bool> deleteSequence(int id, {DatabaseExecutor? executor}) async {
     try{
-      int numberDeleted = await db.delete('SEQUENCES', where: 'sequence_id = ? ', whereArgs: [id]);
+      int numberDeleted = await (executor ?? db)
+          .delete('SEQUENCES', where: 'sequence_id = ? ', whereArgs: [id]);
       return numberDeleted> 0;
     }catch(e){
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
+  Future<void> renameSequence(int id, String name,
+      {DatabaseExecutor? executor}) async {
+    try {
+      await (executor ?? db).update('SEQUENCES', {'name': name},
+          where: 'sequence_id = ?', whereArgs: [id]);
+    } catch (e) {
+      throw LocalStorageFailure();
+    }
+  }
+
+  @override
+  Future<int> countJobsUsing(int id) async {
+    try {
+      final rows = await db.rawQuery(
+          'SELECT COUNT(*) AS n FROM jobs WHERE sequence_id = ?', [id]);
+      return (rows.first['n'] as int?) ?? 0;
+    } catch (e) {
       throw LocalStorageFailure();
     }
   }

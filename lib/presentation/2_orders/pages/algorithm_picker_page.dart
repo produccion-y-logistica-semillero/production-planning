@@ -487,13 +487,25 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             ),
                             if (_selectedIndexes.isNotEmpty) ...[
                               const SizedBox(height: 4),
-                              Text(
-                                'Algoritmos: ${_selectedIndexes.map((i) => i + 1).join(', ')}',
-                                style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
-                              ),
+                              // Rule names (EDD, LPT, WSPT...), in list order,
+                              // instead of their position numbers.
+                              Builder(builder: (context) {
+                                final names = ([..._selectedIndexes]..sort())
+                                    .map((i) => _labelForRule(rules[i], i))
+                                    .join(', ');
+                                return Tooltip(
+                                  message: names,
+                                  child: Text(
+                                    'Algoritmos: $names',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                );
+                              }),
                             ],
                           ],
                         ),

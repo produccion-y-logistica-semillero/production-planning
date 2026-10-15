@@ -182,67 +182,76 @@ class NewOrderPage extends StatelessWidget {
                         child: Column(children: jobWidgets),
                       ),
                     ),
-                    ElevatedButton(
-                      onPressed: () => bloc.addJob(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colorScheme.primary,
-                        foregroundColor: colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
+                    // Acciones del programa, de izquierda a derecha
+                    // (pasan a la siguiente línea si no caben).
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                        ElevatedButton(
+                          onPressed: () => bloc.addJob(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('Agregar Job'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () =>
+                              _showMatrixDialog(context, state, colorScheme),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text(
+                              'Definir matriz de tiempos de alistamiento'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () =>
+                              _showMachineInitialStatesDialog(context, state, colorScheme),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('Definir estado inicial de máquinas'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (!_validateForm(state)) {
+                              _showValidationDialog(context, colorScheme);
+                            } else {
+                              if (editOrderId != null) {
+                                bloc.updateOrder(editOrderId!);
+                              } else {
+                                bloc.saveOrder();
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.secondary,
+                            foregroundColor: colorScheme.onSecondary,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: Text(editOrderId != null
+                              ? 'Guardar Cambios'
+                              : 'Crear programa de produccion'),
+                        ),
+                        ],
                       ),
-                      child: const Text('Agregar Job'),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () =>
-                          _showMatrixDialog(context, state, colorScheme),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: const Text(
-                          'Definir matriz de tiempos de alistamiento'),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () =>
-                          _showMachineInitialStatesDialog(context, state, colorScheme),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: const Text('Definir estado inicial de máquinas'),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (!_validateForm(state)) {
-                          _showValidationDialog(context, colorScheme);
-                        } else {
-                          if (editOrderId != null) {
-                            bloc.updateOrder(editOrderId!);
-                          } else {
-                            bloc.saveOrder();
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colorScheme.secondary,
-                        foregroundColor: colorScheme.onSecondary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(editOrderId != null
-                          ? 'Guardar Cambios'
-                          : 'Crear programa de produccion'),
                     ),
                   ],
                 ),

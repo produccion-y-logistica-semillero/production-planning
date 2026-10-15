@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:intl/intl.dart';
+
+import 'package:production_planning/entities/order_entity.dart';
+import 'package:production_planning/services/orders_service.dart';
+import 'package:production_planning/shared/dispatch_rule_info.dart';
 
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
@@ -19,11 +24,18 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   bool _selectAll = false;
   bool _isLoading = true;
 
+  /// The program being scheduled, to show its routes and jobs.
+  OrderEntity? _order;
+
   @override
   void initState() {
     super.initState();
     _ganttBloc = GetIt.instance<GanttBloc>();
     _ganttBloc.assignOrderId(widget.orderId);
+    GetIt.instance<OrdersService>().getFullOrder(widget.orderId).then((r) {
+      if (!mounted) return;
+      r.fold((_) {}, (order) => setState(() => _order = order));
+    });
   }
 
   @override
@@ -41,6 +53,70 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
       // Si no tiene value2, usar el fallback
     }
     return 'Algoritmo ${index + 1}';
+  }
+
+  String _ruleSummary(String code) =>
+      dispatchRuleInfo(code)?.summary ?? 'Sin descripción disponible.';
+
+  void _showRuleHelp(BuildContext context, String code) {
+    final info = dispatchRuleInfo(code);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(info == null ? code : '${info.code} · ${info.title}'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: info == null
+              ? const Text('No hay una descripción para esta regla.')
+              : _RuleHelpBody(info: info),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAllRulesHelp(BuildContext context, List<String> codes) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Guía de reglas de este ambiente'),
+        content: SizedBox(
+          width: 600,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final code in codes.toSet())
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                    dispatchRuleInfo(code) == null
+                        ? code
+                        : '$code · ${dispatchRuleInfo(code)!.title}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(_ruleSummary(code)),
+                  childrenPadding: const EdgeInsets.only(bottom: 12),
+                  children: [
+                    if (dispatchRuleInfo(code) != null)
+                      _RuleHelpBody(info: dispatchRuleInfo(code)!),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleSelectAll(bool? value, int rulesLength) {
@@ -264,8 +340,22 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                           ],
                         ),
                       ),
+                      TextButton.icon(
+                        onPressed: () => _showAllRulesHelp(context, [
+                          for (int i = 0; i < rules.length; i++)
+                            _labelForRule(rules[i], i)
+                        ]),
+                        icon: const Icon(Icons.menu_book_outlined),
+                        label: const Text('Guía de reglas'),
+                      ),
                     ],
                   ),
+                ),
+
+                // Rutas y jobs del programa
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: _ProgramSummary(order: _order),
                 ),
 
                 // Select All Checkbox
@@ -337,11 +427,18 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             ),
                           ),
                           subtitle: Text(
-                            'Índice: $index',
+                            _ruleSummary(_labelForRule(rule, index)),
                             style: TextStyle(
                               color: colorScheme.onSurfaceVariant,
                               fontSize: 12,
                             ),
+                          ),
+                          secondary: IconButton(
+                            tooltip: '¿Cómo funciona esta regla?',
+                            icon: Icon(Icons.help_outline,
+                                color: colorScheme.primary),
+                            onPressed: () => _showRuleHelp(
+                                context, _labelForRule(rule, index)),
                           ),
                           value: isSelected,
                           onChanged: (v) =>
@@ -442,6 +539,136 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Explanation of one rule: what it does, how it decides, when to use it.
+class _RuleHelpBody extends StatelessWidget {
+  final DispatchRuleInfo info;
+  const _RuleHelpBody({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget section(String label, String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(color: theme.colorScheme.primary)),
+              const SizedBox(height: 2),
+              Text(text),
+            ],
+          ),
+        );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Chip(label: Text(info.kind), visualDensity: VisualDensity.compact),
+        const SizedBox(height: 8),
+        section('Qué hace', info.summary),
+        section('Cómo decide', info.howItWorks),
+        section('Útil para', info.goodFor),
+      ],
+    );
+  }
+}
+
+/// The routes and jobs of the program being scheduled.
+class _ProgramSummary extends StatelessWidget {
+  final OrderEntity? order;
+  const _ProgramSummary({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final jobs = order?.orderJobs ?? const [];
+    final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
+
+    // Route name -> number of jobs that use it.
+    final routes = <String, int>{};
+    for (final job in jobs) {
+      final name = job.sequence?.name ?? 'Ruta sin nombre';
+      routes[name] = (routes[name] ?? 0) + 1;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Icon(Icons.list_alt, color: colorScheme.primary),
+        title: const Text('Contenido del programa',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(order == null
+            ? 'Cargando…'
+            : '${jobs.length} ${jobs.length == 1 ? 'job' : 'jobs'} · '
+                '${routes.length} ${routes.length == 1 ? 'ruta' : 'rutas'} '
+                'de proceso'),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rutas de proceso',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: colorScheme.primary)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final e in routes.entries)
+                Chip(
+                  avatar: const Icon(Icons.account_tree_outlined, size: 16),
+                  label: Text(
+                      '${e.key} (${e.value} ${e.value == 1 ? 'job' : 'jobs'})'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('Jobs',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: colorScheme.primary)),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 32,
+                  dataRowMinHeight: 28,
+                  dataRowMaxHeight: 32,
+                  columns: const [
+                    DataColumn(label: Text('Job')),
+                    DataColumn(label: Text('Ruta')),
+                    DataColumn(label: Text('Prioridad'), numeric: true),
+                    DataColumn(label: Text('Disponible')),
+                    DataColumn(label: Text('Entrega')),
+                  ],
+                  rows: [
+                    for (final job in jobs)
+                      DataRow(cells: [
+                        DataCell(Text(job.jobName ?? 'Job ${job.jobId}')),
+                        DataCell(Text(job.sequence?.name ?? '—')),
+                        DataCell(Text('${job.priority}')),
+                        DataCell(Text(dateFmt.format(job.availableDate))),
+                        DataCell(Text(dateFmt.format(job.dueDate))),
+                      ]),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

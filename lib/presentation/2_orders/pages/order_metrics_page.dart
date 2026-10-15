@@ -8,6 +8,7 @@ import 'package:production_planning/presentation/2_orders/pages/gantt_page.dart'
 import 'package:production_planning/presentation/2_orders/pages/gantt_data_table_page.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/shared/dispatch_rule_info.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
@@ -65,6 +66,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
     final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '${hours.toString()}:$minutes:$seconds';
+  }
+
+  /// What the rule does, for the tooltip on its name.
+  String _ruleTooltip(String code) {
+    final info = dispatchRuleInfo(code);
+    return info == null ? code : '${info.title}\n${info.summary}';
   }
 
   @override
@@ -412,7 +419,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                         ),
                                         cells: [
                                           DataCell(
-                                            Container(
+                                            Tooltip(
+                                              message: _ruleTooltip(
+                                                  filteredRuleNames[index]),
+                                              child: Container(
                                               padding: const EdgeInsets.symmetric(
                                                 horizontal: 12,
                                                 vertical: 6,
@@ -432,6 +442,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                                   fontSize: 12,
                                                 ),
                                               ),
+                                            ),
                                             ),
                                           ),
                                           DataCell(

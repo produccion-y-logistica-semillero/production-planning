@@ -152,6 +152,11 @@ class OrdersService {
     return orderRepo.getAllOrders();
   }
 
+  /// The program with its jobs and each job's route.
+  Future<Either<Failure, OrderEntity>> getFullOrder(int orderId) {
+    return orderRepo.getFullOrder(orderId);
+  }
+
   /// ═══════════════════════════════════════════════════════════════════════════
   /// DETECCIÓN DE AMBIENTE DE PROGRAMACIÓN DE PRODUCCIÓN
   /// ═══════════════════════════════════════════════════════════════════════════

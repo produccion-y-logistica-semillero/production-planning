@@ -94,6 +94,10 @@ class OpenShopAdapter {
         job.priority,
         job.availableDate,
         operations,
+        // An order with at least one free job is scheduled as an open shop
+        // as a whole (agreed rule); the jobs of that order that DO have a
+        // route keep it. Not passing them used to drop those routes.
+        dependencies: job.sequence!.dependencies ?? const [],
         interruptibleByTask: interruptibleByTask,
       ));
     }

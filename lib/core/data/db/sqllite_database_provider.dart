@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -323,6 +323,13 @@ class SQLLiteDatabaseProvider {
           'environment_id': 8,
           'name': 'FLEXIBLE OPEN SHOP',
         });
+        // Precedence graphs (A and B enable C, branching): one machine per
+        // station / some station with several machines.
+        batch.insert('environments', {'environment_id': 9, 'name': 'RECURRENTE'});
+        batch.insert('environments', {
+          'environment_id': 10,
+          'name': 'FLEXIBLE RECURRENTE',
+        });
 
         // ─── Dispatch Rules ────────────────────────────────────────────────────
         // Single Machine (IDs 1-13)
@@ -457,14 +464,12 @@ class SQLLiteDatabaseProvider {
           addRule(6, r);
         }
 
-        // 7: Open Shop
-        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
-          addRule(7, r);
-        }
-
-        // 8: Flexible Open Shop
-        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
-          addRule(8, r);
+        // 7: Open Shop, 8: Flexible Open Shop, 9: Recurrente,
+        // 10: Flexible Recurrente
+        for (final env in [7, 8, 9, 10]) {
+          for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+            addRule(env, r);
+          }
         }
 
         // ─── Orders & Jobs (base) ──────────────────────────────────────────────
@@ -1582,6 +1587,32 @@ class SQLLiteDatabaseProvider {
                 'SELECT 1 FROM types_x_rules '
                 'WHERE environment_id = ? AND dispatch_rule_id = ?)',
                 [environmentId, rule.key, environmentId, rule.key],
+              );
+            }
+          }
+        }
+
+        if (oldVersion < 13) {
+          // RECURRENTE / FLEXIBLE RECURRENTE (precedence graphs) used to be
+          // reported as JOB SHOP / FLEXIBLE JOB SHOP. They get their own
+          // environments, and they and the open shops get the same rules:
+          // static, MINSLACK, CR, ATCS, GENETICS, LWR, MWR.
+          await db.execute(
+            "INSERT OR IGNORE INTO environments (environment_id, name) "
+            "VALUES (9, 'RECURRENTE')",
+          );
+          await db.execute(
+            "INSERT OR IGNORE INTO environments (environment_id, name) "
+            "VALUES (10, 'FLEXIBLE RECURRENTE')",
+          );
+          for (final environmentId in const [7, 8, 9, 10]) {
+            for (final ruleId in const [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+              await db.execute(
+                'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+                'SELECT ?, ? WHERE NOT EXISTS ('
+                'SELECT 1 FROM types_x_rules '
+                'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+                [environmentId, ruleId, environmentId, ruleId],
               );
             }
           }

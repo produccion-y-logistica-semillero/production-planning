@@ -151,6 +151,9 @@ class OpenShop {
       case "MWR":
         scheduleOpenShopMWR();
         break;
+      case "LWR":
+        scheduleOpenShopLWR();
+        break;
       case "CR":
         scheduleOpenShopCR();
         break;
@@ -216,61 +219,41 @@ class OpenShop {
     return dt;
   }
 
-  void scheduleOpenShopFIFO() {
-    _schedule((a, b) => a.job.availableDate.compareTo(b.job.availableDate));
-  }
+  // ── Static rules ──────────────────────────────────────────────────────────
+  //
+  // Applied among the operations that can start (see _schedule), with the
+  // operation's NOMINAL attributes as the index: its processing time on the
+  // machine chosen for it, the job's due date, or when the operation joined
+  // the queue. They used to build the conflict set on the nominal start and
+  // let the job rule pick the machine too — LPT sent the operation to its
+  // slowest machine. WSPT also divided by the raw minutes, so a zero-minute
+  // operation divided by zero.
 
-  void scheduleOpenShopSPT() {
-    _schedule((a, b) => a.duration.compareTo(b.duration));
-  }
+  void scheduleOpenShopFIFO() => _scheduleBy(DispatchCriterion.fifoArrival);
 
-  void scheduleOpenShopLPT() {
-    _schedule((a, b) => b.duration.compareTo(a.duration));
-  }
+  void scheduleOpenShopSPT() => _scheduleBy(DispatchCriterion.sptNominal);
 
-  void scheduleOpenShopEDD() {
-    _schedule((a, b) => a.job.dueDate.compareTo(b.job.dueDate));
-  }
+  void scheduleOpenShopLPT() => _scheduleBy(DispatchCriterion.lptNominal);
 
-  void scheduleOpenShopWSPT() {
-    _schedule((a, b) {
-      final wsptA = a.job.priority / a.duration.inMinutes;
-      final wsptB = b.job.priority / b.duration.inMinutes;
-      return wsptB.compareTo(wsptA);
-    });
-  }
+  void scheduleOpenShopEDD() => _scheduleBy(DispatchCriterion.edd);
 
-  void scheduleOpenShopMS() => _scheduleDynamic(DispatchCriterion.ms);
+  void scheduleOpenShopWSPT() => _scheduleBy(DispatchCriterion.wsptNominal);
 
-  void scheduleOpenShopMWR() {
-    _schedule((a, b) {
-      final remainingA =
-          _remainingWork(a.job as OpenShopInput, a.taskId as int);
-      final remainingB =
-          _remainingWork(b.job as OpenShopInput, b.taskId as int);
-      return remainingB.compareTo(remainingA);
-    });
-  }
+  void scheduleOpenShopMS() => _scheduleBy(DispatchCriterion.ms);
 
-  void scheduleOpenShopCR() => _scheduleDynamic(DispatchCriterion.cr);
+  // LWR / MWR: nominal work the job still has — this operation plus every
+  // operation not yet done (see _remainingWorkAfter). MWR is the classic
+  // open-shop heuristic: start first the job with the most work left, so it
+  // does not end up last on every machine. The previous MWR counted every
+  // other operation of the job, including the ones already done.
 
-  void scheduleOpenShopATCS() => _scheduleDynamic(DispatchCriterion.atcs);
+  void scheduleOpenShopLWR() => _scheduleBy(DispatchCriterion.lwr);
 
-  int _remainingWork(OpenShopInput job, int currentTaskId) {
-    // Calcula el trabajo restante para un job (excluyendo la tarea actual)
-    int totalMinutes = 0;
-    for (var operation in job.operations) {
-      if (operation.value1 != currentTaskId) {
-        if (operation.value2.isEmpty) continue;
-        final sum = operation.value2.values
-            .map((d) => d.inMinutes)
-            .fold<int>(0, (a, b) => a + b);
-        final avgDuration = sum ~/ operation.value2.length;
-        totalMinutes += avgDuration;
-      }
-    }
-    return totalMinutes;
-  }
+  void scheduleOpenShopMWR() => _scheduleBy(DispatchCriterion.mwr);
+
+  void scheduleOpenShopCR() => _scheduleBy(DispatchCriterion.cr);
+
+  void scheduleOpenShopATCS() => _scheduleBy(DispatchCriterion.atcs);
 
   /// Critical ratio used only by the GENETICS score, at [now] — the
   /// schedule's clock, never the wall clock.
@@ -295,7 +278,9 @@ class OpenShop {
   // criteria in dynamic_dispatch.dart. The job's other pending operations
   // are charged against its due date as nominal work still to do.
 
-  void _scheduleDynamic(DispatchCriterion criterion) {
+  /// Runs the non-delay loop with one of the shared criteria — static,
+  /// LWR/MWR or dynamic; they differ only in the index they read.
+  void _scheduleBy(DispatchCriterion criterion) {
     final AtcsParameters? atcs =
         criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
     _schedule(
@@ -318,7 +303,6 @@ class OpenShop {
         if (byTask != 0) return byTask;
         return (a.machineId as int).compareTo(b.machineId as int);
       },
-      priceCandidates: true,
     );
   }
 
@@ -331,6 +315,7 @@ class OpenShop {
     Duration duration,
     DateTime at,
     Set<int> completed,
+    DateTime arrival,
   ) {
     final placed = _priceOperation(
       job: job,
@@ -359,6 +344,8 @@ class OpenShop {
       jobId: job.jobId,
       setup: segmentsDuration(placed.setupSegments),
       remainingWork: _remainingWorkAfter(job, taskId, completed),
+      processing: duration,
+      arrival: arrival,
     );
   }
 
@@ -533,11 +520,17 @@ class OpenShop {
   /// Non-delay list scheduler: each round, the ready operations that can
   /// start earliest compete and [comparator] picks among them.
   ///
-  /// [priceCandidates] prices every contender through the preemption engine
-  /// and attaches it as `dispatch` — needed by the dynamic rules, skipped for
-  /// the static ones, which only read nominal fields.
-  void _schedule(int Function(dynamic, dynamic) comparator,
-      {bool priceCandidates = false}) {
+  /// Every contender — for every rule — is priced through the preemption
+  /// engine on each of its eligible machines and carried as `dispatch`, so
+  /// the conflict set is built on EFFECTIVE starts and the machine is chosen
+  /// by earliest completion before the rule picks the operation (see
+  /// nonDelayConflictSet).
+  ///
+  /// A job WITHOUT precedences is a true open-shop job: its operations can be
+  /// done in any order, but the job is on one machine at a time. A job WITH
+  /// precedences (an order that mixes both kinds) follows its graph, and
+  /// operations with no arrow between them may overlap, as in Job Shop.
+  void _schedule(int Function(dynamic, dynamic) comparator) {
     print(
         'OpenShop._schedule: entering main loop for ${inputJobs.length} jobs');
     // Rastrear qué operaciones ya se completaron por job
@@ -567,12 +560,9 @@ class OpenShop {
 
     bool isTaskReady(OpenShopInput job, int taskId, Set<int> completed) {
       if (job.dependencies.isEmpty) {
-        // Treat operations as unordered; allow first operation if no predecessor defined
-        final idx = job.operations.indexWhere((t) => t.value1 == taskId);
-        if (idx > 0) {
-          final predId = job.operations[idx - 1].value1;
-          return completed.contains(predId);
-        }
+        // Open shop: any operation not yet done may go next. It used to
+        // wait for the operation listed before it, which imposed the order
+        // the tasks were created in — a flow shop, not an open shop.
         return true;
       } else {
         for (final dep in job.dependencies) {
@@ -587,12 +577,8 @@ class OpenShop {
     DateTime getJobReadyTime(
         OpenShopInput job, int taskId, Map<int, DateTime> compTimes) {
       if (job.dependencies.isEmpty) {
-        final idx = job.operations.indexWhere((t) => t.value1 == taskId);
-        if (idx > 0) {
-          final predId = job.operations[idx - 1].value1;
-          return compTimes[predId] ?? job.availableDate;
-        }
-        return job.availableDate;
+        // One machine at a time: free once its last operation ends.
+        return jobAvailability[job.jobId] ?? job.availableDate;
       } else {
         DateTime readyTime = job.availableDate;
         for (final dep in job.dependencies) {
@@ -631,7 +617,7 @@ class OpenShop {
             int machineId,
             Duration duration,
             DateTime earliestStart,
-            DispatchCandidate<OpenShopInput>? dispatch
+            DispatchCandidate<OpenShopInput> dispatch
           })> candidates = [];
       // First pricing failure this round, rethrown only if it leaves no
       // candidate at all — same policy as selectNext in dynamic_dispatch.dart.
@@ -665,19 +651,17 @@ class OpenShop {
                 : jobAvail;
             final adjustedStart = _adjustForWorkingSchedule(earliestStart);
 
-            // Dynamic rules compare what the operation really costs from
-            // here, priced through the same code that commits it. One
-            // impossible machine must not sink the operation's other
-            // options, so a failure only drops this candidate.
-            DispatchCandidate<OpenShopInput>? dispatch;
-            if (priceCandidates) {
-              try {
-                dispatch = _dispatchCandidate(
-                    job, taskId, machineId, duration, adjustedStart, completed);
-              } on SchedulingHorizonException catch (e) {
-                pricingFailure ??= e;
-                continue;
-              }
+            // What the operation really costs from here, priced through
+            // the same code that commits it. One impossible machine must
+            // not sink the operation's other options, so a failure only
+            // drops this candidate.
+            final DispatchCandidate<OpenShopInput> dispatch;
+            try {
+              dispatch = _dispatchCandidate(job, taskId, machineId, duration,
+                  adjustedStart, completed, jobAvail);
+            } on SchedulingHorizonException catch (e) {
+              pricingFailure ??= e;
+              continue;
             }
 
             candidates.add((
@@ -699,23 +683,25 @@ class OpenShop {
         break;
       }
 
-      // Non-delay: the operation that can start earliest goes first, and the
-      // rule only decides among those tied on that start. For the dynamic
-      // rules the start is the EFFECTIVE one (after maintenance, rest caps
-      // and non-interruptible waits), so an operation the calendar would
-      // hold back never beats one that can really run now; if nothing can
+      // Non-delay on the EFFECTIVE start (after changeover waits,
+      // maintenance, rest caps and non-interruptible waits); if nothing can
       // start at the current instant, the clock effectively jumps to the
       // earliest effective start (Giffler & Thompson 1960, non-delay).
-      candidates.sort((a, b) {
-        final DateTime startA = a.dispatch?.start ?? a.earliestStart;
-        final DateTime startB = b.dispatch?.start ?? b.earliestStart;
-        final cmpStart = startA.compareTo(startB);
-        if (cmpStart != 0) return cmpStart;
-        return comparator(a, b);
-      });
+      //
+      // Two decisions, kept apart (see nonDelayConflictSet): each operation
+      // that can start at t* first gets its machine — earliest completion
+      // among its machines available at t*, then cheapest changeover, then
+      // lowest id — and only then does the rule choose among operations.
+      final contenders = nonDelayConflictSet(
+        candidates,
+        operationKey: (c) => (c.job.jobId, c.taskId),
+        candidate: (c) => c.dispatch,
+        machineId: (c) => c.machineId,
+      );
+      contenders.sort(comparator);
 
       // Seleccionar el mejor candidato
-      final selected = candidates.first;
+      final selected = contenders.first;
       // Placed through the same code the dynamic rules priced candidates
       // with, so what gets committed is exactly what was judged.
       final placed = _priceOperation(

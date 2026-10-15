@@ -17,6 +17,7 @@ import 'package:production_planning/repositories/interfaces/machine_repository.d
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
+import 'package:production_planning/services/environment_detection.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleFlowShopAdapter {
@@ -69,7 +70,9 @@ class FlexibleFlowShopAdapter {
     for (final job in order.orderJobs!) {
       final List<Tuple2<int, Map<int, Duration>>> taskSequence = [];
       final Map<int, bool> interruptibleByTask = {};
-      for (final task in job.sequence!.tasks!) {
+      // Stations in the order the ARROWS give, not the order the tasks were
+      // created in the route editor (which is the list order).
+      for (final task in orderedTasks(job.sequence!)) {
         final Map<int, Duration> machineDurations = {};
         for (final machine
             in machines.where((m) => m.machineTypeId == task.machineTypeId)) {

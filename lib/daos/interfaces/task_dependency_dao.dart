@@ -5,4 +5,5 @@ abstract class TaskDependencyDao {
   Future<List<TaskDependencyModel>> getDependenciesByTaskId(int taskId);
   Future<bool> deleteDependencies(int taskId);
   Future<List<TaskDependencyModel>> getDependenciesBySequenceId(int sequenceId);
+  Future<void> deleteDependenciesBySequence(int sequenceId);
 }

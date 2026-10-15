@@ -154,7 +154,10 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(21, 'MS'),
             const Tuple2(24, 'GENETICS'),
           ];
-        } else if (upper == 'OPEN SHOP' || upper == 'FLEXIBLE OPEN SHOP') {
+        } else if (upper == 'OPEN SHOP' ||
+            upper == 'FLEXIBLE OPEN SHOP' ||
+            upper == 'RECURRENTE' ||
+            upper == 'FLEXIBLE RECURRENTE') {
           finalRules = [
             const Tuple2(1, 'EDD'),
             const Tuple2(2, 'SPT'),
@@ -165,6 +168,8 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(12, 'CR'),
             const Tuple2(13, 'ATCS'),
             const Tuple2(24, 'GENETICS'),
+            const Tuple2(26, 'LWR'),
+            const Tuple2(27, 'MWR'),
           ];
         }
       }

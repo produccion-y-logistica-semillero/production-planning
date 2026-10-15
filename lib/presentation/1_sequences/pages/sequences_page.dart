@@ -1,193 +1,280 @@
-// ignore_for_file: avoid_print
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
-import 'package:production_planning/entities/machine_type_entity.dart';
-import 'package:production_planning/entities/process_entity.dart';
-
+import 'package:production_planning/entities/route_draft.dart';
+import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_state.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
+import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_state.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
+import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/machines_list.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/orders_list.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/sequence_editor_panel.dart';
-import 'package:production_planning/presentation/1_sequences/widgets/low_order_widgets/button_mode.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
-import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/machines_list.dart';
-import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/add_order.dart';
 
-class SequencesPage extends StatefulWidget {
+/// Process routes: browse (read-only), create, edit in place, duplicate,
+/// rename and delete.
+class SequencesPage extends StatelessWidget {
   const SequencesPage({super.key});
-
-  @override
-  State<SequencesPage> createState() => _SequencesPageState();
-}
-
-class _SequencesPageState extends State<SequencesPage> {
-  final TextEditingController _sequenceNameController = TextEditingController();
-  final GlobalKey<NodeEditorState> nodeEditorKey = GlobalKey<NodeEditorState>();
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider<SeeProcessBloc>(
-      create: (context) => GetIt.instance.get<SeeProcessBloc>(),
+      create: (_) => GetIt.instance.get<SeeProcessBloc>()..retrieveSequences(),
       child: Scaffold(
         appBar: getAppBar(),
-        body: MultiBlocListener(
-          listeners: [
-            // Refrescar la lista cuando pasas de "Nueva Ruta" a "Ver Secuencias"
-            BlocListener<SequencesBloc, SequencesState>(
-              listenWhen: (prev, curr) =>
-                  prev.isNewOrder == true && curr.isNewOrder == false,
-              listener: (context, state) {
-                // Forzar que la lista se recargue para que aparezca la recién creada
-                context
-                    .read<SeeProcessBloc>()
-                    .retrieveSequences(); // si tienes force: true, úsalo aquí
-              },
-            ),
-          ],
-          child: BlocBuilder<SequencesBloc, SequencesState>(
-            builder: (context, state) {
-              Widget machinesContent =
-                  const Center(child: CircularProgressIndicator());
-
-              if (state is SequencesInitialState) {
-                BlocProvider.of<SequencesBloc>(context)
-                    .retrieveSequencesMachine();
-              }
-              if (state is SequencesMachineFailure) {
-                machinesContent = const Center(child: Text("Error fetching"));
-              }
-              if (state.machines != null) {
-                machinesContent = MachinesList(
-                  machineTypes: state.machines!,
-                  onSelectMachine: (machine) {
-                    BlocProvider.of<SequencesBloc>(context)
-                        .selectMachine(machine);
-
-                    nodeEditorKey.currentState?.addNodeForMachine(machine);
-                  },
-                );
-              }
-              final machinesList = machinesContent;
-
-              final Widget board;
-              if (state.isNewOrder) {
-                board = SequenceEditorPanel(
-                  nameController: _sequenceNameController,
-                  onSave: () {
-                    final name = _sequenceNameController.text;
-                    if (name.isNotEmpty) {
-                      _onSaveOrder(context, name);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Por favor ingresa un nombre para la ruta de proceso'),
-                        ),
-                      );
-                    }
-                  },
-                  machines: state.machines ?? [],
-                  nodeEditorKey: nodeEditorKey,
-                );
-              } else {
-                board = OrderList(
-                  nameController: _sequenceNameController,
-                  nodeEditorKey: nodeEditorKey,
-                );
-              }
-
-              return Row(
-                children: [
-                  IconButton(
-                    onPressed: () => printInfo(
-                      context,
-                      title: 'Ruta de PRoceso',
-                      content:
-                          'Una Ruta de Proceso se refiere al proceso de fabricacion de un producto, aca se define la secuencia de maquinas por las que se debe pasar para la fabricacion, el orden representa pre requisitos, y en cada paso por una maquina, o "tarea" se especifica cuanto tiempo en promedio se requiere en esa maquina, por ejemplo, la produccion de pan:\n\nTarea 1: Maquina de mezclado, 20min\nTarea 2: Camara de reposo, 10 min\nTarea 3: Maquina divisora, 4 min\nTarea 5: Maquina de formado, 15 min\nTarea 6: Maquina de horneado, 1 hora\nTarea 7: Maquina de enfriado 40 min',
-                    ),
-                    icon: const Icon(Icons.info),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        children: [
-                          if (state.isNewOrder)
-                            Expanded(
-                              flex: 2,
-                              child: machinesList,
-                            ),
-                          Expanded(
-                            flex: 1,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ButtonMode(
-                                  callback: state.isNewOrder
-                                      ? () {
-                                          BlocProvider.of<SequencesBloc>(
-                                                  context)
-                                              .useMode(false);
-
-                                          context
-                                              .read<SeeProcessBloc>()
-                                              .retrieveSequences();
-                                        }
-                                      : () => BlocProvider.of<SequencesBloc>(
-                                              context)
-                                          .useMode(true),
-                                  labelText: state.isNewOrder
-                                      ? "Ver Rutas de proceso"
-                                      : "Nueva Ruta de proceso",
-                                  icon: Icons.roller_shades_closed_outlined,
-                                  horizontalPadding: 30,
-                                ),
-                                const SizedBox(height: 20),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(flex: 2, child: board),
-                ],
-              );
-            },
-          ),
-        ),
+        body: const _SequencesBody(),
       ),
     );
   }
+}
 
-  void _onSaveOrder(BuildContext context, String name) {
-    final nodes = nodeEditorKey.currentState?.getNodes() ?? [];
-    final connections = nodeEditorKey.currentState?.getConnections() ?? [];
-    BlocProvider.of<SequencesBloc>(context)
-        .saveProcess(name, nodes, connections);
-    showDialog(
+class _SequencesBody extends StatefulWidget {
+  const _SequencesBody();
+
+  @override
+  State<_SequencesBody> createState() => _SequencesBodyState();
+}
+
+class _SequencesBodyState extends State<_SequencesBody> {
+  final TextEditingController _nameController = TextEditingController();
+
+  /// A fresh key per draft handed to the editor, so each create/edit starts
+  /// from its own route and the save reads the right canvas.
+  GlobalKey<NodeEditorState> _editorKey = GlobalKey<NodeEditorState>();
+  int _editorDraftVersion = -1;
+
+  /// The read-only route shown in view mode, rebuilt only when another
+  /// route (or a fresh copy of it) is loaded.
+  SequenceEntity? _viewedProcess;
+  RouteDraft? _viewedDraft;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _syncEditor(SequencesState state) {
+    if (state.isEditing && state.draftVersion != _editorDraftVersion) {
+      _editorDraftVersion = state.draftVersion;
+      _editorKey = GlobalKey<NodeEditorState>();
+      _nameController.text = state.draft?.name ?? '';
+    }
+  }
+
+  RouteDraft? _viewDraft(SequenceEntity? process) {
+    if (process == null) return null;
+    if (!identical(process, _viewedProcess)) {
+      _viewedProcess = process;
+      _viewedDraft = RouteDraft.fromSequence(process);
+    }
+    return _viewedDraft;
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  Future<void> _save(BuildContext context, SequencesState state) async {
+    final bloc = context.read<SequencesBloc>();
+    final seeBloc = context.read<SeeProcessBloc>();
+    final messenger = ScaffoldMessenger.of(context);
+    final editor = _editorKey.currentState;
+    if (editor == null) return;
+
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Escribe un nombre para la ruta de proceso')));
+      return;
+    }
+    final nodes = editor.currentNodes();
+    if (nodes.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Agrega al menos una estación a la ruta')));
+      return;
+    }
+
+    if (state.mode == RouteEditorMode.edit) {
+      final jobs = await bloc.jobsUsingCurrentRoute();
+      if (jobs > 0 && context.mounted) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Esta ruta está en uso'),
+            content: Text(
+              '$jobs ${jobs == 1 ? 'trabajo' : 'trabajos'} de programas de '
+              'producción guardados usan esta ruta. Los cambios se aplicarán '
+              'a esos programas:\n\n'
+              '• Las estaciones que se mantienen conservan los tiempos que '
+              'cada programa ya tiene.\n'
+              '• Las estaciones nuevas usarán el tiempo estándar hasta que '
+              'lo ajustes en cada programa.\n'
+              '• Las estaciones que quitaste desaparecen de esos trabajos.',
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Guardar cambios')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+      }
+    }
+
+    final result = await bloc.save(RouteDraft(
+      name: name,
+      nodes: nodes,
+      arrows: editor.currentArrows(),
+    ));
+    result.fold(
+      (_) => messenger.showSnackBar(const SnackBar(
+        content: Text('No se pudo guardar la ruta. Intenta de nuevo.'),
+        backgroundColor: Colors.redAccent,
+      )),
+      (id) {
+        messenger.showSnackBar(
+            SnackBar(content: Text('Ruta "$name" guardada')));
+        seeBloc.refreshAndSelect(id);
+      },
+    );
+  }
+
+  Future<void> _delete(BuildContext context, SequenceEntity route) async {
+    final seeBloc = context.read<SeeProcessBloc>();
+    final messenger = ScaffoldMessenger.of(context);
+    final jobs = await seeBloc.countJobsUsing(route.id!);
+    if (!context.mounted) return;
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ruta de proceso creada'),
-        content:
-            const Text('La ruta de proceso ha sido guardada exitosamente.'),
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar ruta?'),
+        content: Text(jobs == 0
+            ? '¿Seguro que quieres eliminar "${route.name}"?'
+            : '"${route.name}" la usan $jobs '
+                '${jobs == 1 ? 'trabajo' : 'trabajos'} de programas '
+                'guardados. Si la eliminas, esos programas quedarán sin '
+                'ruta. ¿Eliminarla de todos modos?'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              GetIt.instance.get<SequencesBloc>().useMode(false);
-            },
-            child: const Text('Aceptar'),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(ctx).colorScheme.error),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Eliminar')),
         ],
       ),
+    );
+    if (confirm != true) return;
+    final ok = await seeBloc.deleteSequence(route.id!);
+    messenger.showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Ruta "${route.name}" eliminada'
+          : 'No se pudo eliminar la ruta'),
+    ));
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<SequencesBloc, SequencesState>(
+      builder: (context, state) {
+        _syncEditor(state);
+        final bloc = context.read<SequencesBloc>();
+
+        final Widget left;
+        final Widget board;
+
+        if (state.isEditing) {
+          left = state.machines == null
+              ? Center(
+                  child: state.machinesFailed
+                      ? const Text('No se pudieron cargar las estaciones')
+                      : const CircularProgressIndicator())
+              : MachinesList(
+                  machineTypes: state.machines!,
+                  onSelectMachine: (m) =>
+                      _editorKey.currentState?.addStation(m),
+                );
+          board = RouteEditorBoard(
+            isEdit: state.mode == RouteEditorMode.edit,
+            saving: state.saving,
+            nameController: _nameController,
+            editorKey: _editorKey,
+            draft: state.draft,
+            onSave: () => _save(context, state),
+            onCancel: bloc.cancel,
+          );
+        } else {
+          left = RouteListPanel(onNewRoute: bloc.startNew);
+          board = BlocBuilder<SeeProcessBloc, SeeProcessState>(
+            builder: (context, seeState) {
+              final process =
+                  seeState.selectedProcess == null ? null : seeState.process;
+              final draft = _viewDraft(process);
+              if (process == null || draft == null) {
+                return Center(
+                  child: Text(
+                    'Selecciona una ruta de la lista o crea una nueva.',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                );
+              }
+              return RouteViewerBoard(
+                name: process.name,
+                draft: draft,
+                viewKey: process,
+                onEdit: () => bloc.startEdit(process),
+                onDuplicate: () => bloc.startDuplicate(process),
+                onDelete: () => _delete(context, process),
+              );
+            },
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Column(
+                children: [
+                  IconButton(
+                    tooltip: 'Qué es una ruta de proceso',
+                    onPressed: () => printInfo(
+                      context,
+                      title: 'Ruta de proceso',
+                      content:
+                          'Una ruta de proceso es la secuencia de estaciones por '
+                          'las que pasa un producto. Cada estación es una tarea '
+                          'con un tiempo estándar, y las flechas indican qué '
+                          'tarea debe terminar antes de empezar otra. Por '
+                          'ejemplo, la producción de pan:\n\n'
+                          'Mezclado (20 min) → Reposo (10 min) → División '
+                          '(4 min) → Formado (15 min) → Horneado (1 h) → '
+                          'Enfriado (40 min)',
+                    ),
+                    icon: const Icon(Icons.info_outline),
+                  ),
+                ],
+              ),
+              SizedBox(width: 280, child: left),
+              const SizedBox(width: 16),
+              Expanded(child: board),
+            ],
+          ),
+        );
+      },
     );
   }
 }

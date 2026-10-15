@@ -135,6 +135,9 @@ class FlexibleJobShop {
       case "MWR":
         scheduleFlexibleJobShopMWR();
         break;
+      case "LWR":
+        scheduleFlexibleJobShopLWR();
+        break;
       case "ATCS":
         scheduleFlexibleJobShopATCS();
         break;
@@ -209,59 +212,43 @@ class FlexibleJobShop {
     return Duration.zero;
   }
 
-  late Map<int, int> jobOperationIndex;
+  // ── Static rules ──────────────────────────────────────────────────────────
+  //
+  // Applied queue by queue, to the operations that can start (see
+  // _schedule), with the operation's NOMINAL attributes as the index: its
+  // processing time on the machine chosen for it, the job's due date, or
+  // when the operation arrived at the queue.
+  //
+  // FIFO used to compare job ids, which is the order jobs were typed in,
+  // not the order they arrive.
 
-  void scheduleFlexibleJobShopFIFO() {
-    _schedule((a, b) => a.job.jobId
-        .compareTo(b.job.jobId)); // FIFO basado en el orden de llegada
-  }
+  void scheduleFlexibleJobShopFIFO() =>
+      _scheduleBy(DispatchCriterion.fifoArrival);
 
-  void scheduleFlexibleJobShopSPT() {
-    _schedule((a, b) => a.duration.compareTo(b.duration));
-  }
+  void scheduleFlexibleJobShopSPT() =>
+      _scheduleBy(DispatchCriterion.sptNominal);
 
-  void scheduleFlexibleJobShopLPT() {
-    _schedule((a, b) => b.duration.compareTo(a.duration));
-  }
+  void scheduleFlexibleJobShopLPT() =>
+      _scheduleBy(DispatchCriterion.lptNominal);
 
-  void scheduleFlexibleJobShopEDD() {
-    _schedule((a, b) => a.job.dueDate.compareTo(b.job.dueDate));
-  }
+  void scheduleFlexibleJobShopEDD() => _scheduleBy(DispatchCriterion.edd);
 
-  void scheduleFlexibleJobShopWSPT() {
-    _schedule((a, b) {
-      final wsptA = a.job.priority / _safeMinutes(a.duration);
-      final wsptB = b.job.priority / _safeMinutes(b.duration);
-      return wsptB.compareTo(wsptA); // mayor primero
-    });
-  }
+  void scheduleFlexibleJobShopWSPT() =>
+      _scheduleBy(DispatchCriterion.wsptNominal);
 
-  void scheduleFlexibleJobShopMWR() {
-    _schedule((a, b) {
-      final remainingA = _remainingWork(a.job, jobOperationIndex[a.job.jobId]!);
-      final remainingB = _remainingWork(b.job, jobOperationIndex[b.job.jobId]!);
-      return remainingB.compareTo(remainingA); // más trabajo primero
-    });
-  }
+  // LWR / MWR: nominal work the job still has — this operation plus every
+  // operation not yet completed (see _remainingWorkAfter). The previous MWR
+  // counted "operations from position k of the list on", k being how many
+  // the job had completed; with a precedence graph the completed ones are
+  // not the first k of the list, so it added up the wrong operations.
 
-  int _remainingWork(FlexibleJobInput job, int currentOpIndex) {
-    int totalMinutes = 0;
+  void scheduleFlexibleJobShopLWR() => _scheduleBy(DispatchCriterion.lwr);
 
-    for (int i = currentOpIndex; i < job.taskSequence.length; i++) {
-      final task = job.taskSequence[i];
-      if (task.value2.isEmpty) continue;
-      final sum = task.value2.values
-          .fold<int>(0, (total, duration) => total + duration.inMinutes);
-      final avgDuration = task.value2.isEmpty ? 0 : sum ~/ task.value2.length;
-      totalMinutes += avgDuration;
-    }
+  void scheduleFlexibleJobShopMWR() => _scheduleBy(DispatchCriterion.mwr);
 
-    return totalMinutes;
-  }
+  void scheduleFlexibleJobShopMS() => _scheduleBy(DispatchCriterion.ms);
 
-  void scheduleFlexibleJobShopMS() => _scheduleDynamic(DispatchCriterion.ms);
-
-  void scheduleFlexibleJobShopCR() => _scheduleDynamic(DispatchCriterion.cr);
+  void scheduleFlexibleJobShopCR() => _scheduleBy(DispatchCriterion.cr);
 
   /// Critical ratio used only by the GENETICS score, at [now] — the
   /// schedule's clock, never the wall clock.
@@ -270,8 +257,7 @@ class FlexibleJobShop {
     return cr < 0 ? 0 : cr;
   }
 
-  void scheduleFlexibleJobShopATCS() =>
-      _scheduleDynamic(DispatchCriterion.atcs);
+  void scheduleFlexibleJobShopATCS() => _scheduleBy(DispatchCriterion.atcs);
 
   // ── Dynamic literature rules (MS, CR, ATCS) ───────────────────────────────
   //
@@ -288,7 +274,9 @@ class FlexibleJobShop {
   // criteria in dynamic_dispatch.dart. The job's other pending operations
   // are charged against its due date as nominal work still to do.
 
-  void _scheduleDynamic(DispatchCriterion criterion) {
+  /// Runs the non-delay loop with one of the shared criteria — static,
+  /// LWR/MWR or dynamic; they differ only in the index they read.
+  void _scheduleBy(DispatchCriterion criterion) {
     final AtcsParameters? atcs =
         criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
     _schedule(
@@ -297,9 +285,10 @@ class FlexibleJobShop {
           criterion,
           a.dispatch as DispatchCandidate<FlexibleJobInput>,
           b.dispatch as DispatchCandidate<FlexibleJobInput>,
-          // The loop only consults the rule among candidates that can start
-          // at the same instant, so this is the shared decision time.
-          decisionTime: a.earliestStart as DateTime,
+          // The loop only consults the rule among candidates whose
+          // EFFECTIVE start coincides, so that is the shared decision time.
+          decisionTime:
+              (a.dispatch as DispatchCandidate<FlexibleJobInput>).start,
           atcs: atcs,
         );
         if (cmp != 0) return cmp;
@@ -310,7 +299,6 @@ class FlexibleJobShop {
         if (byTask != 0) return byTask;
         return (a.machineId as int).compareTo(b.machineId as int);
       },
-      priceCandidates: true,
     );
   }
 
@@ -323,6 +311,7 @@ class FlexibleJobShop {
     Duration duration,
     DateTime at,
     Set<int> completed,
+    DateTime arrival,
   ) {
     final placed = _priceOperation(
       job: job,
@@ -332,12 +321,17 @@ class FlexibleJobShop {
       start: at,
     );
     final DateTime end = placed.schedule.completionTime;
-    final Duration span = end.difference(at);
+    // Effective start: after every interruption the engine had to work
+    // around (maintenance, rest cap, waiting for a window that fits a
+    // non-interruptible block) — not just the shift-adjusted [at]. The
+    // non-delay loop ranks on it, and the span is measured from it.
+    final DateTime start = placed.setupSegments.isNotEmpty
+        ? placed.setupSegments.first.start
+        : placed.schedule.startDate;
+    final Duration span = end.difference(start);
     return DispatchCandidate(
       job: job,
-      start: placed.setupSegments.isNotEmpty
-          ? placed.setupSegments.first.start
-          : placed.schedule.startDate,
+      start: start,
       end: end,
       span: span.isNegative ? Duration.zero : span,
       dueDate: job.dueDate,
@@ -346,6 +340,8 @@ class FlexibleJobShop {
       jobId: job.jobId,
       setup: segmentsDuration(placed.setupSegments),
       remainingWork: _remainingWorkAfter(job, taskId, completed),
+      processing: duration,
+      arrival: arrival,
     );
   }
 
@@ -371,7 +367,7 @@ class FlexibleJobShop {
   ({
     List<ProcessingSegment> setupSegments,
     SegmentedSchedule schedule,
-    Duration usageAfterSetup,
+    Duration usageAfter,
   }) _priceOperation({
     required FlexibleJobInput job,
     required int taskId,
@@ -379,41 +375,24 @@ class FlexibleJobShop {
     required Duration duration,
     required DateTime start,
   }) {
-    final Duration setupDuration =
-        _getSetupDuration(machineId, job.jobId, _machineLastJob[machineId]);
-
-    // Setup is its own segmented block, as sensitive to work-shift, rest and
-    // maintenance boundaries as processing is; processing starts after it.
-    List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = start;
-    Duration continuousUsage =
-        _machineContinuousUsage[machineId] ?? Duration.zero;
-    if (setupDuration > Duration.zero) {
-      final setupSchedule = _engineFor(machineId).computeSegments(
-        earliestStart: start,
-        totalDuration: setupDuration,
-        priorContinuousUsage: continuousUsage,
-      );
-      setupSegments = setupSchedule.segments;
-      processStart = setupSchedule.completionTime;
-      continuousUsage = setupSegments.length > 1
-          ? setupSegments.last.duration
-          : continuousUsage + setupSegments.single.duration;
-    }
-
-    // Split processing wherever the work-shift end, a maintenance window or
-    // the continuous-use rest cap falls inside it.
-    final schedule = _engineFor(machineId).computeSegments(
-      earliestStart: processStart,
-      totalDuration: duration,
-      priorContinuousUsage: continuousUsage,
+    // Setup then processing through the preemption engine. The task's
+    // interruption flag governs the pair: interruptible → each may be split
+    // by a shift end / maintenance / rest cap; not interruptible → one
+    // contiguous block, processing starting the instant setup ends.
+    final placed = _engineFor(machineId).computeSetupAndProcessing(
+      earliestStart: start,
+      setupDuration:
+          _getSetupDuration(machineId, job.jobId, _machineLastJob[machineId]),
+      processingDuration: duration,
+      priorContinuousUsage:
+          _machineContinuousUsage[machineId] ?? Duration.zero,
       interruptible: job.isTaskInterruptible(taskId),
     );
 
     return (
-      setupSegments: setupSegments,
-      schedule: schedule,
-      usageAfterSetup: continuousUsage,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      usageAfter: placed.continuousUsageAfter,
     );
   }
 
@@ -554,15 +533,15 @@ class FlexibleJobShop {
   /// Non-delay list scheduler: each round, the ready operations that can
   /// start earliest compete and [comparator] picks among them.
   ///
-  /// [priceCandidates] prices every contender through the preemption engine
-  /// and attaches it as `dispatch` — needed by the dynamic rules, skipped for
-  /// the static ones, which only read nominal fields.
-  void _schedule(int Function(dynamic, dynamic) comparator,
-      {bool priceCandidates = false}) {
+  /// Every contender — for every rule, static or dynamic — is priced
+  /// through the preemption engine on each of its eligible machines and
+  /// carried as `dispatch`. The static rules used to skip the pricing and
+  /// build the conflict set from the NOMINAL start, `max(machine free, job
+  /// ready)`: an operation facing a long changeover, a maintenance window or
+  /// the wait for a block that fits it uninterrupted looked as if it could
+  /// start right away and took the machine from one that really could.
+  void _schedule(int Function(dynamic, dynamic) comparator) {
     print('FlexibleJobShop._schedule: entering main loop');
-    jobOperationIndex = {
-      for (var job in inputJobs) job.jobId: 0,
-    };
 
     Map<int, Set<int>> completedTasks = {
       for (var job in inputJobs) job.jobId: <int>{},
@@ -624,7 +603,7 @@ class FlexibleJobShop {
             int machineId,
             Duration duration,
             DateTime earliestStart,
-            DispatchCandidate<FlexibleJobInput>? dispatch
+            DispatchCandidate<FlexibleJobInput> dispatch
           })> candidates = [];
       // First pricing failure this round, rethrown only if it leaves no
       // candidate at all — same policy as selectNext in dynamic_dispatch.dart.
@@ -653,19 +632,17 @@ class FlexibleJobShop {
                 : jobReadyTime;
             final adjustedStart = _adjustForWorkingSchedule(earliestStart);
 
-            // Dynamic rules compare what the operation really costs from
-            // here, priced through the same code that commits it. One
-            // impossible machine must not sink the operation's other
-            // options, so a failure only drops this candidate.
-            DispatchCandidate<FlexibleJobInput>? dispatch;
-            if (priceCandidates) {
-              try {
-                dispatch = _dispatchCandidate(
-                    job, taskId, machineId, duration, adjustedStart, completed);
-              } on SchedulingHorizonException catch (e) {
-                pricingFailure ??= e;
-                continue;
-              }
+            // What the operation really costs from here, priced through
+            // the same code that commits it. One impossible machine must
+            // not sink the operation's other options, so a failure only
+            // drops this candidate.
+            final DispatchCandidate<FlexibleJobInput> dispatch;
+            try {
+              dispatch = _dispatchCandidate(job, taskId, machineId, duration,
+                  adjustedStart, completed, jobReadyTime);
+            } on SchedulingHorizonException catch (e) {
+              pricingFailure ??= e;
+              continue;
             }
 
             candidates.add((
@@ -689,13 +666,26 @@ class FlexibleJobShop {
         break;
       }
 
-      candidates.sort((a, b) {
-        final cmpStart = a.earliestStart.compareTo(b.earliestStart);
-        if (cmpStart != 0) return cmpStart;
-        return comparator(a, b);
-      });
+      // Non-delay on the EFFECTIVE start (after the changeover's own wait,
+      // maintenance, rest caps and non-interruptible waits), so an operation
+      // the calendar would hold back never beats one that can really run
+      // now; if nothing can start at the current instant, the clock
+      // effectively jumps to the earliest effective start (Giffler &
+      // Thompson 1960, non-delay).
+      //
+      // Two decisions, kept apart (see nonDelayConflictSet): each operation
+      // that can start at t* first gets its machine — earliest completion
+      // among its machines available at t*, then cheapest changeover, then
+      // lowest id — and only then does the rule choose among operations.
+      final contenders = nonDelayConflictSet(
+        candidates,
+        operationKey: (c) => (c.job.jobId, c.taskId),
+        candidate: (c) => c.dispatch,
+        machineId: (c) => c.machineId,
+      );
+      contenders.sort(comparator);
 
-      final selected = candidates.first;
+      final selected = contenders.first;
       // Placed through the same code the dynamic rules priced candidates
       // with, so what gets committed is exactly what was judged.
       final placed = _priceOperation(
@@ -707,7 +697,6 @@ class FlexibleJobShop {
       );
       final List<ProcessingSegment> setupSegments = placed.setupSegments;
       final SegmentedSchedule schedule = placed.schedule;
-      final Duration continuousUsage = placed.usageAfterSetup;
       final DateTime taskStart = schedule.startDate;
       final DateTime adjustedEnd = schedule.completionTime;
 
@@ -717,15 +706,17 @@ class FlexibleJobShop {
       jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
       machinesAvailability[selected.machineId] = adjustedEnd;
-      _machineContinuousUsage[selected.machineId] = schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration;
+      _machineContinuousUsage[selected.machineId] = placed.usageAfter;
       completedTasks[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
-      jobOperationIndex[selected.job.jobId] =
-          (jobOperationIndex[selected.job.jobId] ?? 0) + 1;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
-      _machineLastJob[selected.machineId] = selected.job.dbJobId;
+      // A job with no state (A-J) registered for this machine leaves the
+      // machine in the state it found it. Recording it as the last job
+      // anyway made the NEXT changeover look up a null state and cost zero.
+      if (jobStates == null ||
+          jobStates![selected.job.dbJobId]?[selected.machineId] != null) {
+        _machineLastJob[selected.machineId] = selected.job.dbJobId;
+      }
     }
     print('FlexibleJobShop._schedule: exiting main loop after iter=$iter');
 

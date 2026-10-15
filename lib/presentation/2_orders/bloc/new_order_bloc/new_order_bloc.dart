@@ -276,46 +276,16 @@ class NewOrderBloc extends Cubit<NewOrderState> {
       return null;
     }
 
+    // The form keeps one entry per (task, machine of the task's station),
+    // so this is already the whole map. It is empty only when the route has
+    // no machines registered; the adapters then fall back to the task's own
+    // time scaled by each machine's percentage. There used to be a second
+    // branch here rebuilding the map from values keyed by machine TYPE,
+    // which gave every task of a type the same machine and the same time.
     final explicit = widgetState.getExplicitTaskMachineMinutes();
-    if (explicit.isNotEmpty) {
-      print(
-          'NewOrderBloc: using explicit taskMachineTimes for job index=${wid.index} -> $explicit');
-      return explicit;
-    }
-
-    final selectedMachines = widgetState.getSelectedMachines();
-    final stationTimes = widgetState.getStationProcessingMinutes();
     print(
-        'NewOrderBloc: widgetState for job index=${wid.index} '
-        'selectedMachines=$selectedMachines stationTimes=$stationTimes');
-
-    final taskMachineTimes = <int, Map<int, Map<String, int>>>{};
-    final tasks = widgetState.getSequenceTasks();
-    if (tasks != null && tasks.isNotEmpty) {
-      for (final task in tasks) {
-        final machineType = task.machineTypeId;
-        final machineId = selectedMachines[machineType];
-        final minutes = stationTimes[machineType];
-        if (machineId != null && minutes != null) {
-          taskMachineTimes[task.id!] = {
-            machineId: {
-              'processing': minutes,
-              'preparation': 0,
-              'rest': 0,
-            }
-          };
-        } else {
-          print(
-              'NewOrderBloc: missing mapping for task ${task.id} -> '
-              'machineType=$machineType machineId=$machineId minutes=$minutes');
-        }
-      }
-    } else {
-      print(
-          'NewOrderBloc: no tasks for job index=${wid.index} '
-          '(sequence not selected?)');
-    }
-    return taskMachineTimes;
+        'NewOrderBloc: taskMachineTimes for job index=${wid.index} -> $explicit');
+    return explicit;
   }
 
   // ─── Persist order ─────────────────────────────────────────────────────────

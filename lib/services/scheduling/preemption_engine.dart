@@ -66,6 +66,28 @@ class SegmentedSchedule {
       segments.fold(Duration.zero, (sum, s) => sum + s.duration);
 }
 
+/// Result of [PreemptionEngine.computeSetupAndProcessing]: a task's setup
+/// segments (empty when there is no changeover) followed by its processing.
+class SetupAndProcessing {
+  final List<ProcessingSegment> setupSegments;
+  final SegmentedSchedule processing;
+
+  /// Continuous machine use carried into whatever runs next.
+  final Duration continuousUsageAfter;
+
+  const SetupAndProcessing({
+    required this.setupSegments,
+    required this.processing,
+    required this.continuousUsageAfter,
+  });
+
+  /// Effective start: the first setup segment, or processing if no setup.
+  DateTime get start =>
+      setupSegments.isNotEmpty ? setupSegments.first.start : processing.startDate;
+
+  DateTime get end => processing.completionTime;
+}
+
 class _Window {
   final DateTime start;
   final DateTime end;
@@ -138,6 +160,88 @@ class PreemptionEngine {
 
     return _computeSplitSegments(current, totalDuration, priorContinuousUsage);
   }
+
+  /// Places a task's changeover ([setupDuration]) and its processing
+  /// ([processingDuration]) together, honouring the task's interruption
+  /// flag for BOTH of them.
+  ///
+  /// * [interruptible] true — setup and processing are two independently
+  ///   segmented blocks, back to back: either may be split by a shift end,
+  ///   maintenance window or rest cap (resumable job, separable setup).
+  /// * [interruptible] false — setup + processing are ONE uninterrupted
+  ///   block: the start waits for a window that fits both, and processing
+  ///   begins the instant the setup ends. This is the *attached /
+  ///   non-separable* setup of Allahverdi et al. (2008) on a *non-resumable*
+  ///   job (Lee, 1996): a changeover that conditions the machine for a task
+  ///   that cannot be paused is lost if a pause opens between the two, so it
+  ///   must not be split from it — nor split itself.
+  ///
+  /// When setup + processing can never fit in one block (longer than the
+  /// machine's longest uninterrupted stretch or than the rest cap), the
+  /// combination is a contradiction the user configured, so this degrades
+  /// to the separable treatment — setup splittable, processing still
+  /// uninterruptible when it alone fits — rather than failing.
+  SetupAndProcessing computeSetupAndProcessing({
+    required DateTime earliestStart,
+    required Duration setupDuration,
+    required Duration processingDuration,
+    Duration priorContinuousUsage = Duration.zero,
+    bool interruptible = true,
+  }) {
+    final Duration total = setupDuration + processingDuration;
+    if (!interruptible &&
+        setupDuration > Duration.zero &&
+        processingDuration > Duration.zero &&
+        _canEverFitInOneBlock(total)) {
+      final DateTime aligned = _alignToAvailable(earliestStart);
+      final block = _computeSingleBlock(aligned, total, priorContinuousUsage);
+      if (block.segments.length == 1) {
+        final DateTime start = block.startDate;
+        final DateTime setupEnd = start.add(setupDuration);
+        return SetupAndProcessing(
+          setupSegments: [ProcessingSegment(start, setupEnd)],
+          processing: SegmentedSchedule(
+              [ProcessingSegment(setupEnd, block.completionTime)]),
+          // Waiting for the window crossed at least one pause, which resets
+          // the continuous-use counter.
+          continuousUsageAfter:
+              start.isAtSameMomentAs(aligned) ? priorContinuousUsage + total : total,
+        );
+      }
+    }
+
+    List<ProcessingSegment> setupSegments = const [];
+    DateTime processStart = earliestStart;
+    Duration usage = priorContinuousUsage;
+    if (setupDuration > Duration.zero) {
+      final setup = computeSegments(
+        earliestStart: earliestStart,
+        totalDuration: setupDuration,
+        priorContinuousUsage: usage,
+      );
+      setupSegments = setup.segments;
+      processStart = setup.completionTime;
+      usage = _usageAfter(setup, usage);
+    }
+    final processing = computeSegments(
+      earliestStart: processStart,
+      totalDuration: processingDuration,
+      priorContinuousUsage: usage,
+      interruptible: interruptible,
+    );
+    return SetupAndProcessing(
+      setupSegments: setupSegments,
+      processing: processing,
+      continuousUsageAfter: _usageAfter(processing, usage),
+    );
+  }
+
+  /// Continuous use after [schedule]: a split resets the counter, so only
+  /// the last segment counts; otherwise it adds to what came before.
+  static Duration _usageAfter(SegmentedSchedule schedule, Duration prior) =>
+      schedule.segments.length > 1
+          ? schedule.segments.last.duration
+          : prior + schedule.segments.single.duration;
 
   /// The normal path: consume [totalDuration] boundary by boundary,
   /// emitting one segment per uninterrupted stretch.

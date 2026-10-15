@@ -99,8 +99,7 @@ class SingleMachineAdapter {
     // ── 6. Run algorithm ──────────────────────────────────────────────────
     // continueCapacity is interpreted as minutes of continuous processing
     // before a mandatory rest (see PreemptionEngine), not a job count.
-    final restTime =
-        Duration(minutes: (60 * machineEntity.restPercentage / 100).round());
+    final restPolicy = machineRestPolicy(machineEntity);
     final output = SingleMachine(
       machineEntity.id!,
       order.regDate,
@@ -110,8 +109,8 @@ class SingleMachineAdapter {
       stateSetupMatrix: stateSetupMatrix,
       initialMachineState: initialMachineState,
       machineInactivities: machineEntity.scheduledInactivities,
-      continueCapacity: machineEntity.continueCapacity,
-      restTime: restTime,
+      continueCapacity: restPolicy.capacityMinutes,
+      restTime: restPolicy.rest,
     ).output;
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────

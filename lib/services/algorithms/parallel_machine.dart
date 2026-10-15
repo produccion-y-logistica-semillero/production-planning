@@ -299,7 +299,11 @@ class ParallelMachine {
     output.clear();
     machines.updateAll((key, value) => []);
     _machineContinuousUsage.updateAll((key, value) => Duration.zero);
-    _machineLastState.updateAll((key, value) => null);
+    // Back to each machine's configured INITIAL state, not to null: null
+    // threw away the state the constructor had seeded, so under a dynamic
+    // rule the first job on every machine never paid its changeover.
+    _machineLastState
+        .updateAll((machineId, value) => initialMachineState[machineId]);
     _resetMachineAvailability();
 
     if (inputJobs.isEmpty) return;

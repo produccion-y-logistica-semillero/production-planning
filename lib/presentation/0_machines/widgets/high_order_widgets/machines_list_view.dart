@@ -228,8 +228,11 @@ class _MachinesListViewState extends State<MachinesListView> {
     final controllerPreparation = TextEditingController(text: "100.0");
     // Rest time is expressed in minutes (more intuitive for the user).
     // It is converted to a percentage internally before calling the BLoC.
-    final controllerRestTime = TextEditingController(text: "60");
-    final controllerContinue = TextEditingController(text: "1");
+    // Both at 0 = "No aplica descanso automático", the default for a new
+    // machine. The field is in MINUTES of continuous processing; it used to
+    // default to 1, i.e. an hour of rest after every minute of work.
+    final controllerRestTime = TextEditingController(text: "0");
+    final controllerContinue = TextEditingController(text: "0");
     final availabilityDateTimeController = TextEditingController();
     final quantityController = TextEditingController(text: "1");
     final startModeNotifier =
@@ -271,15 +274,23 @@ class _MachinesListViewState extends State<MachinesListView> {
                 int.tryParse(controllerContinue.text.trim());
             final startMode = startModeNotifier.value;
 
+            // The rest policy is either off (both 0, the "No aplica"
+            // checkbox) or fully given (both positive). One without the
+            // other has no meaning.
+            final hasInvalidRestPolicy = restMinutes == null ||
+                continueCapacity == null ||
+                restMinutes < 0 ||
+                continueCapacity < 0 ||
+                ((restMinutes > 0) != (continueCapacity > 0));
+
             final hasInvalidFields = processingPercent == null ||
                 processingPercent <= 0 ||
                 preparationPercent == null ||
                 preparationPercent < 0 ||
                 restPercent == null ||
-                restPercent < 0 ||
                 nameController.text.trim().isEmpty ||
                 continueCapacity == null ||
-                continueCapacity <= 0 ||
+                hasInvalidRestPolicy ||
                 (startMode == MachineStartMode.specificDate &&
                     availabilityDateTimeController.text.trim().isEmpty) ||
                 quantity <= 0;

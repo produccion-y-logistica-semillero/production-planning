@@ -68,6 +68,34 @@ enum DispatchCriterion {
   /// Highest ATCS index first (Lee, Bhaskaran & Pinedo, 1997). Needs
   /// [AtcsParameters]. See [atcsLogIndex].
   atcs,
+
+  /// Least work remaining first: the job with the least NOMINAL processing
+  /// still to do, this operation included. See [workRemaining].
+  lwr,
+
+  /// Most work remaining first. See [workRemaining].
+  mwr,
+
+  // ── Static rules inside an operation-level dispatch loop ─────────────────
+  //
+  // In Flexible Flow Shop, Job Shop and Flexible Job Shop a static rule is
+  // still applied queue by queue — at each station, among the operations
+  // that can start — but its index is the fixed, NOMINAL attribute of the
+  // operation, blind to setups and interruptions. That is the only thing
+  // that separates SPT from SPT_ADAPTADO there.
+
+  /// Shortest nominal processing time of the operation first.
+  sptNominal,
+
+  /// Longest nominal processing time of the operation first.
+  lptNominal,
+
+  /// Highest priority per minute of nominal processing time first.
+  wsptNominal,
+
+  /// First to ARRIVE at this queue first (see [DispatchCandidate.arrival]);
+  /// ties broken by release date.
+  fifoArrival,
 }
 
 /// One job simulated at a decision time, with everything the criteria need.
@@ -110,6 +138,17 @@ class DispatchCandidate<T> {
   /// slack-based criteria charge it against the due date.
   final Duration remainingWork;
 
+  /// NOMINAL processing time of this candidate on its machine — what the
+  /// user registered, with no setup and no interruption. Read by the static
+  /// criteria and by LWR/MWR; the dynamic ones read [span] instead.
+  final Duration processing;
+
+  /// When the operation joined the queue it is waiting in: the job's
+  /// release for its first operation, the completion of its predecessors
+  /// afterwards. Null means "the release date". Read by
+  /// [DispatchCriterion.fifoArrival].
+  final DateTime? arrival;
+
   const DispatchCandidate({
     required this.job,
     required this.start,
@@ -121,6 +160,8 @@ class DispatchCandidate<T> {
     required this.jobId,
     this.setup = Duration.zero,
     this.remainingWork = Duration.zero,
+    this.processing = Duration.zero,
+    this.arrival,
   });
 }
 
@@ -458,7 +499,86 @@ DispatchCandidate<T> _measuredFrom<T>(DispatchCandidate<T> c, DateTime at) {
     jobId: c.jobId,
     setup: c.setup,
     remainingWork: c.remainingWork,
+    processing: c.processing,
+    arrival: c.arrival,
   );
+}
+
+/// LWR / MWR index: nominal work the job still has to do, counting the
+/// operation being dispatched — `p_now + Σ p_later` (Baker, 1974; Pinedo,
+/// *Scheduling*, ch. 14). Nominal on purpose: the rule is about how much of
+/// the route is left, not about what the calendar does to it.
+Duration workRemaining<T>(DispatchCandidate<T> c) =>
+    c.processing + c.remainingWork;
+
+/// Orders two (operation, machine) pairings of the SAME operation: which
+/// machine should run it. Negative when [a]'s machine is preferred.
+///
+/// Earliest completion time (ECT) — setup out of the machine's current
+/// state, processing at that machine's own speed, and every interruption —
+/// then the cheaper changeover, then the lowest machine id.
+int compareMachineChoice<T>(
+  DispatchCandidate<T> a,
+  int machineA,
+  DispatchCandidate<T> b,
+  int machineB,
+) {
+  int cmp = a.end.compareTo(b.end);
+  if (cmp != 0) return cmp;
+  cmp = a.setup.compareTo(b.setup);
+  if (cmp != 0) return cmp;
+  return machineA.compareTo(machineB);
+}
+
+/// The conflict set of one round of an operation-level NON-DELAY dispatch
+/// (Flexible Flow Shop, Job Shop, Flexible Job Shop, Open Shop), with the
+/// machine of each operation already chosen.
+///
+/// [pairings] holds every (ready operation × eligible machine) priced
+/// through the preemption engine. Two separate decisions are taken:
+///
+///   1. `t*` is the earliest EFFECTIVE start over all pairings. Only the
+///      pairings that start at `t*` survive — a machine that is busy, in
+///      maintenance, or cannot fit a non-interruptible block until later is
+///      not "available" and does not compete.
+///   2. WHICH MACHINE: for each operation, among its machines available at
+///      `t*`, the one chosen by [compareMachineChoice] (ECT).
+///
+/// The caller then applies the dispatch rule to the returned list — one
+/// pairing per operation — to decide WHICH OPERATION goes next.
+///
+/// Keeping the two apart matters. They used to be one sort — start, then
+/// the job rule over every pairing — so the job rule also picked the
+/// machine: LPT sent the operation to its SLOWEST machine, minimum slack to
+/// the one finishing later, and EDD/FIFO, which cannot tell two machines of
+/// one job apart, to whichever the sort happened to leave first.
+List<P> nonDelayConflictSet<P, T>(
+  List<P> pairings, {
+  required Object Function(P) operationKey,
+  required DispatchCandidate<T> Function(P) candidate,
+  required int Function(P) machineId,
+}) {
+  if (pairings.isEmpty) return const [];
+
+  DateTime earliestStart = candidate(pairings.first).start;
+  for (final p in pairings) {
+    final DateTime start = candidate(p).start;
+    if (start.isBefore(earliestStart)) earliestStart = start;
+  }
+
+  final Map<Object, P> bestByOperation = {};
+  for (final p in pairings) {
+    if (!candidate(p).start.isAtSameMomentAs(earliestStart)) continue;
+    final Object key = operationKey(p);
+    final P? best = bestByOperation[key];
+    if (best == null ||
+        compareMachineChoice(
+                candidate(p), machineId(p), candidate(best), machineId(best)) <
+            0) {
+      bestByOperation[key] = p;
+    }
+  }
+  return bestByOperation.values.toList();
 }
 
 /// Orders two candidates under [criterion]: negative when [a] goes first.
@@ -508,6 +628,27 @@ int compareCandidates<T>(
     case DispatchCriterion.atcs:
       if (atcs == null) throw ArgumentError.notNull('atcs');
       cmp = atcsLogIndex(b, atcs).compareTo(atcsLogIndex(a, atcs));
+      break;
+    case DispatchCriterion.lwr:
+      cmp = workRemaining(a).compareTo(workRemaining(b));
+      break;
+    case DispatchCriterion.mwr:
+      cmp = workRemaining(b).compareTo(workRemaining(a));
+      break;
+    case DispatchCriterion.sptNominal:
+      cmp = a.processing.compareTo(b.processing);
+      break;
+    case DispatchCriterion.lptNominal:
+      cmp = b.processing.compareTo(a.processing);
+      break;
+    case DispatchCriterion.wsptNominal:
+      final double wa = a.priority / _spanMinutes(a.processing);
+      final double wb = b.priority / _spanMinutes(b.processing);
+      cmp = wb.compareTo(wa);
+      break;
+    case DispatchCriterion.fifoArrival:
+      cmp = (a.arrival ?? a.releaseDate).compareTo(b.arrival ?? b.releaseDate);
+      if (cmp == 0) cmp = a.releaseDate.compareTo(b.releaseDate);
       break;
   }
   if (cmp != 0) return cmp;

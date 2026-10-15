@@ -17,12 +17,12 @@ import 'package:intl/intl.dart';
 
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
-import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/shared/utils/task_time_utils.dart';
 
 // Helper widget for numeric input with max value validation
 class _MaxValueFormatter extends TextInputFormatter {
@@ -192,8 +192,12 @@ class AddJobState extends State<AddJobWidget> {
   SequenceEntity? _sequenceDetails;
   bool _loadingStations = false;
   final Map<int, List<MachineEntity>> _machinesByType = {};
+  // taskId → machine shown on the station's row. Keyed by TASK, not by
+  // machine type: two tasks of one route on the same machine type used to
+  // share a single entry and overwrite each other.
   final Map<int, MachineEntity?> _selectedMachines = {};
-  final Map<int, MachineStandardTimes> _stationTimes = {};
+  // taskId → machineId → minutes. One entry for EVERY machine of the task's
+  // station (see seedTaskMachineMinutes), so each machine keeps its own time.
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
   final Map<int, int> _preemptionMatrix = {};
 
@@ -214,22 +218,6 @@ class AddJobState extends State<AddJobWidget> {
   // ── public getters used by the matrix dialog ──────────────────────────────
 
   Map<int, int> getPreemptionMatrix() => _preemptionMatrix;
-
-  Map<int, int> getSelectedMachines() {
-    final map = <int, int>{};
-    _selectedMachines.forEach((key, value) {
-      if (value != null && value.id != null) map[key] = value.id!;
-    });
-    return map;
-  }
-
-  Map<int, int> getStationProcessingMinutes() {
-    final res = <int, int>{};
-    _stationTimes.forEach((machineTypeId, times) {
-      res[machineTypeId] = times.processing.inMinutes;
-    });
-    return res;
-  }
 
   Map<int, Map<int, Map<String, int>>> getExplicitTaskMachineMinutes() {
     return _explicitTaskMachineMinutes.map((taskId, machines) => MapEntry(
@@ -289,10 +277,10 @@ class AddJobState extends State<AddJobWidget> {
     selectedSequenceValue = widget.selectedSequence;
 
     // Seed the saved values BEFORE _loadSequence runs. Order matters:
-    // _loadSequence clears _machinesByType / _selectedMachines /
-    // _stationTimes but leaves these three maps alone, and it seeds
-    // _preemptionMatrix with putIfAbsent — so anything placed here survives
-    // and takes precedence over the sequence defaults.
+    // _loadSequence clears _machinesByType / _selectedMachines but leaves
+    // these three maps alone; it seeds _preemptionMatrix with putIfAbsent
+    // and the times with seedTaskMachineMinutes, where a saved entry wins —
+    // so anything placed here takes precedence over the sequence defaults.
     if (widget.initialMachineFinalStates != null) {
       _machineFinalStates.addAll(widget.initialMachineFinalStates!);
     }
@@ -358,7 +346,6 @@ class AddJobState extends State<AddJobWidget> {
       _sequenceDetails = null;
       _machinesByType.clear();
       _selectedMachines.clear();
-      _stationTimes.clear();
     });
 
     final sequence = await bloc.getSequenceDetails(sequenceId);
@@ -367,17 +354,6 @@ class AddJobState extends State<AddJobWidget> {
     if (sequence != null) {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
-      // Per-job, per-station baseline: the task's own nominal processing
-      // time. This used to be seeded from a bloc-level cache shared by
-      // EVERY job of the order (MachinesService._standardTimesCache), so
-      // editing — or even just opening — one job silently changed the
-      // baseline every other job on the same machine type computed from.
-      // Keeping it local to this call is what makes jobs independent.
-      final Map<int, MachineStandardTimes> initialTimes = {
-        for (final task in tasks)
-          task.machineTypeId:
-              MachineStandardTimes(processing: task.processingUnits),
-      };
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
@@ -389,67 +365,41 @@ class AddJobState extends State<AddJobWidget> {
 
         final Map<int, List<MachineEntity>> machinesMap = {};
         for (final entry in results) {
-          final times = initialTimes[entry.value1];
-          machinesMap[entry.value1] = times != null
-              ? entry.value2.map((m) => _applyStandardTimes(m, times)).toList()
-              : entry.value2;
+          machinesMap[entry.value1] = entry.value2;
         }
 
         setState(() {
           _sequenceDetails = sequence;
           _machinesByType.addAll(machinesMap);
-          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
+
+          // Times of a previously chosen route must not be saved with this
+          // one.
+          final taskIds = tasks.map((t) => t.id).toSet();
+          _explicitTaskMachineMinutes
+              .removeWhere((taskId, _) => !taskIds.contains(taskId));
 
           for (final task in tasks) {
             final machineTypeId = task.machineTypeId;
             final machines = machinesMap[machineTypeId];
             if (machines != null && machines.isNotEmpty) {
-              // A reopened job remembers which machine it ran on: it is the
-              // key of its saved times for this task. Fall back to the first
-              // candidate for a new job, or if that machine is no longer a
-              // candidate for this station.
-              final int? savedMachineId =
-                  widget.initialTaskMachineTimes?[task.id]?.keys.firstOrNull;
-              final machine = machines.firstWhere(
-                (m) => m.id != null && m.id == savedMachineId,
-                orElse: () => machines.first,
+              // The machine shown on the row. Every machine of the station
+              // keeps its own time and all of them are candidates when the
+              // order is scheduled, so this is only what the row displays
+              // and what the time dialog opens on.
+              _selectedMachines[task.id!] = machines.first;
+
+              // One entry per machine of the station. Saved times win over
+              // the values recomputed from the machine's percentage —
+              // otherwise editing an order silently reset every processing
+              // time the user had adjusted by hand. Rebuilding the whole
+              // map also drops entries of machines that are no longer
+              // candidates for this station.
+              _explicitTaskMachineMinutes[task.id!] = seedTaskMachineMinutes(
+                task: task,
+                stationMachines: machines,
+                saved: _explicitTaskMachineMinutes[task.id],
               );
-              _selectedMachines[machineTypeId] = machine;
-
-              // Saved times win over the values recomputed from the machine's
-              // percentages — otherwise editing an order silently reset every
-              // processing time the user had adjusted by hand.
-              final savedTimes =
-                  widget.initialTaskMachineTimes?[task.id]?[machine.id];
-
-              final times = initialTimes[machineTypeId];
-              final baseProcessingMinutes =
-                  times?.processing.inMinutes ?? task.processingUnits.inMinutes;
-
-              final processingMinutes = savedTimes?['processing'] ??
-                  (baseProcessingMinutes * machine.processingPercentage / 100)
-                      .round();
-              const preparationMinutes = 0; // comes from matrix — always 0 here
-              // Rest is no longer a per-job field: what the scheduler uses
-              // is the machine's own rest policy (restPercentage /
-              // continueCapacity, set in the machine inactivities dialog).
-              // This column is kept at 0 for compatibility with rows saved
-              // before this change; nothing reads it.
-              const restMinutes = 0;
-
-              // Exactly one machine entry per task, same invariant
-              // _showStationTimeDialog maintains. The clear matters when a
-              // reopened job was seeded with a machine that is no longer a
-              // candidate for this station: without it the stale entry would
-              // survive alongside the new one and both would be saved.
-              _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-              _explicitTaskMachineMinutes[task.id!]!.clear();
-              _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
-                'processing': processingMinutes,
-                'preparation': preparationMinutes,
-                'rest': restMinutes,
-              };
 
               // Seed the per-job preemption override for EVERY candidate
               // machine of this station from the sequence's own flag. Two
@@ -472,7 +422,6 @@ class AddJobState extends State<AddJobWidget> {
       } else {
         setState(() {
           _sequenceDetails = sequence;
-          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
         });
       }
@@ -755,7 +704,7 @@ class AddJobState extends State<AddJobWidget> {
     final machineTypeId = task.machineTypeId;
     final machineOptions =
         _machinesByType[machineTypeId] ?? const <MachineEntity>[];
-    final selectedMachine = _selectedMachines[machineTypeId];
+    final selectedMachine = _selectedMachines[task.id];
     final defaultLabel = _stationLabel(task);
 
     return Padding(
@@ -879,27 +828,11 @@ class AddJobState extends State<AddJobWidget> {
 
     if (!mounted || selected == null) return;
 
-    setState(() {
-      _selectedMachines[task.machineTypeId] = selected;
-      // Local to THIS job/station — never fed back to a shared cache, so
-      // picking a machine on one job cannot change another job's baseline.
-      final fallback = _stationTimes[task.machineTypeId];
-      final updated =
-          MachineStandardTimes.fromMachine(selected, fallback: fallback);
-      _stationTimes[task.machineTypeId] = updated;
-
-      // Update explicit times mapping for this task & machine
-      final baseProcessingMinutes = updated.processing.inMinutes;
-      _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-      _explicitTaskMachineMinutes[task.id!]!.clear();
-      _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
-        'processing': baseProcessingMinutes,
-        'preparation': 0, // setup times come from matrix
-        'rest': 0, // real rest is the machine's own policy, not a job field
-      };
-
-      _syncStandardTimesToMachines(task.machineTypeId, updated);
-    });
+    // Only changes the machine the row shows. It used to wipe the task's
+    // times and rewrite the picked machine's from a per-machine-type value
+    // rescaled by its percentage, so picking a machine could replace a time
+    // typed by hand, and picking twice applied the percentage twice.
+    setState(() => _selectedMachines[task.id!] = selected);
   }
 
   // ── station time dialog — SETUP TIME FIELD REMOVED ────────────────────────
@@ -913,26 +846,24 @@ class AddJobState extends State<AddJobWidget> {
       TaskEntity task, int machineTypeId) async {
     final machines = _machinesByType[machineTypeId] ?? [];
 
-    final existingForTask = _explicitTaskMachineMinutes[task.id];
-    Map<String, int>? existingTimes;
-    int? existingMachineId;
-    if (existingForTask != null && existingForTask.isNotEmpty) {
-      existingMachineId = existingForTask.keys.first;
-      existingTimes = existingForTask[existingMachineId];
-    }
+    // Working copy of this task's minutes on EVERY machine of the station.
+    // The dialog edits the copy, one machine at a time, and only "Aceptar"
+    // writes it back — so each machine keeps its own time and cancelling
+    // changes nothing.
+    final Map<int, int> draft = {
+      for (final machine in machines)
+        if (machine.id != null)
+          machine.id!: _explicitTaskMachineMinutes[task.id]?[machine.id]
+                  ?['processing'] ??
+              nominalTaskMinutesOn(task, machine),
+    };
 
-    int? selectedMachineId =
-        existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
+    int? selectedMachineId = _selectedMachines[task.id]?.id ??
+        (machines.isNotEmpty ? machines[0].id : null);
 
-    final stationDefaults = _stationTimes[machineTypeId] ??
-        MachineStandardTimes(processing: task.processingUnits);
-
-    Duration processingDuration = existingTimes != null
-        ? Duration(minutes: existingTimes['processing'] ?? 0)
-        : stationDefaults.processing;
-
-    final processingController =
-        TextEditingController(text: _formatDuration(processingDuration));
+    final processingController = TextEditingController(
+        text: _formatDuration(
+            Duration(minutes: draft[selectedMachineId] ?? 0)));
 
     // Without this, tapping into a pre-filled field (e.g. showing the
     // stale "00:05:00" default) places the cursor instead of selecting the
@@ -966,8 +897,28 @@ class AddJobState extends State<AddJobWidget> {
                         .map((m) => DropdownMenuItem<int>(
                             value: m.id, child: Text(m.name)))
                         .toList(),
-                    onChanged: (v) =>
-                        setDialogState(() => selectedMachineId = v),
+                    // Keep what was typed for the machine being left and
+                    // show the time of the machine being entered. Without
+                    // the reload the field kept the previous machine's
+                    // time, which "Aceptar" then saved on the new one.
+                    onChanged: (v) => setDialogState(() {
+                      if (selectedMachineId != null) {
+                        draft[selectedMachineId!] =
+                            _parseTimeToMinutes(processingController.text);
+                      }
+                      selectedMachineId = v;
+                      processingController.text = _formatDuration(
+                          Duration(minutes: draft[v] ?? 0));
+                    }),
+                  ),
+                if (machines.length > 1)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Cada máquina de la estación guarda su propio tiempo. '
+                      'Cambie de máquina para ver o editar el de las demás.',
+                      style: TextStyle(fontSize: 11),
+                    ),
                   ),
                 const SizedBox(height: 16),
 
@@ -1025,30 +976,28 @@ class AddJobState extends State<AddJobWidget> {
     );
 
     if (result == true) {
-      final processingMinutes = _parseTimeToMinutes(processingController.text);
+      if (selectedMachineId != null) {
+        draft[selectedMachineId!] =
+            _parseTimeToMinutes(processingController.text);
+      }
 
       setState(() {
         if (selectedMachineId != null) {
-          final newSelMachine =
+          _selectedMachines[task.id!] =
               machines.firstWhere((m) => m.id == selectedMachineId);
-          _selectedMachines[machineTypeId] = newSelMachine;
-
-          _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-          _explicitTaskMachineMinutes[task.id!]!.clear();
-          _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
-            'processing': processingMinutes,
+        }
+        // Each machine's own entry — never clear() the task's map here:
+        // that is what erased the sibling machines' times.
+        final byMachine =
+            _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+        draft.forEach((machineId, minutes) {
+          byMachine[machineId] = {
+            'processing': minutes,
             'preparation': 0, // comes from matrix — always 0 here
             'rest': 0, // real rest is the machine's own policy
           };
-        }
-        _stationTimes[machineTypeId] = MachineStandardTimes(
-          processing: Duration(minutes: processingMinutes),
-          preparation: Duration.zero, // from matrix
-          rest: Duration.zero,
-        );
+        });
       });
-      _syncStandardTimesToMachines(
-          machineTypeId, _stationTimes[machineTypeId]!);
     }
 
     processingFocusNode.dispose();
@@ -1065,24 +1014,6 @@ class AddJobState extends State<AddJobWidget> {
       s = int.tryParse(parts[2]) ?? 0;
     }
     return h * 60 + m + (s >= 30 ? 1 : 0);
-  }
-
-  MachineEntity _applyStandardTimes(
-          MachineEntity machine, MachineStandardTimes times) =>
-      machine;
-
-  void _syncStandardTimesToMachines(
-      int machineTypeId, MachineStandardTimes times) {
-    final machines = _machinesByType[machineTypeId];
-    if (machines == null) return;
-    setState(() {
-      _machinesByType[machineTypeId] =
-          machines.map((m) => _applyStandardTimes(m, times)).toList();
-      final selected = _selectedMachines[machineTypeId];
-      if (selected != null) {
-        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
-      }
-    });
   }
 
   String _formatDuration(Duration duration) {
@@ -1222,14 +1153,6 @@ class AddJobState extends State<AddJobWidget> {
     final explicit = _explicitTaskMachineMinutes[task.id]?[machine.id]
         ?['processing'];
     if (explicit != null) return Duration(minutes: explicit);
-
-    final base = _stationTimes[task.machineTypeId]?.processing ??
-        task.processingUnits;
-    if (machine.processingPercentage == 100 ||
-        machine.processingPercentage <= 0) {
-      return base;
-    }
-    final ratio = machine.processingPercentage / 100.0;
-    return Duration(milliseconds: (base.inMilliseconds * ratio).round());
+    return Duration(minutes: nominalTaskMinutesOn(task, machine));
   }
 }

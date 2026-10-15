@@ -112,9 +112,9 @@ class FlowShopAdapter {
     for (final m in machines) {
       if (m.id == null) continue;
       machineInactivitiesMap[m.id!] = m.scheduledInactivities;
-      machineContinueCapacityMap[m.id!] = m.continueCapacity;
-      machineRestTimeMap[m.id!] =
-          Duration(minutes: (60 * m.restPercentage / 100).round());
+      final restPolicy = machineRestPolicy(m);
+      machineContinueCapacityMap[m.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[m.id!] = restPolicy.rest;
     }
 
     final output = FlowShop(

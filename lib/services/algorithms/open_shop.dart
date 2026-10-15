@@ -742,7 +742,13 @@ class OpenShop {
       completedOperations[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
-      _machineLastJob[selected.machineId] = selected.job.dbJobId;
+      // A job with no state (A-J) registered for this machine leaves the
+      // machine in the state it found it. Recording it as the last job
+      // anyway made the NEXT changeover look up a null state and cost zero.
+      if (jobStates == null ||
+          jobStates![selected.job.dbJobId]?[selected.machineId] != null) {
+        _machineLastJob[selected.machineId] = selected.job.dbJobId;
+      }
       _machineContinuousUsage[selected.machineId] = placed.usageAfter;
     }
 

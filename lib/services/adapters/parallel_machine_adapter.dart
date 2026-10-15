@@ -109,9 +109,9 @@ class ParallelMachineAdapter {
     final Map<int, Duration?> machineRestTimeMap = {};
     for (final machine in machineEntities) {
       machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      machineRestTimeMap[machine.id!] =
-          Duration(minutes: (60 * machine.restPercentage / 100).round());
+      final restPolicy = machineRestPolicy(machine);
+      machineContinueCapacityMap[machine.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[machine.id!] = restPolicy.rest;
     }
 
     final output = ParallelMachine(

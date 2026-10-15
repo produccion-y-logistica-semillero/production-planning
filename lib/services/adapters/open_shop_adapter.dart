@@ -110,10 +110,9 @@ class OpenShopAdapter {
     final Map<int, Duration?> machineRestTimeMap = {};
     for (final machine in machines) {
       machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      // Calculate rest duration from percentage (100% = 1 hour base)
-      machineRestTimeMap[machine.id!] =
-          Duration(minutes: (60 * machine.restPercentage / 100).round());
+      final restPolicy = machineRestPolicy(machine);
+      machineContinueCapacityMap[machine.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[machine.id!] = restPolicy.rest;
     }
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =

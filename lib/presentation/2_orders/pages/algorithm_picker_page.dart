@@ -4,6 +4,10 @@ import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 
 import 'package:production_planning/entities/order_entity.dart';
+import 'package:production_planning/entities/route_draft.dart';
+import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
+import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/shared/dispatch_rule_info.dart';
 
@@ -590,11 +594,14 @@ class _ProgramSummary extends StatelessWidget {
     final jobs = order?.orderJobs ?? const [];
     final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
 
-    // Route name -> number of jobs that use it.
+    // Route -> number of jobs that use it, and the route's id (for the
+    // preview).
     final routes = <String, int>{};
+    final routeIds = <String, int?>{};
     for (final job in jobs) {
       final name = job.sequence?.name ?? 'Ruta sin nombre';
       routes[name] = (routes[name] ?? 0) + 1;
+      routeIds[name] ??= job.sequence?.id;
     }
 
     return Container(
@@ -626,10 +633,23 @@ class _ProgramSummary extends StatelessWidget {
             runSpacing: 4,
             children: [
               for (final e in routes.entries)
-                Chip(
-                  avatar: const Icon(Icons.account_tree_outlined, size: 16),
-                  label: Text(
-                      '${e.key} (${e.value} ${e.value == 1 ? 'job' : 'jobs'})'),
+                Tooltip(
+                  message: 'Ver ruta',
+                  child: ActionChip(
+                    avatar: Icon(Icons.account_tree_outlined,
+                        size: 16, color: colorScheme.primary),
+                    label: Text(
+                        '${e.key} (${e.value} ${e.value == 1 ? 'job' : 'jobs'})'),
+                    onPressed: routeIds[e.key] == null
+                        ? null
+                        : () => showDialog<void>(
+                              context: context,
+                              builder: (_) => _RoutePreviewDialog(
+                                sequenceId: routeIds[e.key]!,
+                                name: e.key,
+                              ),
+                            ),
+                  ),
                 ),
             ],
           ),
@@ -669,6 +689,83 @@ class _ProgramSummary extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Read-only view of a process route: its graph, which can be panned and
+/// zoomed but not edited.
+class _RoutePreviewDialog extends StatelessWidget {
+  final int sequenceId;
+  final String name;
+  const _RoutePreviewDialog({required this.sequenceId, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: FutureBuilder(
+            // The route's own record: it carries the station names, which the
+            // copy inside each job does not always have.
+            future:
+                GetIt.instance<SequencesService>().getFullSequence(sequenceId),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final SequenceEntity? route =
+                  snapshot.data!.fold((_) => null, (r) => r);
+              final draft = route == null ? null : RouteDraft.fromSequence(route);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.account_tree_outlined,
+                          color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name,
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w600)),
+                            if (draft != null)
+                              Text(
+                                '${draft.nodes.length} estaciones · '
+                                '${draft.arrows.length} precedencias · '
+                                'solo lectura',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: draft == null
+                        ? const Center(
+                            child: Text('No se pudo cargar la ruta.'))
+                        : NodeEditor(readOnly: true, initialDraft: draft),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }

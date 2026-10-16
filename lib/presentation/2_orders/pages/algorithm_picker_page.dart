@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
+import 'package:dartz/dartz.dart' as dartz;
 
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/route_draft.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_params_dialog.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
@@ -25,6 +28,7 @@ class AlgorithmPickerPage extends StatefulWidget {
 class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   late final GanttBloc _ganttBloc;
   final List<int> _selectedIndexes = [];
+  TabuParams? _tabuParams;
   bool _selectAll = false;
   bool _isLoading = true;
 
@@ -146,6 +150,18 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     });
   }
 
+  Future<void> _configureTabu() async {
+    final params = await showDialog<TabuParams>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => TabuParamsDialog(
+        initial: _tabuParams ?? const TabuParams(),
+      ),
+    );
+    if (params == null) return; // canceló
+    setState(() => _tabuParams = params);
+  }
+
   void _onCalculate() {
     if (_selectedIndexes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,7 +183,13 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     }
 
     // Retornar los índices seleccionados
-    Navigator.pop(context, List<int>.from(_selectedIndexes));
+    Navigator.pop(
+      context,
+      dartz.Tuple2<List<int>, TabuParams?>(
+        List<int>.from(_selectedIndexes),
+        _tabuParams,
+      ),
+    );
   }
 
   @override
@@ -459,12 +481,34 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                     fontSize: 12,
                                   ),
                                 ),
-                                secondary: IconButton(
-                                  tooltip: '¿Cómo funciona esta regla?',
-                                  icon: Icon(Icons.help_outline,
-                                      color: colorScheme.primary),
-                                  onPressed: () => _showRuleHelp(
-                                      context, _labelForRule(rule, index)),
+                                secondary: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_labelForRule(rule, index)
+                                                .toUpperCase() ==
+                                            'TABU' &&
+                                        env.name.toUpperCase() ==
+                                            'PARALLEL MACHINES')
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.tune,
+                                          color: _tabuParams == null
+                                              ? colorScheme.onSurfaceVariant
+                                              : colorScheme.primary,
+                                        ),
+                                        tooltip: _tabuParams == null
+                                            ? 'Configurar parametros (usando valores por defecto)'
+                                            : 'Parametros personalizados activos',
+                                        onPressed: _configureTabu,
+                                      ),
+                                    IconButton(
+                                      tooltip: '¿Cómo funciona esta regla?',
+                                      icon: Icon(Icons.help_outline,
+                                          color: colorScheme.primary),
+                                      onPressed: () => _showRuleHelp(
+                                          context, _labelForRule(rule, index)),
+                                    ),
+                                  ],
                                 ),
                                 value: isSelected,
                                 onChanged: (v) =>

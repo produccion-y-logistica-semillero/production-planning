@@ -213,8 +213,13 @@ class _OrdersPageState extends State<OrdersPage> {
               ],
             ),
             const SizedBox(height: 8.0),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            // Wrap, not Row: on a narrow screen the actions go to a second
+            // line instead of overflowing.
+            Wrap(
+              alignment: WrapAlignment.spaceEvenly,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 TextButton(
                   onPressed: () => getMetrics(context, order.orderId!),
@@ -273,8 +278,11 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
                 Expanded(
                   flex: 1,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  // Wrap (not Row) hands the button the available width, so
+                  // on a phone its label breaks into two lines instead of
+                  // overflowing.
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
                     children: [
                       TextButton(
                         onPressed: () async {
@@ -307,7 +315,8 @@ class _OrdersPageState extends State<OrdersPage> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text("Nuevo Programa de Producción"),
+                        child: const Text("Nuevo Programa de Producción",
+                            textAlign: TextAlign.center),
                       ),
                     ],
                   ),

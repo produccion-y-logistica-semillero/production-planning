@@ -302,158 +302,183 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
               _selectAll = false;
             }
 
+            // Everything above the action bar scrolls as ONE list: the header,
+            // the program summary (which can be expanded) and the rules. It
+            // used to be a fixed column with only the rules list flexible,
+            // so on a short window (tablet, phone) or with the summary open
+            // the fixed parts alone were taller than the screen and the page
+            // overflowed at the bottom.
             return Column(
               children: [
-                // Header con información del ambiente
-                Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: colorScheme.primaryContainer,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.inventory_2_outlined,
-                        color: colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
+                Expanded(
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Orden ID: ${widget.orderId}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onSurface,
+                            // Header con información del ambiente
+                            Container(
+                              margin: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer
+                                    .withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: colorScheme.primaryContainer,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Orden ID: ${widget.orderId}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Ambiente: ${env.name}',
+                                          style: TextStyle(
+                                            color: colorScheme.onSurfaceVariant,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () => _showAllRulesHelp(
+                                        context, [
+                                      for (int i = 0; i < rules.length; i++)
+                                        _labelForRule(rules[i], i)
+                                    ]),
+                                    icon: const Icon(Icons.menu_book_outlined),
+                                    label: const Text('Guía de reglas'),
+                                  ),
+                                ],
                               ),
                             ),
-                            Text(
-                              'Ambiente: ${env.name}',
-                              style: TextStyle(
-                                color: colorScheme.onSurfaceVariant,
-                                fontSize: 14,
+
+                            // Rutas y jobs del programa
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                              child: _ProgramSummary(order: _order),
+                            ),
+
+                            // Select All Checkbox
+                            Container(
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainer,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: colorScheme.outlineVariant,
+                                ),
+                              ),
+                              child: CheckboxListTile(
+                                title: Text(
+                                  'Seleccionar todos',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${rules.length} algoritmos disponibles',
+                                  style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                value: _selectAll,
+                                onChanged: (v) =>
+                                    _toggleSelectAll(v, rules.length),
+                                activeColor: colorScheme.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
+
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: () => _showAllRulesHelp(context, [
-                          for (int i = 0; i < rules.length; i++)
-                            _labelForRule(rules[i], i)
-                        ]),
-                        icon: const Icon(Icons.menu_book_outlined),
-                        label: const Text('Guía de reglas'),
+
+                      // Lista de algoritmos
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList.builder(
+                          itemCount: rules.length,
+                          itemBuilder: (context, index) {
+                            final rule = rules[index];
+                            final isSelected = _selectedIndexes.contains(index);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? colorScheme.primaryContainer
+                                        .withOpacity(0.3)
+                                    : colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? colorScheme.primary.withOpacity(0.5)
+                                      : colorScheme.outlineVariant
+                                          .withOpacity(0.5),
+                                ),
+                              ),
+                              child: CheckboxListTile(
+                                title: Text(
+                                  _labelForRule(rule, index),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: isSelected
+                                        ? colorScheme.primary
+                                        : colorScheme.onSurface,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  _ruleSummary(_labelForRule(rule, index)),
+                                  style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                secondary: IconButton(
+                                  tooltip: '¿Cómo funciona esta regla?',
+                                  icon: Icon(Icons.help_outline,
+                                      color: colorScheme.primary),
+                                  onPressed: () => _showRuleHelp(
+                                      context, _labelForRule(rule, index)),
+                                ),
+                                value: isSelected,
+                                onChanged: (v) =>
+                                    _toggleSingle(index, v, rules.length),
+                                activeColor: colorScheme.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ],
-                  ),
-                ),
-
-                // Rutas y jobs del programa
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: _ProgramSummary(order: _order),
-                ),
-
-                // Select All Checkbox
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainer,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: colorScheme.outlineVariant,
-                    ),
-                  ),
-                  child: CheckboxListTile(
-                    title: Text(
-                      'Seleccionar todos',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${rules.length} algoritmos disponibles',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                    value: _selectAll,
-                    onChanged: (v) => _toggleSelectAll(v, rules.length),
-                    activeColor: colorScheme.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Lista de algoritmos
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: rules.length,
-                    itemBuilder: (context, index) {
-                      final rule = rules[index];
-                      final isSelected = _selectedIndexes.contains(index);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? colorScheme.primaryContainer.withOpacity(0.3)
-                              : colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected
-                                ? colorScheme.primary.withOpacity(0.5)
-                                : colorScheme.outlineVariant.withOpacity(0.5),
-                          ),
-                        ),
-                        child: CheckboxListTile(
-                          title: Text(
-                            _labelForRule(rule, index),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: isSelected
-                                  ? colorScheme.primary
-                                  : colorScheme.onSurface,
-                            ),
-                          ),
-                          subtitle: Text(
-                            _ruleSummary(_labelForRule(rule, index)),
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                          secondary: IconButton(
-                            tooltip: '¿Cómo funciona esta regla?',
-                            icon: Icon(Icons.help_outline,
-                                color: colorScheme.primary),
-                            onPressed: () => _showRuleHelp(
-                                context, _labelForRule(rule, index)),
-                          ),
-                          value: isSelected,
-                          onChanged: (v) =>
-                              _toggleSingle(index, v, rules.length),
-                          activeColor: colorScheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      );
-                    },
                   ),
                 ),
 
@@ -470,49 +495,49 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                       ),
                     ],
                   ),
-                  child: Row(
-                    children: [
-                      // Información de selección
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Seleccionados: ${_selectedIndexes.length}/${rules.length}',
-                              style: TextStyle(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (_selectedIndexes.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              // Rule names (EDD, LPT, WSPT...), in list order,
-                              // instead of their position numbers.
-                              Builder(builder: (context) {
-                                final names = ([..._selectedIndexes]..sort())
-                                    .map((i) => _labelForRule(rules[i], i))
-                                    .join(', ');
-                                return Tooltip(
-                                  message: names,
-                                  child: Text(
-                                    'Algoritmos: $names',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
-                          ],
+                  // Narrow window: the selection summary on top and the
+                  // buttons below, instead of squeezing all three into one
+                  // line.
+                  child: LayoutBuilder(builder: (context, c) {
+                    final narrow = c.maxWidth < 520;
+                    // Información de selección
+                    final info = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Seleccionados: ${_selectedIndexes.length}/${rules.length}',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-
-                      // Botones
+                        if (_selectedIndexes.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          // Rule names (EDD, LPT, WSPT...), in list order,
+                          // instead of their position numbers.
+                          Builder(builder: (context) {
+                            final names = ([..._selectedIndexes]..sort())
+                                .map((i) => _labelForRule(rules[i], i))
+                                .join(', ');
+                            return Tooltip(
+                              message: names,
+                              child: Text(
+                                'Algoritmos: $names',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    );
+                    // Botones
+                    final buttons = <Widget>[
                       OutlinedButton(
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
@@ -548,8 +573,27 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ];
+                    if (narrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          info,
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: buttons,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(children: [
+                      Expanded(child: info),
+                      const SizedBox(width: 16),
+                      ...buttons,
+                    ]);
+                  }),
                 ),
               ],
             );
@@ -733,7 +777,8 @@ class _RoutePreviewDialog extends StatelessWidget {
               }
               final SequenceEntity? route =
                   snapshot.data!.fold((_) => null, (r) => r);
-              final draft = route == null ? null : RouteDraft.fromSequence(route);
+              final draft =
+                  route == null ? null : RouteDraft.fromSequence(route);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

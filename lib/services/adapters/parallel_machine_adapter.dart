@@ -115,7 +115,7 @@ class ParallelMachineAdapter {
           Duration(minutes: (60 * machine.restPercentage / 100).round());
     }
 
-    final output = ParallelMachine(
+    final parallel = ParallelMachine(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
@@ -128,7 +128,10 @@ class ParallelMachineAdapter {
       machineRestTime: machineRestTimeMap,
       tabuParams: tabuParams ?? const TabuParams(),
 
-    ).output;
+    );final output = parallel.output;
+
+
+
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────
     final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
@@ -177,6 +180,8 @@ class ParallelMachineAdapter {
         return Tuple5(out.jobId, job.availableDate, out.endDate, out.dueDate,
             job.priority);
       }).toList(),
+      tabuStats: parallel.tabuStats,
+
     );
 
     return Tuple2(machinesResult, metrics);

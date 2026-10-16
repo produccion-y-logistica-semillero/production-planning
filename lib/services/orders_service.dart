@@ -648,7 +648,7 @@ class OrdersService {
     // fix instead of watching a spinner — or, in the five environments that
     // run on the UI isolate, a frozen app.
     try {
-      return await _dispatchSchedule(sch);
+      return await _dispatchSchedule(sch, tabuParams: tabuParams);
     } on SchedulingHorizonException catch (e) {
       print('scheduleOrder: orden imposible de planificar → $e');
       return Left(UnschedulableOrderFailure(e.reason));

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
@@ -173,6 +174,11 @@ class ParallelMachine {
   final Map<int, Duration> _machineContinuousUsage = {};
   final Map<int, PreemptionEngine> _engineByMachine = {};
   final TabuParams tabuParams;
+
+  /// Resumen de la ultima corrida de [tabuSearchRule] (iteraciones, tiempo
+  /// y flujo). Null si no se corrio TABU o si habia menos de 2 jobs y no
+  /// hubo busqueda. Lo lee el adapter para mostrarlo en la UI.
+  TabuRunStats? tabuStats;
 
   /// Earliest-free moment of each machine, as the schedule is built.
   ///
@@ -868,48 +874,197 @@ class ParallelMachine {
     ];
   }
 
-  // Total flow de una sola maquina Σ (Cj - rj)
-  Duration _machineFlow(int machineId, List<ParallelInput> sequence) {
-  DateTime available = startDate; // Fecha de inicio de la maquina 
-  String? lastState; // ultimo estado 
-  int processedCount = 0; // numero de procesos para ver lo de procesos continuos 
-  Duration flow = Duration.zero; // calculo del flujo total 
+  // Semillas DINÁMICAS: el reparto por máquina que produce cada regla
+  // dinámica (SPT/LPT/EDD/FIFO/WSPT_ADAPTADO, MS, CR, ATCS).
+  //
+  // Estas reglas deciden en cada momento qué trabajo sigue según el reloj,
+  // así que su horario NO se puede reproducir ordenando una lista y
+  // asignando con _greedyAssign (que es lo que hace _seedSolutions). Aquí se
+  // corre la regla y se lee el reparto resultante de su propio output; luego
+  // la búsqueda lo mide con _totalFlow como a cualquier otra semilla.
+  //
+  // Devuelve Map<máquina, trabajos en orden de ejecución>, el mismo formato
+  // que _greedyAssign.
+  //
+  // _runDynamic escribe en output, machines, machineAvailable,
+  // _machineLastState, _machineContinuousUsage e inputJobs. Todo eso se
+  // restaura al terminar (también si lanza una excepción) para que la
+  // búsqueda y _commitBestAssignment arranquen de un estado limpio.
+  List<Map<int, List<ParallelInput>>> _dynamicSeedAssignments() {
+    final List<ParallelInput> savedJobs = List<ParallelInput>.from(inputJobs);
+    final Map<int, ParallelInput> jobById = {
+      for (final job in savedJobs) job.jobId: job,
+    };
+    final Map<int, String?> savedLastState =
+        Map<int, String?>.from(_machineLastState);
+    final Map<int, Duration> savedUsage =
+        Map<int, Duration>.from(_machineContinuousUsage);
+    final Map<int, DateTime> savedAvailable =
+        Map<int, DateTime>.from(machineAvailable);
 
-  for (final job in sequence) {
-    final Duration? processingTime = job.durationsInMachines[machineId]; // busca cuanto tarda y si se puede porcesar en esa maquina 
-    if (processingTime == null) {
-      continue; 
-    }// permite revisar todos los trabajos
+    final List<Map<int, List<ParallelInput>>> seeds = [];
+    try {
+      for (final criterion in DispatchCriterion.values) {
+        _runDynamic(criterion);
 
-    DateTime candidateStart =job.availableDate.isAfter(available) ? job.availableDate : available;candidateStart = _adjustForWorkingSchedule(candidateStart); // Ajusta la hora de inico a las inactividades 
+        final Map<int, List<ParallelInput>> assignment = {
+          for (final id in machines.keys) id: <ParallelInput>[],
+        };
+        // output queda en el orden en que se fue comprometiendo cada trabajo
+        // y, dentro de una misma máquina, ese es su orden de ejecución.
+        for (final out in output) {
+          final job = jobById[out.jobId];
+          if (job != null) assignment[out.machineId]?.add(job);
+        }
+        // DIAGNÓSTICO (temporal, se puede borrar): flujo REAL de la regla,
+        // leído de su propio output, frente al que da re-simular su reparto.
+        // Si difieren, la semilla no reproduce a la regla y TABU puede quedar
+        // por detrás de ella.
+        Duration ruleFlow = Duration.zero;
+        for (final out in output) {
+          final job = jobById[out.jobId];
+          if (job != null) {
+            ruleFlow += out.endDate.difference(job.availableDate);
+          }
+        }
+        String minutes2(Duration d) =>
+            (d.inMilliseconds / 60000).toStringAsFixed(2);
+        print('[TABU semilla ${criterion.name}] regla=${minutes2(ruleFlow)} min · '
+            're-simulada=${minutes2(_totalFlow(assignment))} min');
 
-    final String toState = job.stateOnMachine(machineId);
-    final Duration setup = _setupDuration(machineId, lastState, toState); // cuanto tarda en iniciar la maquina 
-    final DateTime processStart = setup > Duration.zero  // incio real considerando inactivades 
-        ? _adjustForWorkingSchedule(candidateStart.add(setup))
-        : candidateStart;
-
-    final DateTime endTime = _adjustEndTimeWithInactivities(
-        machineId, processStart, processStart.add(processingTime));
-
-    flow += endTime.difference(job.availableDate); // C_j − r_j se calcula el flujo total 
-
-    DateTime finalEnd = endTime; // la desocupa 
-    final capacity = machineContinueCapacity[machineId] ?? 0; // revisa proceamientos continuos 
-    final restTime = machineRestTime[machineId];
-    if (capacity > 0 && restTime != null) {
-      processedCount++; // aumenta procesos continuos 
-      if (processedCount >= capacity) {
-        finalEnd = endTime.add(restTime); // se le aplica descanso 
-        processedCount = 0;
+        seeds.add(assignment);
       }
+    } finally {
+      _clearSchedule();
+      inputJobs = savedJobs;
+      _machineLastState
+        ..clear()
+        ..addAll(savedLastState);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(savedUsage);
+      machineAvailable
+        ..clear()
+        ..addAll(savedAvailable);
     }
-    available = finalEnd; // ajuste de la disponibilidad 
-    lastState = job.stateOnMachine(machineId);
+    return seeds;
   }
 
-  return flow;
-}
+  /// Cuántos trabajos quedaron repartidos en [assignment].
+  int _assignedJobs(Map<int, List<ParallelInput>> assignment) =>
+      assignment.values.fold(0, (sum, seq) => sum + seq.length);
+
+  // ----------------------------------------------------------------------------
+  // Modelo de tiempos del TABU = el mismo de las reglas (_bestPlacementFor).
+  // _placeOnMachine coloca UN job en UNA máquina dada su situación actual
+  // (libre desde, último estado, racha de uso continuo):
+  //   • setup por el PreemptionEngine como bloque propio (setupSegments)
+  //   • proceso partido en segmentos por fin de turno, mantenimiento o tope
+  //     de uso continuo, respetando si el job es interrumpible
+  //   • la racha de uso continuo pasa de un job al siguiente
+  // Es pura: no escribe ningún campo de la clase.
+  // ----------------------------------------------------------------------------
+  _ParallelPlacement _placeOnMachine(
+    ParallelInput job,
+    int machineId, {
+    required DateTime freeAt,
+    required String? lastState,
+    required Duration continuousUsage,
+  }) {
+    final Duration processingTime = job.durationsInMachines[machineId]!;
+
+    DateTime candidateStart =
+        job.availableDate.isAfter(freeAt) ? job.availableDate : freeAt;
+    candidateStart = _adjustForWorkingSchedule(candidateStart);
+
+    final Duration setup = _setupDuration(
+      machineId,
+      lastState,
+      job.stateOnMachine(machineId),
+    );
+
+    List<ProcessingSegment> setupSegments = const [];
+    DateTime processStart = candidateStart;
+    Duration usageAfterSetup = continuousUsage;
+    if (setup > Duration.zero) {
+      final setupSchedule = _engineByMachine[machineId]!.computeSegments(
+        earliestStart: candidateStart,
+        totalDuration: setup,
+        priorContinuousUsage: usageAfterSetup,
+      );
+      setupSegments = setupSchedule.segments;
+      processStart = setupSchedule.completionTime;
+      usageAfterSetup = setupSegments.length > 1
+          ? setupSegments.last.duration
+          : usageAfterSetup + setupSegments.single.duration;
+    }
+
+    final schedule = _engineByMachine[machineId]!.computeSegments(
+      earliestStart: processStart,
+      totalDuration: processingTime,
+      priorContinuousUsage: usageAfterSetup,
+      interruptible: job.isInterruptibleOnMachine(machineId),
+    );
+    final DateTime endTime = schedule.completionTime;
+    final Duration delay = endTime.isAfter(job.dueDate)
+        ? endTime.difference(job.dueDate)
+        : Duration.zero;
+
+    return _ParallelPlacement(
+      job: job,
+      machineId: machineId,
+      processStart: processStart,
+      schedule: schedule,
+      setupSegments: setupSegments,
+      continuousUsageAfterSetup: usageAfterSetup,
+      delay: delay,
+    );
+  }
+
+  /// Racha de uso continuo con la que queda la máquina después de [p]
+  /// (misma regla que _commitPlacement).
+  Duration _usageAfter(_ParallelPlacement p) => p.schedule.segments.length > 1
+      ? p.schedule.segments.last.duration
+      : p.continuousUsageAfterSetup + p.schedule.segments.single.duration;
+
+  /// Simula una secuencia fija en una máquina y devuelve la colocación de
+  /// cada job, en orden. La usan _machineFlow (evaluar) y
+  /// _commitBestAssignment (escribir el output): lo que se evalúa es
+  /// exactamente lo que se dibuja.
+  List<_ParallelPlacement> _simulateMachine(
+      int machineId, List<ParallelInput> sequence) {
+    final List<_ParallelPlacement> placements = [];
+    DateTime freeAt = startDate;
+    String? lastState; // igual que antes: la máquina arranca sin estado
+    Duration usage = Duration.zero;
+
+    for (final job in sequence) {
+      if (!job.durationsInMachines.containsKey(machineId)) continue;
+
+      final placement = _placeOnMachine(
+        job,
+        machineId,
+        freeAt: freeAt,
+        lastState: lastState,
+        continuousUsage: usage,
+      );
+      placements.add(placement);
+
+      freeAt = placement.end;
+      lastState = job.stateOnMachine(machineId);
+      usage = _usageAfter(placement);
+    }
+    return placements;
+  }
+
+  // Total flow de una sola maquina Σ (Cj - rj)
+  Duration _machineFlow(int machineId, List<ParallelInput> sequence) {
+    Duration flow = Duration.zero;
+    for (final placement in _simulateMachine(machineId, sequence)) {
+      flow += placement.end.difference(placement.job.availableDate); // C_j − r_j
+    }
+    return flow;
+  }
 
 
   /// Tardiness (vs. dueDate) of each job within a single machine's sequence,
@@ -954,57 +1109,15 @@ Duration _totalFlow(Map<int, List<ParallelInput>> assignment) {
 // mejor solucion encontrada por el tabu 
 void _commitBestAssignment(Map<int, List<ParallelInput>> assignment) {
   for (final entry in assignment.entries) {
-    final int machineId = entry.key;
-    final List<ParallelInput> sequence = entry.value;
-
-    DateTime available = startDate;
-    String? lastState;
-    int processedCount = 0;
-
-    for (final job in sequence) {
-      final Duration? processingTime = job.durationsInMachines[machineId];
-      if (processingTime == null) continue; 
-
-      DateTime candidateStart =
-          job.availableDate.isAfter(available) ? job.availableDate : available;
-      candidateStart = _adjustForWorkingSchedule(candidateStart);
-
-      final String toState = job.stateOnMachine(machineId);
-      final Duration setup = _setupDuration(machineId, lastState, toState);
-      final DateTime processStart = setup > Duration.zero
-          ? _adjustForWorkingSchedule(candidateStart.add(setup))
-          : candidateStart;
-
-      final DateTime endTime = _adjustEndTimeWithInactivities(
-          machineId, processStart, processStart.add(processingTime));
-      final Duration delay = endTime.isAfter(job.dueDate)
-          ? endTime.difference(job.dueDate)
-          : Duration.zero;
-
-      output.add(ParallelOutput(
-        job.jobId,
-        machineId,
-        processStart,
-        endTime,
-        delay,
-        job.dueDate,
-      ));
-
-      DateTime finalEnd = endTime;
-      final capacity = machineContinueCapacity[machineId] ?? 0;
-      final restTime = machineRestTime[machineId];
-      if (capacity > 0 && restTime != null) {
-        processedCount++;
-        if (processedCount >= capacity) {
-          finalEnd = endTime.add(restTime);
-          processedCount = 0;
-        }
-      }
-
-      available = finalEnd;
-      lastState = job.stateOnMachine(machineId);
+    // La secuencia ya decidida se simula con el mismo modelo de la búsqueda
+    // y cada colocación se escribe con _commitPlacement, el mismo método que
+    // usan las reglas: así el output lleva segments y setupSegments y el
+    // Gantt dibuja los cortes (fin de turno, mantenimiento, uso continuo).
+    for (final placement in _simulateMachine(entry.key, entry.value)) {
+      _commitPlacement(placement);
     }
   }
+
 
 
   for (final out in output) {
@@ -1030,63 +1143,44 @@ Map<int, List<ParallelInput>> _greedyAssign(List<ParallelInput> sequence) {
   final Map<int, String?> lastState = {
     for (final id in machines.keys) id: null,
   };
-  final Map<int, int> processedCount = {
-    for (final id in machines.keys) id: 0,
+  // Racha de uso continuo por máquina, en minutos reales como en las reglas
+  // (reemplaza al antiguo conteo de jobs processedCount).
+  final Map<int, Duration> continuousUsage = {
+    for (final id in machines.keys) id: Duration.zero,
   };
   final Map<int, List<ParallelInput>> assignment = {
     for (final id in machines.keys) id: <ParallelInput>[], // Se guardan los jobs asigandos a cada maquina 
   };
 
   for (final job in sequence) {
-    int bestMachineId = -1;
-    DateTime bestEndTime = startDate;
-    Duration bestDelay = const Duration(days: 99999);
+    _ParallelPlacement? best;
 
-    for (final entry in job.durationsInMachines.entries) { // probar todas las maquinas donde se puede procesar el job 
-      final int machineId = entry.key;
-      final Duration processingTime = entry.value;
+    for (final machineId in job.durationsInMachines.keys) { // probar todas las maquinas donde se puede procesar el job 
       final DateTime? freeAt = machineAvailable[machineId];
       if (freeAt == null) continue;
 
-      DateTime candidateStart =
-          job.availableDate.isAfter(freeAt) ? job.availableDate : freeAt; // Cuando esta  disponible 
-      candidateStart = _adjustForWorkingSchedule(candidateStart); // ajusta los horarios 
+      final _ParallelPlacement candidate = _placeOnMachine(
+        job,
+        machineId,
+        freeAt: freeAt,
+        lastState: lastState[machineId],
+        continuousUsage: continuousUsage[machineId]!,
+      );
 
-      final String toState = job.stateOnMachine(machineId); 
-      final Duration setup =
-          _setupDuration(machineId, lastState[machineId], toState); // setup hace referencia a el tiempo entre estados que tarda 
-      final DateTime processStart = setup > Duration.zero
-          ? _adjustForWorkingSchedule(candidateStart.add(setup)) // comprueba horaio laboral 
-          : candidateStart;
-      final DateTime endTime = _adjustEndTimeWithInactivities(machineId, processStart, processStart.add(processingTime)); // cuando termina 
-      final Duration delay = endTime.isAfter(job.dueDate) // retraso 
-          ? endTime.difference(job.dueDate)
-          : Duration.zero;
-
-      if (bestMachineId == -1 || delay < bestDelay || (delay == bestDelay && endTime.isBefore(bestEndTime))) { // revisa el delay y el criterio de desempate es el flow 
-        bestMachineId = machineId;
-        bestEndTime = endTime;
-        bestDelay = delay;
+      if (best == null ||
+          candidate.delay < best.delay ||
+          (candidate.delay == best.delay && candidate.end.isBefore(best.end))) { // revisa el delay y el criterio de desempate es el fin mas temprano 
+        best = candidate;
       }
     }
 
-    if (bestMachineId == -1) continue;
+    if (best == null) continue;
 
-    assignment[bestMachineId]!.add(job); // se le asigna el job a esa maquina 
-
-    DateTime finalEnd = bestEndTime;
-    final capacity = machineContinueCapacity[bestMachineId] ?? 0;
-    final restTime = machineRestTime[bestMachineId];
-    if (capacity > 0 && restTime != null) { // compureba el descanso 
-      processedCount[bestMachineId] = processedCount[bestMachineId]! + 1; // aumenta la capacidad y revisa si llego 
-      if (processedCount[bestMachineId]! >= capacity) {
-        finalEnd = bestEndTime.add(restTime); // añade descanso pertienente 
-        processedCount[bestMachineId] = 0;
-      }
-    }
-
-    machineAvailable[bestMachineId] = finalEnd;
-    lastState[bestMachineId] = job.stateOnMachine(bestMachineId);
+    final int machineId = best.machineId;
+    assignment[machineId]!.add(job); // se le asigna el job a esa maquina 
+    machineAvailable[machineId] = best.end;
+    lastState[machineId] = job.stateOnMachine(machineId);
+    continuousUsage[machineId] = _usageAfter(best); // el descanso lo aplica el motor
   }
 
   return assignment;
@@ -1321,7 +1415,12 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
   final int n = inputJobs.length; // tamalno de jobs 
   final Random random = Random(params.seed);
   final Random startRandom = Random(params.seed + 1);
-  final Stopwatch watch = Stopwatch()..start(); // cuenta el tiempo de ejecucion del tabu search 
+  // Dos relojes. [setupWatch] mide la preparación (semillas, incluidas las
+  // reglas dinámicas, y estado inicial). [watch] mide SOLO la búsqueda y
+  // arranca justo antes del bucle: el presupuesto de tiempo se cuenta sobre
+  // él, así las semillas no le quitan tiempo a la búsqueda.
+  final Stopwatch setupWatch = Stopwatch()..start();
+  final Stopwatch watch = Stopwatch();
 
 
     // Llegan desde la interfaz. Se acotan aqui para que un valor invalido
@@ -1353,6 +1452,21 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
 
   for (final seedSequence in _seedSolutions()) {
     final candidateAssignment = _greedyAssign(seedSequence);
+    final candidateTotal = _totalFlow(candidateAssignment).inMinutes;
+    if (candidateTotal < seedTotalMinutes) {
+      seedAssignment = candidateAssignment;
+      seedTotalMinutes = candidateTotal;
+    }
+  }
+
+  // Semillas dinámicas: horarios que ningún ordenamiento estático + greedy
+  // reproduce. Se miden con el mismo _totalFlow, así TABU nunca arranca peor
+  // que la mejor regla dinámica.
+  final int seededJobs = _assignedJobs(seedAssignment);
+  for (final candidateAssignment in _dynamicSeedAssignments()) {
+    // Una semilla que coloca menos trabajos tendría menos flujo solo por
+    // eso: no es comparable, se descarta.
+    if (_assignedJobs(candidateAssignment) != seededJobs) continue;
     final candidateTotal = _totalFlow(candidateAssignment).inMinutes;
     if (candidateTotal < seedTotalMinutes) {
       seedAssignment = candidateAssignment;
@@ -1402,6 +1516,10 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
   int iter = 0;
   bool intensifying = false;
 
+  // Termina la preparación: desde aquí corre el presupuesto de tiempo.
+  setupWatch.stop();
+  watch.start();
+
   while (iter < maxIterations && watch.elapsedMilliseconds < timeBudgetMs) { // tiempo menor y iteraciones menor misma iteracion saca dos rams 
     final intraCandidate = _bestIntraMove(
       assignment: currentAssignment,
@@ -1439,51 +1557,52 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
       chosen = intraCandidate ?? interCandidate;
     }
 
-    if (chosen == null) { // si no hay mejora iteracion . improve +1 
-      iter++;
+    if (chosen == null) {
+      // Sin vecino aplicable: cuenta como iteración sin mejora y, a diferencia
+      // de antes (iter++ + continue), cae igual al control de estancamiento,
+      // para que la intensificación (s1) y la diversificación (s2) se disparen.
       noImprove++;
-      continue;
-    }
-
-    // --- Aplicar el movimiento elegido ---
-    currentAssignment[chosen.machineA] = chosen.newSequenceA; // Actualiza la maquina 
-    flowCache[chosen.machineA] = chosen.newFlowA; // actualiza el flow 
-    jobDelay.addAll(_machineRemovalGains(chosen.machineA, chosen.newSequenceA)); // Actualiza los retrasos 
-    if (!chosen.isIntra) {
-      currentAssignment[chosen.machineB!] = chosen.newSequenceB!;
-      flowCache[chosen.machineB!] = chosen.newFlowB!; // Actualiza la lamquina a la que se le saca 
-      jobDelay.addAll(_machineRemovalGains(chosen.machineB!, chosen.newSequenceB!));
-      for (final job in chosen.newSequenceB!) {
-        currentMachineOf[job] = chosen.machineB!;
+    } else {
+      // --- Aplicar el movimiento elegido ---
+      currentAssignment[chosen.machineA] = chosen.newSequenceA; // Actualiza la maquina 
+      flowCache[chosen.machineA] = chosen.newFlowA; // actualiza el flow 
+      jobDelay.addAll(_machineRemovalGains(chosen.machineA, chosen.newSequenceA)); // Actualiza los retrasos 
+      if (!chosen.isIntra) {
+        currentAssignment[chosen.machineB!] = chosen.newSequenceB!;
+        flowCache[chosen.machineB!] = chosen.newFlowB!; // Actualiza la lamquina a la que se le saca 
+        jobDelay.addAll(_machineRemovalGains(chosen.machineB!, chosen.newSequenceB!));
+        for (final job in chosen.newSequenceB!) {
+          currentMachineOf[job] = chosen.machineB!;
+        }
       }
-    }
-    currentTotalMinutes = chosen.totalMinutesAfter; // actualiza el total de la solcion global 
+      currentTotalMinutes = chosen.totalMinutesAfter; // actualiza el total de la solcion global 
 
-    // --- Registrar atributo tabú (tenencia dinámica ~ √n) ---
-    final int tenure = intensifying // verifica si esta intensificando 
-        ? shortTenure
-        : minTenure + random.nextInt(maxTenure - minTenure + 1); // en el ternure puede salir cualquiera entre maximo y minimo 
-    tabuList[chosen.attribute] = iter + tenure;
-    moveFrequency[chosen.attribute] =(moveFrequency[chosen.attribute] ?? 0) + 1; //  Guardar la frecuencia de los moviminetos tabu 
-    if (iter % 25 == 0) {
-      tabuList.removeWhere((_, expiration) => expiration <= iter);
-    } // eliminan movimientso tabu expirados 
+      // --- Registrar atributo tabú (tenencia dinámica ~ √n) ---
+      final int tenure = intensifying // verifica si esta intensificando 
+          ? shortTenure
+          : minTenure + random.nextInt(maxTenure - minTenure + 1); // en el ternure puede salir cualquiera entre maximo y minimo 
+      tabuList[chosen.attribute] = iter + tenure;
+      moveFrequency[chosen.attribute] =(moveFrequency[chosen.attribute] ?? 0) + 1; //  Guardar la frecuencia de los moviminetos tabu 
+      if (iter % 25 == 0) {
+        tabuList.removeWhere((_, expiration) => expiration <= iter);
+      } // eliminan movimientso tabu expirados 
 
-    // --- ¿F(S') < F(best)? ---
-    if (currentTotalMinutes < bestTotalMinutes) {
-      // Recalcular exacto antes de aceptar (protege contra deriva de caché).
-      final verified = _totalFlow(currentAssignment).inMinutes; // revisa el nuevo flujo ganadador 
-      currentTotalMinutes = verified;
-      if (verified < bestTotalMinutes) {
-        bestTotalMinutes = verified; // guarda la nueva solucion 
-        bestAssignment = _deepCopyAssignment(currentAssignment);
-        noImprove = 0;
-        intensifying = false;
+      // --- ¿F(S') < F(best)? ---
+      if (currentTotalMinutes < bestTotalMinutes) {
+        // Recalcular exacto antes de aceptar (protege contra deriva de caché).
+        final verified = _totalFlow(currentAssignment).inMinutes; // revisa el nuevo flujo ganadador 
+        currentTotalMinutes = verified;
+        if (verified < bestTotalMinutes) {
+          bestTotalMinutes = verified; // guarda la nueva solucion 
+          bestAssignment = _deepCopyAssignment(currentAssignment);
+          noImprove = 0;
+          intensifying = false;
+        } else {
+          noImprove++;
+        }
       } else {
         noImprove++;
       }
-    } else {
-      noImprove++;
     }
 
     // --- Control de estancamiento ---
@@ -1543,6 +1662,7 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
 
     iter++;
   }
+  watch.stop(); // solo cuenta la búsqueda, sin el commit final
   // _assignJobsToMachines() would re-pick each job's machine on its own
   // greedy logic, discarding the inter-machine moves the search just made —
   // so the output is built directly from bestAssignment instead.
@@ -1553,13 +1673,24 @@ void tabuSearchRule({TabuParams params = const TabuParams()}){ // busacr hasta 4
   ];
   _commitBestAssignment(bestAssignment);
 
-  watch.stop();
+  // El bucle sale por iter >= maxIterations o por tiempo; si quedaron
+  // iteraciones sin hacer, la causa fue el presupuesto de tiempo.
+  tabuStats = TabuRunStats(
+    iterations: iter,
+    maxIterations: maxIterations,
+    elapsedMs: watch.elapsedMilliseconds,
+    timeBudgetMs: timeBudgetMs,
+    initialFlowMinutes: initialFitness,
+    bestFlowMinutes: bestTotalMinutes,
+    stoppedByTime: iter < maxIterations,
+  );
   final String mejora = initialFitness == 0
       ? '0.0'
       : ((initialFitness - bestTotalMinutes) * 100 / initialFitness)
           .toStringAsFixed(1);
   print('[TABU parallel intra/inter] n=$n · iteraciones=$iter · '
-      '${watch.elapsedMilliseconds} ms');
+      'semillas ${setupWatch.elapsedMilliseconds} ms · '
+      'busqueda ${watch.elapsedMilliseconds} ms');
 
   print('[Iteraciones totales Criterio de parada] = $maxIterations ');
 

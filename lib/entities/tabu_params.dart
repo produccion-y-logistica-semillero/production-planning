@@ -18,7 +18,7 @@ class TabuParams {
   final bool randomStart;
 
   const TabuParams({
-    this.maxIterations = 1000,
+    this.maxIterations = 100,
     this.intraAttempts = 40,
     this.interJobSamples = 10,
     this.maxDestinations = 3,

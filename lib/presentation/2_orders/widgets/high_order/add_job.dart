@@ -511,28 +511,25 @@ class AddJobState extends State<AddJobWidget> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 32,
+                          runSpacing: 4,
                           children: [
-                            Expanded(
-                              child: _selectAutomaticHour(
-                                'Hora de inicio',
-                                automaticStartHour,
-                                (picked) => setState(() {
-                                  automaticStartHour = picked;
-                                  widget.automaticStartHour = picked;
-                                }),
-                              ),
+                            _selectAutomaticHour(
+                              'Hora de inicio',
+                              automaticStartHour,
+                              (picked) => setState(() {
+                                automaticStartHour = picked;
+                                widget.automaticStartHour = picked;
+                              }),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _selectAutomaticHour(
-                                'Hora de entrega',
-                                automaticDueHour,
-                                (picked) => setState(() {
-                                  automaticDueHour = picked;
-                                  widget.automaticDueHour = picked;
-                                }),
-                              ),
+                            _selectAutomaticHour(
+                              'Hora de entrega',
+                              automaticDueHour,
+                              (picked) => setState(() {
+                                automaticDueHour = picked;
+                                widget.automaticDueHour = picked;
+                              }),
                             ),
                           ],
                         ),
@@ -551,21 +548,26 @@ class AddJobState extends State<AddJobWidget> {
                     ),
                   );
                 }
-                return Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: selectDate('Seleccione fecha de disponibilidad',
-                          availableDate, availableHour),
-                    ),
-                    const Expanded(flex: 2, child: SizedBox()),
-                    Expanded(
-                      flex: 3,
-                      child: selectDate(
-                          'Seleccione fecha de entrega', dueDate, dueHour),
-                    ),
-                  ],
-                );
+                final available = selectDate(
+                    'Seleccione fecha de disponibilidad',
+                    availableDate,
+                    availableHour);
+                final due = selectDate(
+                    'Seleccione fecha de entrega', dueDate, dueHour);
+                // Side by side when there is room, one under the other on a
+                // narrow screen.
+                return LayoutBuilder(builder: (context, c) {
+                  if (c.maxWidth < 700) {
+                    return Column(children: [available, due]);
+                  }
+                  return Row(
+                    children: [
+                      Expanded(flex: 3, child: available),
+                      const Expanded(flex: 2, child: SizedBox()),
+                      Expanded(flex: 3, child: due),
+                    ],
+                  );
+                });
               },
             ),
             const SizedBox(height: 8),
@@ -639,9 +641,13 @@ class AddJobState extends State<AddJobWidget> {
     return Row(
       children: [
         selectHour(hour, date, label),
-        Text(
-          date == null ? label : DateFormat('dd/MM/yyyy').format(date),
-          style: TextStyle(color: colorScheme.onSurface),
+        // Flexible: a long label ellipsizes instead of overflowing.
+        Flexible(
+          child: Text(
+            date == null ? label : DateFormat('dd/MM/yyyy').format(date),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
         ),
         const Spacer(),
         IconButton(
@@ -747,7 +753,9 @@ class AddJobState extends State<AddJobWidget> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          // Wrap: on a narrow screen the A-J picker moves under its label.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text('Estado (familia) del job en esta estación: '),
               const SizedBox(width: 4),

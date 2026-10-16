@@ -281,7 +281,12 @@ class NewOrderPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Wrap: the lead-time field moves under the toggle on a narrow
+          // screen instead of overflowing.
+          Wrap(
+            spacing: 0,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SegmentedButton<DateRegistrationMode>(
                 segments: const [

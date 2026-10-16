@@ -242,7 +242,27 @@ class _SequencesBodyState extends State<_SequencesBody> {
           );
         }
 
-        return Padding(
+        // Narrow window (phone, tablet in portrait): the list / palette goes
+        // on top and the canvas below, instead of a fixed 280 px side panel
+        // that leaves the canvas a sliver.
+        return LayoutBuilder(builder: (context, constraints) {
+          if (constraints.maxWidth < 900) {
+            return Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: (constraints.maxHeight * 0.38).clamp(220.0, 360.0),
+                    child: left,
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(child: board),
+                ],
+              ),
+            );
+          }
+          return Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -274,6 +294,7 @@ class _SequencesBodyState extends State<_SequencesBody> {
             ],
           ),
         );
+        });
       },
     );
   }

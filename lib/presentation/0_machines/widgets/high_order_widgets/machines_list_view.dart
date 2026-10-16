@@ -123,10 +123,13 @@ class _MachinesListViewState extends State<MachinesListView> {
                         ),
                       ),
                     ),
-                    Expanded(
-                      flex: 1,
+                    // The two actions take their natural width (they used to
+                    // get 1/9 of the row, which on a phone is less than two
+                    // icon buttons need); the tile above takes the rest.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                             onPressed: () => _addNewMachine(

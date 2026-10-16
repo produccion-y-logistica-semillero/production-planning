@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
+import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machine_bloc.dart';
@@ -122,10 +123,13 @@ class _MachinesListViewState extends State<MachinesListView> {
                         ),
                       ),
                     ),
-                    Expanded(
-                      flex: 1,
+                    // The two actions take their natural width (they used to
+                    // get 1/9 of the row, which on a phone is less than two
+                    // icon buttons need); the tile above takes the rest.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                             onPressed: () => _addNewMachine(
@@ -227,10 +231,15 @@ class _MachinesListViewState extends State<MachinesListView> {
     final controllerPreparation = TextEditingController(text: "100.0");
     // Rest time is expressed in minutes (more intuitive for the user).
     // It is converted to a percentage internally before calling the BLoC.
-    final controllerRestTime = TextEditingController(text: "60");
-    final controllerContinue = TextEditingController(text: "1");
+    // Both at 0 = "No aplica descanso automático", the default for a new
+    // machine. The field is in MINUTES of continuous processing; it used to
+    // default to 1, i.e. an hour of rest after every minute of work.
+    final controllerRestTime = TextEditingController(text: "0");
+    final controllerContinue = TextEditingController(text: "0");
     final availabilityDateTimeController = TextEditingController();
     final quantityController = TextEditingController(text: "1");
+    final startModeNotifier =
+        ValueNotifier<MachineStartMode>(MachineStartMode.specificDate);
 
     double? parsePercentage(String text) {
       final normalized = text.replaceAll(',', '.').trim();
@@ -250,6 +259,7 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: controllerContinue,
           availabilityDateTimeController: availabilityDateTimeController,
           quantityController: quantityController,
+          startModeNotifier: startModeNotifier,
           // scheduledInactivities is passed from the dialog to the BLoC.
           addMachineHandle: (scheduledInactivities) async {
             final quantity =
@@ -265,17 +275,27 @@ class _MachinesListViewState extends State<MachinesListView> {
                 restMinutes != null ? (restMinutes * 100) / 60 : null;
             final continueCapacity =
                 int.tryParse(controllerContinue.text.trim());
+            final startMode = startModeNotifier.value;
+
+            // The rest policy is either off (both 0, the "No aplica"
+            // checkbox) or fully given (both positive). One without the
+            // other has no meaning.
+            final hasInvalidRestPolicy = restMinutes == null ||
+                continueCapacity == null ||
+                restMinutes < 0 ||
+                continueCapacity < 0 ||
+                ((restMinutes > 0) != (continueCapacity > 0));
 
             final hasInvalidFields = processingPercent == null ||
                 processingPercent <= 0 ||
                 preparationPercent == null ||
                 preparationPercent < 0 ||
                 restPercent == null ||
-                restPercent < 0 ||
                 nameController.text.trim().isEmpty ||
                 continueCapacity == null ||
-                continueCapacity <= 0 ||
-                availabilityDateTimeController.text.trim().isEmpty ||
+                hasInvalidRestPolicy ||
+                (startMode == MachineStartMode.specificDate &&
+                    availabilityDateTimeController.text.trim().isEmpty) ||
                 quantity <= 0;
 
             if (hasInvalidFields) {
@@ -328,6 +348,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                 machineId,
                 availabilityDateTimeController.text,
                 scheduledInactivities,
+                startMode: startMode,
               );
             }
 
@@ -365,6 +386,9 @@ class _MachinesListViewState extends State<MachinesListView> {
           : '',
     );
     final quantityController = TextEditingController(text: '1');
+    final startModeNotifier = ValueNotifier<MachineStartMode>(
+      machine.startMode ?? MachineStartMode.specificDate,
+    );
 
     await showDialog(
       context: context,
@@ -378,6 +402,7 @@ class _MachinesListViewState extends State<MachinesListView> {
           continueController: continueController,
           availabilityDateTimeController: availabilityController,
           quantityController: quantityController,
+          startModeNotifier: startModeNotifier,
           isEditing: true,
           // Inactivities are not re-submitted on edit; _ discards the parameter.
           addMachineHandle: (_) async {
@@ -390,6 +415,7 @@ class _MachinesListViewState extends State<MachinesListView> {
               int.tryParse(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),
+              startMode: startModeNotifier.value,
             );
             Navigator.of(dialogContext).pop();
             await Future.delayed(const Duration(milliseconds: 300));

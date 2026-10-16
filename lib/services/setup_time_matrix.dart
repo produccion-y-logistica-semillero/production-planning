@@ -1,5 +1,5 @@
 // =============================================================================
-// lib/services/algorithms/setup_time_matrix.dart
+// lib/services/setup_time_matrix.dart
 //
 // Core logic for sequence-dependent setup times (tiempos de alistamiento
 // dependientes de la secuencia).
@@ -7,15 +7,15 @@
 // ARCHITECTURE NOTE
 // ──────────────────
 // This file is pure Dart — no Flutter, no BLoC, no SQLite imports.
-// It is consumed by:
-//   • Algorithm files (flexible_flow_shop.dart, single_machine.dart, …)
-//   • SetupTimeService, which hydrates the matrix from the DB via SetupTimeDao
+// It is consumed by the algorithm files (flexible_flow_shop.dart,
+// single_machine.dart, …) to look up job-state-to-job-state changeover costs.
 //
 // DB RELATIONSHIP
 // ───────────────
-// The setup_times table (via SetupTimeEntity / SetupTimeDao) stores one row
-// per (machineId, fromState, toState).  SetupTimeMatrixBuilder (at the bottom)
-// converts that flat list into a SetupTimeMatrix for O(1) in-algorithm lookup.
+// The matrix data (keyed by machine name and job "final state" letter) is
+// persisted per order in the order_setup_matrix table, read/written by
+// OrderDao and carried on OrderEntity.setupTimeMatrix. Adapters convert that
+// raw map into a SetupTimeMatrix/SetupTimeHelper at schedule time.
 //
 // WHY SEQUENCE-DEPENDENT?
 // ────────────────────────
@@ -185,66 +185,4 @@ class SetupTimeHelper {
     required String toState,
   }) =>
       completionTime.add(setupDuration(fromState, toState));
-}
-
-// -----------------------------------------------------------------------------
-// SetupTimeMatrixBuilder — converts DB entities ↔ SetupTimeMatrix
-// -----------------------------------------------------------------------------
-
-/// Converts a flat list of DB entity maps into a [SetupTimeMatrix] and back.
-///
-/// The map schema matches SetupTimeEntity fields:
-///   'machineName' : String
-///   'fromState'   : String
-///   'toState'     : String
-///   'time'        : num  (minutes, stored as REAL in SQLite)
-///
-/// Example usage in SetupTimeService / repository:
-/// ```dart
-/// final entities = await _setupTimeDao.getByMachineId(machineId);
-/// final rows = entities.map((e) => {
-///   'machineName': machineName,
-///   'fromState'  : e.fromState,
-///   'toState'    : e.toState,
-///   'time'       : e.setupTime,
-/// }).toList();
-/// final matrix = SetupTimeMatrixBuilder.fromRows(
-///   machineName: machineName,
-///   states: jobStates,          // from the current production program
-///   rows: rows,
-/// );
-/// ```
-class SetupTimeMatrixBuilder {
-  /// Build a [SetupTimeMatrix] from DB rows.
-  ///
-  /// [states] must include every label that can appear as fromState or toState.
-  /// Rows whose states are not in [states] are silently skipped (safe fallback).
-  static SetupTimeMatrix fromRows({
-    required String machineName,
-    required List<String> states,
-    required List<Map<String, dynamic>> rows,
-  }) {
-    final matrix = SetupTimeMatrix(machineName: machineName, states: states);
-    for (final row in rows) {
-      final from = row['fromState'] as String;
-      final to = row['toState'] as String;
-      final t = (row['time'] as num).toDouble();
-      if (states.contains(from) && states.contains(to)) {
-        matrix.setTime(from, to, t);
-      }
-    }
-    return matrix;
-  }
-
-  /// Converts a [SetupTimeMatrix] to DB row maps for persistence.
-  /// Pass the result to SetupTimeDao.insertAll() or equivalent.
-  static List<Map<String, dynamic>> toRows(SetupTimeMatrix matrix) =>
-      matrix.allEntries
-          .map((e) => {
-                'machineName': matrix.machineName,
-                'fromState': e.fromState,
-                'toState': e.toState,
-                'time': e.time,
-              })
-          .toList();
 }

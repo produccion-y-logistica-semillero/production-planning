@@ -1,7 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
-import 'package:production_planning/shared/types/rnage.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'dart:math';
 
 class ParallelInput {
@@ -18,6 +19,15 @@ class ParallelInput {
   /// Optional per-machine state (machineId → state). Falls back to [jobState].
   final Map<int, String>? jobStatesByMachine;
 
+  /// Default interruptibility (usually the task's own setting). Whether this
+  /// job's processing may be split by a work-shift boundary, the
+  /// continuous-use rest cap, or a maintenance window.
+  final bool interruptible;
+
+  /// Optional per-machine override (machineId → interruptible). Falls back
+  /// to [interruptible].
+  final Map<int, bool>? interruptibleByMachine;
+
   ParallelInput(
     this.jobId,
     this.dueDate,
@@ -26,10 +36,15 @@ class ParallelInput {
     this.durationsInMachines, {
     this.jobState = 'A',
     this.jobStatesByMachine,
+    this.interruptible = true,
+    this.interruptibleByMachine,
   });
 
   String stateOnMachine(int machineId) =>
       jobStatesByMachine?[machineId] ?? jobState;
+
+  bool isInterruptibleOnMachine(int machineId) =>
+      interruptibleByMachine?[machineId] ?? interruptible;
 }
 
 class ParallelOutput {
@@ -39,6 +54,8 @@ class ParallelOutput {
   final DateTime endDate;
   final Duration delay;
   final DateTime dueDate;
+  final List<ProcessingSegment> segments;
+  final List<ProcessingSegment> setupSegments;
 
   ParallelOutput(
     this.jobId,
@@ -46,8 +63,49 @@ class ParallelOutput {
     this.startDate,
     this.endDate,
     this.delay,
-    this.dueDate,
-  );
+    this.dueDate, {
+    List<ProcessingSegment>? segments,
+    this.setupSegments = const [],
+  }) : segments = segments ?? [ProcessingSegment(startDate, endDate)];
+}
+
+/// One job priced on one machine, not yet committed.
+///
+/// Produced by `ParallelMachine._bestPlacementFor`, written by
+/// `_commitPlacement`. Splitting evaluation from commitment is what lets the
+/// dynamic rules compare jobs on their real cost — the same placement that
+/// won the comparison is the one that gets scheduled.
+class _ParallelPlacement {
+  final ParallelInput job;
+  final int machineId;
+
+  /// Start of processing (after setup, if any).
+  final DateTime processStart;
+
+  final SegmentedSchedule schedule;
+  final List<ProcessingSegment> setupSegments;
+
+  /// Continuous-use streak once this job is done.
+  final Duration continuousUsageAfter;
+
+  final Duration delay;
+
+  const _ParallelPlacement({
+    required this.job,
+    required this.machineId,
+    required this.processStart,
+    required this.schedule,
+    required this.setupSegments,
+    required this.continuousUsageAfter,
+    required this.delay,
+  });
+
+  /// When the machine actually starts working: setup if there is one,
+  /// otherwise processing.
+  DateTime get start =>
+      setupSegments.isNotEmpty ? setupSegments.first.start : processStart;
+
+  DateTime get end => schedule.completionTime;
 }
 
 class ParallelMachine {
@@ -62,14 +120,33 @@ class ParallelMachine {
   // Mirrors the structure used by Flow Shop / Flexible Job Shop / Open Shop.
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
 
-  // Tracks which job-state each machine processed last (null = cold start).
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
+
+  // Tracks which job-state each machine processed last. Seeded from
+  // [initialMachineState] below; null when a machine has no configured
+  // initial state (cold start, same as before this field existed).
   final Map<int, String?> _machineLastState = {};
 
-  // Machine inactivity support
+  // Machine inactivity support.
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count — so a
+  // single long job can be preempted mid-processing.
   final Map<int, List<MachineInactivityEntity>> machineInactivities;
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
+
+  /// Earliest-free moment of each machine, as the schedule is built.
+  ///
+  /// A field rather than a local of the assignment loop because the dynamic
+  /// rules need to read it to know WHEN the next decision happens — the
+  /// earliest moment any machine frees up.
+  final Map<int, DateTime> machineAvailable = {};
 
   ParallelMachine(
     this.startDate,
@@ -78,17 +155,23 @@ class ParallelMachine {
     this.machines,
     String rule, {
     this.stateSetupMatrix,
+    this.initialMachineState = const {},
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
   }) {
-    // Inicializar contador de procesamiento por máquina
+    // Initialise cold-start tracking and a preemption engine per machine.
     for (final machineId in machines.keys) {
-      machineProcessedCount[machineId] = 0;
-    }
-    // Initialise cold-start tracking for every machine.
-    for (final machineId in machines.keys) {
-      _machineLastState[machineId] = null;
+      _machineLastState[machineId] = initialMachineState[machineId];
+      _machineContinuousUsage[machineId] = Duration.zero;
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      _engineByMachine[machineId] = PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap:
+            capacityMinutes > 0 ? Duration(minutes: capacityMinutes) : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
     }
 
     final r = rule.toUpperCase();
@@ -163,77 +246,136 @@ class ParallelMachine {
 
   // ── Dispatching rules ─────────────────────────────────────────────────────
 
-  void msRule()       => _schedule((a, b) => _slack(a).compareTo(_slack(b)));
   void sptRule()      => _schedule((a, b) => _averageProcessingTime(a).compareTo(_averageProcessingTime(b)));
   void lptRule()      => _schedule((a, b) => _averageProcessingTime(b).compareTo(_averageProcessingTime(a)));
   void eddRule()      => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
   void fcfsRule()     => _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void minslackRule() => _schedule((a, b) => _slack(a).compareTo(_slack(b)));
-  void crRule()       => _schedule((a, b) => _criticalRatio(a).compareTo(_criticalRatio(b)));
-  void atcRule()      => _schedule((a, b) => _atcPriority(b, startDate).compareTo(_atcPriority(a, startDate)));
   void wsptRule()     => _schedule((a, b) => calculateWSPT(b).compareTo(calculateWSPT(a)));
 
-  void sptaRule() {
-    _schedule((a, b) {
-      int minA = a.durationsInMachines.values.reduce((x, y) => x < y ? x : y).inMilliseconds;
-      int minB = b.durationsInMachines.values.reduce((x, y) => x < y ? x : y).inMilliseconds;
-      return minA.compareTo(minB);
-    });
-  }
+  // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
+  //
+  // These previously partitioned jobs against `DateTime.now()` captured once
+  // before the sort, which made the schedule depend on the wall clock at the
+  // moment the button was pressed, and collapsed to `return 0` — discarding
+  // the rule's own criterion — whenever two jobs were both unreleased.
+  //
+  // They are now real event-driven dispatch against the schedule's own
+  // clock: see _runDynamic.
 
-  void eddaRule() {
-    final now = DateTime.now();
-    _schedule((a, b) {
-      final aAvail = !a.availableDate.isAfter(now);
-      final bAvail = !b.availableDate.isAfter(now);
-      if (aAvail && !bAvail) return -1;
-      if (!aAvail && bAvail) return 1;
-      if (!aAvail && !bAvail) return 0;
-      return a.dueDate.compareTo(b.dueDate);
-    });
-  }
+  void sptaRule() => _runDynamic(DispatchCriterion.spt);
+  void eddaRule() => _runDynamic(DispatchCriterion.edd);
+  void lptaRule() => _runDynamic(DispatchCriterion.lpt);
+  void fifoaRule() => _runDynamic(DispatchCriterion.fifo);
+  void wsptaRule() => _runDynamic(DispatchCriterion.wspt);
 
-  void lptaRule() {
-    final now = DateTime.now();
-    _schedule((a, b) {
-      final aAvail = !a.availableDate.isAfter(now);
-      final bAvail = !b.availableDate.isAfter(now);
-      if (aAvail && !bAvail) return -1;
-      if (!aAvail && bAvail) return 1;
-      if (!aAvail && !bAvail) return 0;
-      return _averageProcessingTime(b).compareTo(_averageProcessingTime(a));
-    });
-  }
-
-  void fifoaRule() {
-    final now = DateTime.now();
-    _schedule((a, b) {
-      final aAvail = !a.availableDate.isAfter(now);
-      final bAvail = !b.availableDate.isAfter(now);
-      if (aAvail && !bAvail) return -1;
-      if (!aAvail && bAvail) return 1;
-      if (!aAvail && !bAvail) return 0;
-      return a.availableDate.compareTo(b.availableDate);
-    });
-  }
-
-  void wsptaRule() {
-    final now = DateTime.now();
-    _schedule((a, b) {
-      final aAvail = !a.availableDate.isAfter(now);
-      final bAvail = !b.availableDate.isAfter(now);
-      if (aAvail && !bAvail) return -1;
-      if (!aAvail && bAvail) return 1;
-      if (!aAvail && !bAvail) return 0;
-      return calculateWSPT(b).compareTo(calculateWSPT(a));
-    });
-  }
+  // MS, CR and ATCS are dynamic by definition — their index depends on the
+  // clock t — so they run through the same event-driven dispatch. They used
+  // to be sorted once against each job's release date (MS, CR) or against
+  // the schedule start (ATC, which also ignored priority and setups), which
+  // froze the very quantity they measure.
+  void msRule() => _runDynamic(DispatchCriterion.ms);
+  void minslackRule() => _runDynamic(DispatchCriterion.ms);
+  void crRule() => _runDynamic(DispatchCriterion.cr);
+  void atcRule() => _runDynamic(DispatchCriterion.atcs);
 
   // ── Core scheduler ────────────────────────────────────────────────────────
 
   void _schedule(int Function(ParallelInput, ParallelInput) comparator) {
     inputJobs.sort(comparator);
     _assignJobsToMachines();
+  }
+
+  /// Event-driven dispatch across parallel machines.
+  ///
+  /// The decision point is the earliest moment ANY machine frees up. Every
+  /// pending job is priced on its best machine (from its release, if later)
+  /// and only those that can effectively start earliest compete (non-delay,
+  /// see selectNext). Each is priced through
+  /// [_bestPlacementFor] — which runs the preemption engine, so the span
+  /// being compared already includes the changeover out of that machine's
+  /// current state and any split caused by a shift end, maintenance window
+  /// or rest cap.
+  void _runDynamic(DispatchCriterion criterion) {
+    output.clear();
+    machines.updateAll((key, value) => []);
+    _machineContinuousUsage.updateAll((key, value) => Duration.zero);
+    // Back to each machine's configured INITIAL state, not to null: null
+    // threw away the state the constructor had seeded, so under a dynamic
+    // rule the first job on every machine never paid its changeover.
+    _machineLastState
+        .updateAll((machineId, value) => initialMachineState[machineId]);
+    _resetMachineAvailability();
+
+    if (inputJobs.isEmpty) return;
+
+    final pending = List<ParallelInput>.from(inputJobs);
+    final AtcsParameters? atcs =
+        criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
+    final sequenced = <ParallelInput>[];
+
+    while (pending.isNotEmpty) {
+      // The next decision happens when the first machine becomes free.
+      DateTime decisionTime = machineAvailable.values
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+
+      _ParallelPlacement? chosen;
+
+      final selected = selectNext<ParallelInput>(
+        pending: pending,
+        decisionTime: decisionTime,
+        releaseTime: (job) => job.availableDate,
+        criterion: criterion,
+        atcs: atcs,
+        evaluate: (job, at) {
+          final placement = _bestPlacementFor(job, notBefore: at);
+          if (placement == null) return null;
+          final span = placement.end.difference(at);
+          return DispatchCandidate(
+            job: job,
+            start: placement.start,
+            end: placement.end,
+            span: span.isNegative ? Duration.zero : span,
+            dueDate: job.dueDate,
+            releaseDate: job.availableDate,
+            priority: job.priority,
+            jobId: job.jobId,
+            setup: segmentsDuration(placement.setupSegments),
+          );
+        },
+      );
+
+      if (selected == null) {
+        // Unreachable in practice: selectNext only returns null for an empty
+        // list or when no job has any machine. Guard anyway — this runs on
+        // the UI isolate, so a spin here would freeze the app.
+        for (final job in pending) {
+          final fallback = _bestPlacementFor(job, notBefore: decisionTime);
+          if (fallback != null) _commitPlacement(fallback);
+          sequenced.add(job);
+        }
+        pending.clear();
+        break;
+      }
+
+      // selectNext is non-delay on effective starts: the winner can really
+      // begin at t*, the earliest instant any pending job can on its best
+      // machine — a job an interruption would hold back does not get to
+      // take a machine ahead of one that can run now, and when nothing can
+      // start at decisionTime the clock jumps to t*. Re-price the winner
+      // from the same instant it was judged from; _bestPlacementFor is
+      // pure, so this recomputes rather than re-decides.
+      chosen = _bestPlacementFor(
+        selected.job,
+        notBefore:
+            evaluationTime(selected.job, decisionTime, (j) => j.availableDate),
+      );
+      if (chosen != null) _commitPlacement(chosen);
+
+      sequenced.add(selected.job);
+      pending.remove(selected.job);
+    }
+
+    inputJobs = sequenced;
   }
 
   /// Assigns each job to the machine that minimises tardiness after accounting
@@ -247,88 +389,131 @@ class ParallelMachine {
   /// After a machine is chosen, [_machineLastState] is updated so the next job
   /// assigned to that machine sees the correct "from" state.
   void _assignJobsToMachines() {
-    // Current earliest-free DateTime for each machine.
-    final Map<int, DateTime> machineAvailable = {
-      for (final id in machines.keys) id: startDate,
-    };
+    _resetMachineAvailability();
 
     for (final job in inputJobs) {
-      int bestMachineId = -1;
-      DateTime bestProcessStart = DateTime.now();
-      DateTime bestEndTime = DateTime.now();
-      Duration bestDelay = const Duration(days: 99999);
+      final placement = _bestPlacementFor(job, notBefore: null);
+      if (placement != null) _commitPlacement(placement);
+    }
+  }
 
-      for (final entry in job.durationsInMachines.entries) {
-        final int machineId = entry.key;
-        final Duration processingTime = entry.value;
+  /// Resets the earliest-free clock of every machine to the schedule start.
+  ///
+  /// Kept separate because the genetic and tabu searches re-enter the
+  /// scheduler repeatedly and each pass must start from idle machines.
+  void _resetMachineAvailability() {
+    machineAvailable
+      ..clear()
+      ..addEntries(machines.keys.map((id) => MapEntry(id, startDate)));
+  }
 
-        // Earliest moment when both machine and job are ready.
-        DateTime candidateStart = job.availableDate.isAfter(machineAvailable[machineId]!)
-            ? job.availableDate
-            : machineAvailable[machineId]!;
-        candidateStart = _adjustForWorkingSchedule(candidateStart);
+  /// Evaluates [job] on every machine that can run it and returns the best
+  /// placement, WITHOUT committing anything.
+  ///
+  /// Nothing here writes to [machineAvailable], [_machineLastState],
+  /// [_machineContinuousUsage], [machines] or [output] — the engine's
+  /// `computeSegments` is a pure function of its arguments, so a candidate
+  /// can be priced and then discarded. [_commitPlacement] does the writing.
+  ///
+  /// [notBefore], when given, forces the job to start no earlier than that
+  /// moment; the dynamic rules pass the decision time so every contender is
+  /// priced from the same instant.
+  _ParallelPlacement? _bestPlacementFor(
+    ParallelInput job, {
+    required DateTime? notBefore,
+  }) {
+    _ParallelPlacement? best;
 
-        // ── Sequence-dependent setup time ─────────────────────────────────
-        // The machine needs s_{prevState → jobState} minutes of preparation
-        // before it can start processing this job.  Setup runs on the machine
-        // (occupies it), so processing only starts after setup finishes.
-        final String toState = job.stateOnMachine(machineId);
-        final Duration setup = _setupDuration(
-          machineId,
-          _machineLastState[machineId],
-          toState,
-        );
-        final DateTime processStart = setup > Duration.zero
-            ? _adjustForWorkingSchedule(candidateStart.add(setup))
-            : candidateStart;
+    for (final entry in job.durationsInMachines.entries) {
+      final int machineId = entry.key;
+      final Duration processingTime = entry.value;
+      final DateTime freeAt = machineAvailable[machineId] ?? startDate;
 
-        final rawEnd = processStart.add(processingTime);
-        final DateTime endTime = _adjustEndTimeWithInactivities(machineId, processStart, rawEnd);
-        final Duration delay = endTime.isAfter(job.dueDate)
-            ? endTime.difference(job.dueDate)
-            : Duration.zero;
-
-        // Choose the machine that minimises delay, breaking ties on end time.
-        if (delay < bestDelay || (delay == bestDelay && endTime.isBefore(bestEndTime))) {
-          bestMachineId = machineId;
-          bestProcessStart = processStart;
-          bestEndTime = endTime;
-          bestDelay = delay;
-        }
+      // Earliest moment when machine, job and (for dynamic rules) the
+      // decision clock are all ready.
+      DateTime candidateStart =
+          job.availableDate.isAfter(freeAt) ? job.availableDate : freeAt;
+      if (notBefore != null && notBefore.isAfter(candidateStart)) {
+        candidateStart = notBefore;
       }
+      candidateStart = _adjustForWorkingSchedule(candidateStart);
 
-      if (bestMachineId != -1) {
-        // Aplicar descanso por continueCapacity
-        DateTime finalEnd = bestEndTime;
-        final capacity = machineContinueCapacity[bestMachineId] ?? 0;
-        final restTime = machineRestTime[bestMachineId];
+      // ── Sequence-dependent setup time ─────────────────────────────────
+      // The machine needs s_{prevState → jobState} minutes of preparation
+      // before it can start processing this job. Setup and processing go
+      // through the preemption engine together: the job's interruption flag
+      // on this machine governs the pair (interruptible → each may be split;
+      // not interruptible → one contiguous block, no gap between them).
+      final String toState = job.stateOnMachine(machineId);
+      final Duration setup = _setupDuration(
+        machineId,
+        _machineLastState[machineId],
+        toState,
+      );
 
-        if (capacity > 0 && restTime != null) {
-          machineProcessedCount[bestMachineId] =
-              (machineProcessedCount[bestMachineId] ?? 0) + 1;
+      final placed = _engineByMachine[machineId]!.computeSetupAndProcessing(
+        earliestStart: candidateStart,
+        setupDuration: setup,
+        processingDuration: processingTime,
+        priorContinuousUsage:
+            _machineContinuousUsage[machineId] ?? Duration.zero,
+        interruptible: job.isInterruptibleOnMachine(machineId),
+      );
+      final schedule = placed.processing;
+      final DateTime endTime = schedule.completionTime;
+      final Duration delay = endTime.isAfter(job.dueDate)
+          ? endTime.difference(job.dueDate)
+          : Duration.zero;
 
-          if (machineProcessedCount[bestMachineId]! >= capacity) {
-            finalEnd = bestEndTime.add(restTime);
-            machineProcessedCount[bestMachineId] = 0;
-          }
-        }
+      final candidate = _ParallelPlacement(
+        job: job,
+        machineId: machineId,
+        processStart: schedule.startDate,
+        schedule: schedule,
+        setupSegments: placed.setupSegments,
+        continuousUsageAfter: placed.continuousUsageAfter,
+        delay: delay,
+      );
 
-        machineAvailable[bestMachineId] = finalEnd;
-        machines[bestMachineId]?.add(Tuple2(bestProcessStart, bestEndTime));
-        // ── Update last-state so the next job on this machine sees the correct
-        //    "from" state in the setup matrix.
-        _machineLastState[bestMachineId] = job.stateOnMachine(bestMachineId);
-
-        output.add(ParallelOutput(
-          job.jobId,
-          bestMachineId,
-          bestProcessStart,
-          bestEndTime,
-          bestDelay,
-          job.dueDate,
-        ));
+      // Choose the machine that minimises delay, breaking ties on end time
+      // and then on machine id, so the choice is deterministic.
+      if (best == null ||
+          delay < best.delay ||
+          (delay == best.delay && endTime.isBefore(best.end)) ||
+          (delay == best.delay &&
+              endTime.isAtSameMomentAs(best.end) &&
+              machineId < best.machineId)) {
+        best = candidate;
       }
     }
+
+    return best;
+  }
+
+  /// Writes a placement produced by [_bestPlacementFor] into the schedule.
+  void _commitPlacement(_ParallelPlacement placement) {
+    final job = placement.job;
+    final machineId = placement.machineId;
+    final schedule = placement.schedule;
+    final DateTime endTime = placement.end;
+
+    machineAvailable[machineId] = endTime;
+    machines[machineId]?.add(Tuple2(placement.start, endTime));
+    // ── Update last-state so the next job on this machine sees the correct
+    //    "from" state in the setup matrix.
+    _machineLastState[machineId] = job.stateOnMachine(machineId);
+    _machineContinuousUsage[machineId] = placement.continuousUsageAfter;
+
+    output.add(ParallelOutput(
+      job.jobId,
+      machineId,
+      placement.processStart,
+      endTime,
+      placement.delay,
+      job.dueDate,
+      segments: schedule.segments,
+      setupSegments: placement.setupSegments,
+    ));
   }
 
   // ── Fitness / metric helpers ───────────────────────────────────────────────
@@ -342,28 +527,55 @@ class ParallelMachine {
         job.durationsInMachines.length;
   }
 
-  int _slack(ParallelInput job) {
-    final remaining = job.dueDate.difference(job.availableDate).inMinutes;
-    final processing = job.durationsInMachines.values.fold(0, (s, d) => s + d.inMinutes);
-    return remaining - processing;
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]). Following Lee & Pinedo (1997) for
+  /// parallel machines, the makespan estimate is the single-machine one
+  /// spread over the m machines: (Σp̄_j + n·s̄) / m.
+  AtcsParameters _atcsParameters() {
+    final int n = inputJobs.length;
+    final double meanProcessing = inputJobs.fold<double>(
+            0,
+            (sum, job) => sum +
+                (job.durationsInMachines.isEmpty
+                    ? 0
+                    : _averageProcessingTime(job))) /
+        n;
+    // A pair's changeover depends on which machine they share, so it is
+    // averaged over the machines both can run on; pairs with none are left
+    // out — they can never follow each other.
+    final double meanSetup = meanPairwiseSetupMinutes<ParallelInput>(
+      inputJobs,
+      (from, to) {
+        final shared = to.durationsInMachines.keys
+            .where(from.durationsInMachines.containsKey)
+            .toList();
+        if (shared.isEmpty) return null;
+        final Duration total = shared.fold<Duration>(
+          Duration.zero,
+          (sum, m) =>
+              sum +
+              _setupDuration(m, from.stateOnMachine(m), to.stateOnMachine(m)),
+        );
+        return total ~/ shared.length;
+      },
+    );
+    final int m = max(machines.length, 1);
+    final double workMinutes = n * (meanProcessing + meanSetup) / m;
+
+    return AtcsParameters.calibrate(
+      start: startDate,
+      dueDates: inputJobs.map((job) => job.dueDate),
+      meanProcessingMinutes: meanProcessing,
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        PreemptionEngine(workingSchedule: workingSchedule),
+        startDate,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
   }
 
 
-
-  double _criticalRatio(ParallelInput job) {
-    final remaining = job.dueDate.difference(job.availableDate).inMinutes;
-    final processing = job.durationsInMachines.values.fold(0, (s, d) => s + d.inMinutes);
-    return processing == 0 ? double.infinity : remaining / processing;
-  }
-
-  double _atcPriority(ParallelInput job, DateTime currentTime) {
-    const k = 2.0;
-    final avg = _averageProcessingTime(job);
-    final processing = job.durationsInMachines.values.fold(0, (s, d) => s + d.inMinutes);
-    final remaining = job.dueDate.difference(currentTime).inMinutes;
-    final tardiness = remaining > 0 ? remaining / (k * avg) : 0;
-    return (1 / processing) * exp(-tardiness);
-  }
 
   double calculateWSPT(ParallelInput job) {
     final minMs = job.durationsInMachines.values
@@ -395,100 +607,6 @@ class ParallelMachine {
       return DateTime(start.year, start.month, start.day + 1, ws.hour, ws.minute).add(remaining);
     }
     return endTime;
-  }
-
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday;
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    // Si no hay inactividades configuradas, devolver el end time directamente
-    if (machineInactivities.isEmpty || (machineInactivities[machineId]?.isEmpty ?? true)) {
-      return end;
-    }
-
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-    int maxIterations = 365; // Máximo de días a iterar
-    int iterations = 0;
-
-    while (remaining > Duration.zero && iterations < maxIterations) {
-      iterations++;
-      current = _adjustForWorkingSchedule(current);
-
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-      dayInactivities.sort((a, b) => a.startDate.compareTo(b.startDate));
-
-      final dayStart = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value1.hour, workingSchedule.value1.minute,
-      );
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current.isBefore(dayStart) ? dayStart : current;
-
-      // Si estamos después del final del día, ir al siguiente
-      if (nextAvailable.isAfter(dayEnd) || nextAvailable.isAtSameMomentAs(dayEnd)) {
-        current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
-        continue;
-      }
-
-      // Procesar inactividades ordenadas
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.startDate)) {
-          final availableBeforeInactivity = inactivity.startDate.difference(nextAvailable);
-          if (remaining <= availableBeforeInactivity) {
-            return nextAvailable.add(remaining);
-          }
-          remaining -= availableBeforeInactivity;
-          nextAvailable = inactivity.endDate;
-        } else if (nextAvailable.isBefore(inactivity.endDate)) {
-          nextAvailable = inactivity.endDate;
-        }
-      }
-
-      // Tiempo disponible hoy después de inactividades
-      final availableToday = dayEnd.difference(nextAvailable);
-      if (availableToday > Duration.zero) {
-        if (remaining <= availableToday) {
-          return nextAvailable.add(remaining);
-        }
-        remaining -= availableToday;
-      }
-
-      // Ir al siguiente día
-      current = DateTime(current.year, current.month, current.day + 1, dayStart.hour, dayStart.minute);
-    }
-
-    // Si no hay tiempo suficiente después de iterar, devolver end time
-    return end;
   }
 
   void printOutput() {

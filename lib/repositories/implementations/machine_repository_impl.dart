@@ -142,7 +142,8 @@ class MachineRepositoryImpl implements MachineRepository {
       "preparation_percentage": entity.preparationPercentage,
       "rest_percentage": entity.restPercentage,
       "continue_capacity": entity.continueCapacity,
-      "availability_time": entity.availabilityDateTime.toString()
+      "availability_time": entity.availabilityDateTime.toString(),
+      "start_mode": entity.startMode.index,
     };
   }
 
@@ -163,6 +164,7 @@ class MachineRepositoryImpl implements MachineRepository {
       availabilityDateTime: map["availability_time"] != null
           ? DateTime.tryParse(map["availability_time"].toString())
           : null,
+      startMode: MachineStartMode.values[(map["start_mode"] as int?) ?? 1],
       scheduledInactivities: scheduled,
     );
   }
@@ -266,6 +268,7 @@ Future<Either<Failure, bool>> updateMachine(MachineEntity machine) async {
       'rest_percentage': machine.restPercentage,
       'continue_capacity': machine.continueCapacity,
       'availability_time': machine.availabilityDateTime.toString(),
+      'start_mode': machine.startMode.index,
     });
     return Right(updated);
   } on Failure catch (failure) {

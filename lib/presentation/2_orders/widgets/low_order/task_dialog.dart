@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_states.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 
@@ -58,8 +59,6 @@ class TaskDialog extends StatelessWidget {
   Widget _buildOrderInfo(OrderEntity order) {
     final job = order.orderJobs!.firstWhere((j) => j.jobId! == task.jobId);
 
-    final taskInfo = job.sequence!.tasks!.firstWhere((t) => t.id == task.taskId);
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,24 +66,36 @@ class TaskDialog extends StatelessWidget {
           _buildInfoRow("Order ID", order.orderId.toString()),
           _buildInfoRow(
             "La orden está compuesta por",
-
-            order.orderJobs!
-                .map((j) => j.sequence!.name)
-                .join(", "),
+            order.orderJobs!.map((j) => j.sequence!.name).join(", "),
           ),
           _buildInfoRow("Nombre de Job", job.jobName ?? "Job ${job.jobId}"),
-          _buildInfoRow("Secuencia", task.sequenceName),
+          _buildInfoRow("Ruta de Proceso", task.sequenceName),
           _buildInfoRow("ID tarea", task.taskId.toString()),
-          _buildInfoRow("Tiempo procesamiento", '${taskInfo.processingUnits.inHours.toString().padLeft(2,'0')}:${(taskInfo.processingUnits.inMinutes- (taskInfo.processingUnits.inHours*60)).toString().padLeft(2,'0') }'),
-         /* _buildInfoRow(
+          if (task.setupSegments.isNotEmpty)
+            _buildInfoRow(
+              "Tiempo de alistamiento",
+              _formatProcessingDuration(_sumSegments(task.setupSegments)),
+            ),
+          _buildInfoRow(
+            "Tiempo procesamiento",
+            _formatProcessingDuration(_actualProcessingDuration(task)),
+          ),
+          /* _buildInfoRow(
             "Número ejecución",
             "${taskInfo.execOrder} de ${job.sequence!.tasks!.length}",
           ),*/
-          _buildInfoRow("Cantidad", job.amount.toString()),
           _buildInfoRow(
             "Fechas",
             "${getDateFormat(task.startDate)} - ${getDateFormat(task.endDate)}",
           ),
+          if (task.segments.length > 1)
+            _buildInfoRow(
+              "Procesado en ${task.segments.length} tramos",
+              task.segments
+                  .map((s) =>
+                      '${getDateFormat(s.start)} – ${getDateFormat(s.end)}')
+                  .join('\n'),
+            ),
         ],
       ),
     );
@@ -116,5 +127,27 @@ class TaskDialog extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// The duration actually spent processing this specific task instance —
+  /// the sum of its segments, excluding any preemption pauses. This is what
+  /// was truly scheduled for this job, as opposed to the sequence's generic
+  /// per-task template duration (which can differ once per-job/per-machine
+  /// overrides or machine processing percentages are applied).
+  Duration _actualProcessingDuration(PlanningTaskEntity task) =>
+      _sumSegments(task.segments);
+
+  Duration _sumSegments(List<ProcessingSegment> segments) {
+    return segments.fold(
+      Duration.zero,
+      (sum, segment) => sum + segment.duration,
+    );
+  }
+
+  String _formatProcessingDuration(Duration duration) {
+    final hours = duration.inHours.toString().padLeft(2, '0');
+    final minutes =
+        (duration.inMinutes - duration.inHours * 60).toString().padLeft(2, '0');
+    return '$hours:$minutes';
   }
 }

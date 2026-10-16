@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 10,
+      version: 13,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -66,6 +66,7 @@ class SQLLiteDatabaseProvider {
               rest_percentage REAL NOT NULL DEFAULT 100.0,
               availability_time DATETIME NOT NULL,
               continue_capacity INTEGER,
+              start_mode INTEGER NOT NULL DEFAULT 1,
               FOREIGN KEY (machine_type_id) REFERENCES machine_types(machine_type_id),
               FOREIGN KEY (status_id) REFERENCES status(status_id)
           );
@@ -175,7 +176,6 @@ class SQLLiteDatabaseProvider {
               job_id INTEGER PRIMARY KEY AUTOINCREMENT,
               sequence_id INTEGER NOT NULL,
               order_id INTEGER NOT NULL,
-              amount INTEGER NOT NULL,
               job_name VARCHAR(100),
               due_date DATE NOT NULL,
               available_date DATE NOT NULL,
@@ -323,6 +323,13 @@ class SQLLiteDatabaseProvider {
           'environment_id': 8,
           'name': 'FLEXIBLE OPEN SHOP',
         });
+        // Precedence graphs (A and B enable C, branching): one machine per
+        // station / some station with several machines.
+        batch.insert('environments', {'environment_id': 9, 'name': 'RECURRENTE'});
+        batch.insert('environments', {
+          'environment_id': 10,
+          'name': 'FLEXIBLE RECURRENTE',
+        });
 
         // ─── Dispatch Rules ────────────────────────────────────────────────────
         // Single Machine (IDs 1-13)
@@ -403,6 +410,10 @@ class SQLLiteDatabaseProvider {
           'name': 'TABU',
         });
 
+        // Work-remaining rules (IDs 26-27)
+        batch.insert('dispatch_rules', {'dispatch_rule_id': 26, 'name': 'LWR'});
+        batch.insert('dispatch_rules', {'dispatch_rule_id': 27, 'name': 'MWR'});
+
         // ─── Types × Rules ─────────────────────────────────────────────────────
         void addRule(int envId, int ruleId) {
           batch.insert('types_x_rules', {
@@ -417,41 +428,48 @@ class SQLLiteDatabaseProvider {
         }
 
         // 2: Parallel Machines
+        // Rules 15, 16, 19 and 20 are dropped on purpose: they duplicate the
+        // names of 7 (SPT_ADAPTADO), 6 (EDD_ADAPTADO), 10 (WSPT_ADAPTADO) and
+        // 12 (CR), which are already granted here. The DAO joins without
+        // DISTINCT, so granting both made each of those four appear twice in
+        // the rule dropdown.
         for (final r in [
           2, 3, 1, 14, 11, 12, 5, 6, 7, 10,
-          15, 16, 17, 18, 19, 20, 21, 22, 24, 25,
+          17, 18, 21, 22, 24, 25,
         ]) {
           addRule(2, r);
         }
 
         // 3: Flow Shop
-        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 23, 24]) {
+        for (final r in [
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 23, 24, 26, 27,
+        ]) {
           addRule(3, r);
         }
 
         // 4: Flexible Flow Shop
-        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24]) {
+        for (final r in [
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24, 26, 27,
+        ]) {
           addRule(4, r);
         }
 
         // 5: Job Shop
-        for (final r in [1, 2, 3, 4, 5, 12, 13, 24]) {
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 24, 26, 27]) {
           addRule(5, r);
         }
 
         // 6: Flexible Job Shop
-        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24]) {
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24, 26, 27]) {
           addRule(6, r);
         }
 
-        // 7: Open Shop
-        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
-          addRule(7, r);
-        }
-
-        // 8: Flexible Open Shop
-        for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24]) {
-          addRule(8, r);
+        // 7: Open Shop, 8: Flexible Open Shop, 9: Recurrente,
+        // 10: Flexible Recurrente
+        for (final env in [7, 8, 9, 10]) {
+          for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+            addRule(env, r);
+          }
         }
 
         // ─── Orders & Jobs (base) ──────────────────────────────────────────────
@@ -462,7 +480,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 1,
           'order_id': 1,
-          'amount': 100,
           'due_date': '2024-09-10',
           'priority': 1,
           'available_date': '2024-09-10',
@@ -470,7 +487,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 2,
           'order_id': 2,
-          'amount': 200,
           'due_date': '2024-09-11',
           'priority': 2,
           'available_date': '2024-09-10',
@@ -478,7 +494,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 3,
           'order_id': 3,
-          'amount': 150,
           'due_date': '2024-09-12',
           'priority': 3,
           'available_date': '2024-09-10',
@@ -789,7 +804,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 4,
           'order_id': 4,
-          'amount': 50,
           'job_name': 'Lote Pan Integral Supermercado',
           'due_date': '2024-10-18',
           'priority': 2,
@@ -798,7 +812,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 5,
           'order_id': 4,
-          'amount': 30,
           'job_name': 'Lote Croissants Vitrina',
           'due_date': '2024-10-18',
           'priority': 3,
@@ -807,7 +820,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 6,
           'order_id': 5,
-          'amount': 5,
           'job_name': 'Pastel Cumpleaños El Rincón',
           'due_date': '2024-10-17',
           'priority': 1,
@@ -816,7 +828,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 7,
           'order_id': 5,
-          'amount': 120,
           'job_name': 'Galletas Avena Pedido Mayorista',
           'due_date': '2024-10-19',
           'priority': 2,
@@ -825,7 +836,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 4,
           'order_id': 6,
-          'amount': 25,
           'job_name': 'Pan Artesanal Evento Corporativo',
           'due_date': '2024-10-20',
           'priority': 1,
@@ -1261,7 +1271,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 8,
           'order_id': 7,
-          'amount': 100,
           'job_name': 'Camisetas Blancas Lote A',
           'due_date': '2024-10-25',
           'priority': 2,
@@ -1270,7 +1279,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 8,
           'order_id': 7,
-          'amount': 80,
           'job_name': 'Camisetas Negras Lote B',
           'due_date': '2024-10-25',
           'priority': 2,
@@ -1281,7 +1289,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 9,
           'order_id': 8,
-          'amount': 60,
           'job_name': 'Corte Mezclilla Lote A',
           'due_date': '2024-10-24',
           'priority': 1,
@@ -1290,7 +1297,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 9,
           'order_id': 8,
-          'amount': 50,
           'job_name': 'Corte Algodón Lote B',
           'due_date': '2024-10-24',
           'priority': 1,
@@ -1301,7 +1307,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 12,
           'order_id': 9,
-          'amount': 75,
           'job_name': 'Tintura Azul Marino',
           'due_date': '2024-10-26',
           'priority': 1,
@@ -1310,7 +1315,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 12,
           'order_id': 9,
-          'amount': 60,
           'job_name': 'Tintura Rojo Intenso',
           'due_date': '2024-10-26',
           'priority': 1,
@@ -1321,7 +1325,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 11,
           'order_id': 10,
-          'amount': 40,
           'job_name': 'Camisas Blancas Premium',
           'due_date': '2024-10-27',
           'priority': 1,
@@ -1330,7 +1333,6 @@ class SQLLiteDatabaseProvider {
         batch.insert('jobs', {
           'sequence_id': 11,
           'order_id': 10,
-          'amount': 35,
           'job_name': 'Camisas Azules Premium',
           'due_date': '2024-10-27',
           'priority': 1,
@@ -1547,6 +1549,74 @@ class SQLLiteDatabaseProvider {
             INSERT OR IGNORE INTO types_x_rules(environment_id, dispatch_rule_id) VALUES (2, 25);
           ''');
         }
+
+        if (oldVersion < 11) {
+          // Parallel Machines was granted two rule ids for the same rule
+          // name: 15/7 (SPT_ADAPTADO), 16/6 (EDD_ADAPTADO), 19/10
+          // (WSPT_ADAPTADO) and 20/12 (CR). The rules DAO joins without
+          // DISTINCT, so each of those appeared twice in the dropdown.
+          //
+          // Only the grant is removed, never the row in dispatch_rules:
+          // orders already saved against ids 15/16/19/20 must keep resolving
+          // their rule name.
+          await db.execute('''
+            DELETE FROM types_x_rules
+            WHERE environment_id = 2 AND dispatch_rule_id IN (15, 16, 19, 20);
+          ''');
+        }
+
+        if (oldVersion < 12) {
+          // LWR / MWR (least / most work remaining), granted to Flow Shop,
+          // Flexible Flow Shop, Job Shop and Flexible Job Shop.
+          //
+          // One statement per execute, and the grant guarded by NOT EXISTS:
+          // types_x_rules has no UNIQUE constraint, so INSERT OR IGNORE
+          // would not stop a second grant, and the rules DAO joins without
+          // DISTINCT — a repeated grant shows the rule twice.
+          const newRules = {26: 'LWR', 27: 'MWR'};
+          for (final rule in newRules.entries) {
+            await db.execute(
+              'INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) '
+              'VALUES (?, ?)',
+              [rule.key, rule.value],
+            );
+            for (final environmentId in const [3, 4, 5, 6]) {
+              await db.execute(
+                'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+                'SELECT ?, ? WHERE NOT EXISTS ('
+                'SELECT 1 FROM types_x_rules '
+                'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+                [environmentId, rule.key, environmentId, rule.key],
+              );
+            }
+          }
+        }
+
+        if (oldVersion < 13) {
+          // RECURRENTE / FLEXIBLE RECURRENTE (precedence graphs) used to be
+          // reported as JOB SHOP / FLEXIBLE JOB SHOP. They get their own
+          // environments, and they and the open shops get the same rules:
+          // static, MINSLACK, CR, ATCS, GENETICS, LWR, MWR.
+          await db.execute(
+            "INSERT OR IGNORE INTO environments (environment_id, name) "
+            "VALUES (9, 'RECURRENTE')",
+          );
+          await db.execute(
+            "INSERT OR IGNORE INTO environments (environment_id, name) "
+            "VALUES (10, 'FLEXIBLE RECURRENTE')",
+          );
+          for (final environmentId in const [7, 8, 9, 10]) {
+            for (final ruleId in const [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+              await db.execute(
+                'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+                'SELECT ?, ? WHERE NOT EXISTS ('
+                'SELECT 1 FROM types_x_rules '
+                'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+                [environmentId, ruleId, environmentId, ruleId],
+              );
+            }
+          }
+        }
       },
     );
 
@@ -1577,7 +1647,6 @@ class SQLLiteDatabaseProvider {
           job_id INTEGER PRIMARY KEY AUTOINCREMENT,
           sequence_id INTEGER NOT NULL,
           order_id INTEGER NOT NULL,
-          amount INTEGER NOT NULL,
           job_name VARCHAR(100),
           due_date DATE NOT NULL,
           available_date DATE NOT NULL,
@@ -1612,6 +1681,21 @@ class SQLLiteDatabaseProvider {
     ''');
 
     await _ensureOrderSetupMatrixSchema(_database!);
+    await _ensureMachinesSchema(_database!);
+
+    // The state (A-J) each machine starts a program in, before its first
+    // job. Without this the first job on every machine always paid zero
+    // setup, since there was no "previous state" to compare it against.
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS order_machine_initial_states (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          machine_name TEXT NOT NULL,
+          state_char TEXT NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders(order_id),
+          UNIQUE(order_id, machine_name)
+      );
+    ''');
 
     return _database!;
   }
@@ -1638,6 +1722,20 @@ class SQLLiteDatabaseProvider {
     await addIfMissing('from_state', 'TEXT NOT NULL DEFAULT ""');
     await addIfMissing('to_state', 'TEXT NOT NULL DEFAULT ""');
     await addIfMissing('duration_minutes', 'INTEGER NOT NULL DEFAULT 0');
+  }
+
+  /// Adds any columns that may be missing from [MACHINES] due to older
+  /// schema versions being upgraded incrementally. start_mode defaults to
+  /// 1 (specificDate) so existing machines keep their current behavior.
+  static Future<void> _ensureMachinesSchema(Database db) async {
+    final columns = await _getTableColumns(db, 'MACHINES');
+    if (columns.isEmpty) return;
+
+    if (!columns.contains('start_mode')) {
+      await db.execute(
+        'ALTER TABLE MACHINES ADD COLUMN start_mode INTEGER NOT NULL DEFAULT 1;',
+      );
+    }
   }
 
   static Future<List<String>> _getTableColumns(

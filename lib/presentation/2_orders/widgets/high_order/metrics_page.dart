@@ -37,8 +37,8 @@ class MetricsPage extends StatelessWidget {
                   _formatDuration(metrics.avarageProcessingTime)),
               _buildMetricRow('Tardanza promedio',
                   _formatDuration(metrics.avarageDelayTime)),
-              _buildMetricRow('Retardo promedio',
-                  _formatDuration(metrics.avarageLatenessTime)),
+              _buildMetricRow('Adelanto promedio',
+                  _formatDuration(metrics.avarageEarlinessTime)),
               _buildMetricRow('Tardanza total',
                   _formatDuration(metrics.totalTardiness)),
               _buildMetricRow('Retardo ponderado',
@@ -79,7 +79,8 @@ class MetricsPage extends StatelessWidget {
   }
 
   String _formatDuration(Duration duration) {
-    return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m ${duration.inSeconds.remainder(60)}s';
+    final d = duration.isNegative ? duration.abs() : duration;
+    return '${d.inHours}h ${d.inMinutes.remainder(60)}m ${d.inSeconds.remainder(60)}s';
   }
   }
 

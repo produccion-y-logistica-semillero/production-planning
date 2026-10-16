@@ -5,7 +5,6 @@ import 'package:production_planning/entities/machine_times.dart';
 class JobModel {
   final int jobId;
   final int sequenceId;
-  final int amount;
   final String? jobName;
   final DateTime dueDate;
   final DateTime availableDate;
@@ -17,7 +16,7 @@ class JobModel {
   final Map<int, Map<int, Map<String, int>>>? taskMachineTimesMinutes;
   final Map<int, String>? machineFinalStates;
 
-  JobModel(this.jobId, this.sequenceId, this.amount, this.jobName, this.dueDate,
+  JobModel(this.jobId, this.sequenceId, this.jobName, this.dueDate,
       this.priority, this.availableDate,
       {this.preemptionMatrix, this.taskMachineTimesMinutes, this.jobState, this.machineFinalStates});
 
@@ -25,7 +24,6 @@ class JobModel {
     return JobModel(
         json['job_id'],
         json['sequence_id'],
-        json['amount'],
         json['job_name'],
         DateTime.parse(json['due_date']),
         json['priority'],
@@ -52,7 +50,7 @@ class JobModel {
       });
     }
 
-    return JobEntity(jobId, null, amount, jobName, dueDate, priority, availableDate,
+    return JobEntity(jobId, null, jobName, dueDate, priority, availableDate,
         preemptionMatrix: preemptionMatrix, taskMachineTimes: taskTimes, machineFinalStates: machineFinalStates);
 
   }

@@ -10,13 +10,10 @@ import 'package:production_planning/daos/interfaces/enviroment_dao.dart';
 import 'package:production_planning/daos/interfaces/job_dao.dart';
 import 'package:production_planning/daos/interfaces/order_dao.dart';
 
-import 'package:production_planning/daos/interfaces/setup_time_dao.dart';
-
 abstract class Factory {
   MachineTypeDao getMachineTypeDao();
   MachineDao getMachineDao();
   MachineInactivityDao getMachineInactivityDao();
-  SetupTimeDao getSetupTimeDao();
   SequencesDao getSequenceDao();
   TasksDao getTaskDao();
   StatusDao getStatusDao();

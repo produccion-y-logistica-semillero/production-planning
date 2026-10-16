@@ -19,8 +19,18 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
 
   for (final machine in machines) {
     for (final task in machine.tasks) {
-      final taskDuration = task.endDate.difference(task.startDate);
-      totalBusyTime += taskDuration;
+      // Sum actual processing segments rather than endDate-startDate, so a
+      // task paused by a work-shift/rest/maintenance interruption doesn't
+      // have its paused time counted as busy machine time.
+      final taskDuration = task.segments
+          .fold(Duration.zero, (sum, seg) => sum + seg.duration);
+      // Setup/changeover time also occupies the machine, so it counts
+      // toward busy time (and thus reduces idle) the same as processing —
+      // but it's kept out of avarageProcessingTime, which represents pure
+      // job processing effort, not machine changeover overhead.
+      final setupDuration = task.setupSegments
+          .fold(Duration.zero, (sum, seg) => sum + seg.duration);
+      totalBusyTime += taskDuration + setupDuration;
 
       final jobId = task.jobId;
       processingTimeByJob[jobId] =
@@ -49,6 +59,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
       avarageProcessingTime: Duration.zero,
       avarageDelayTime: Duration.zero,
       avarageLatenessTime: Duration.zero,
+      avarageEarlinessTime: Duration.zero,
       delayedJobs: 0,
       makespan: Duration.zero,
       totalFlow: Duration.zero,
@@ -72,6 +83,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   Duration totalFlowTime = Duration.zero;
   Duration totalTardiness = Duration.zero;
   Duration totalLateness = Duration.zero;
+  Duration totalEarliness = Duration.zero;
   Duration maxTardiness = Duration.zero;
   Duration maxLateness = Duration.zero;
   int delayedJobs = 0;
@@ -95,6 +107,9 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
 
     final tardiness = lateness.isNegative ? Duration.zero : lateness;
     totalTardiness += tardiness;
+
+    final earliness = lateness.isNegative ? lateness.abs() : Duration.zero;
+    totalEarliness += earliness;
     if (tardiness > maxTardiness) {
       maxTardiness = tardiness;
     }
@@ -117,6 +132,9 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   final Duration averageLateness = Duration(
     microseconds: totalLateness.inMicroseconds ~/ jobCount,
   );
+  final Duration averageEarliness = Duration(
+    microseconds: totalEarliness.inMicroseconds ~/ jobCount,
+  );
 
   return Metrics(
     idle: idle.isNegative ? Duration.zero : idle,
@@ -125,6 +143,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     avarageProcessingTime: averageProcessingTime,
     avarageDelayTime: averageTardiness,
     avarageLatenessTime: averageLateness,
+    avarageEarlinessTime: averageEarliness,
     delayedJobs: delayedJobs,
     makespan: makespan,
     totalFlow: totalFlowTime,

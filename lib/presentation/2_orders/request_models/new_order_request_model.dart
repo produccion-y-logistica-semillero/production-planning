@@ -4,7 +4,6 @@ class NewOrderRequestModel{
   final DateTime dueDate;
   final DateTime availableDate;
   final int priority;
-  final int amount;
   final String? jobName;
 
   final Map<int, int>? preemptionMatrix;
@@ -13,6 +12,6 @@ class NewOrderRequestModel{
   final Map<int, String>? machineFinalStates;
 
   NewOrderRequestModel(this.sequenceId, this.dueDate, this.availableDate,
-      this.priority, this.amount, this.jobName,
+      this.priority, this.jobName,
            {this.preemptionMatrix, this.taskMachineTimesMinutes, this.machineFinalStates});
 }

@@ -15,11 +15,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_entity.dart';
-import 'package:production_planning/entities/machine_standard_times.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
+import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/shared/utils/task_time_utils.dart';
 
 // Helper widget for numeric input with max value validation
 class _MaxValueFormatter extends TextInputFormatter {
@@ -84,12 +87,37 @@ class AddJobWidget extends StatefulWidget {
   DateTime? dueDate;
   TimeOfDay? availableHour;
   TimeOfDay? dueHour;
+  // Optional hour overrides for "Automático" date-registration mode: the
+  // date itself is always computed at save time (today / today + lead
+  // time), but the user can still pin a specific hour for each. Left null
+  // means "use the current time at save time".
+  TimeOfDay? automaticStartHour;
+  TimeOfDay? automaticDueHour;
   final TextEditingController? priorityController;
-  final TextEditingController? quantityController;
   final TextEditingController? idController;
   final List<dartz.Tuple2<int, String>> sequences;
   final int index;
   int? selectedSequence;
+
+  // ── Values restored when an existing order is reopened for editing ───────
+  //
+  // Without these the form rebuilds every station from the sequence and the
+  // machine defaults, so a saved job came back with its A-J state blank, its
+  // interruptibility reset to the sequence default, its per-station times
+  // recomputed and its machine reset to the first candidate. Worse, saving
+  // that emptied form wrote the blanks back over the stored values.
+  //
+  // Null (the create-a-new-order case) keeps the previous behaviour exactly.
+
+  /// machineTypeId → state letter (A-J) the job leaves the machine in.
+  final Map<int, String>? initialMachineFinalStates;
+
+  /// machineId → 1 interruptible / 0 not.
+  final Map<int, int>? initialPreemptionMatrix;
+
+  /// taskId → machineId → {'processing','preparation','rest'} in minutes.
+  /// Also tells us which machine each station was actually saved on.
+  final Map<int, Map<int, Map<String, int>>>? initialTaskMachineTimes;
 
   final GlobalKey<AddJobState> stateKey;
 
@@ -100,11 +128,13 @@ class AddJobWidget extends StatefulWidget {
     required this.availableHour,
     required this.dueHour,
     required this.priorityController,
-    required this.quantityController,
     required this.idController,
     required this.index,
     required this.sequences,
     this.selectedSequence,
+    this.initialMachineFinalStates,
+    this.initialPreemptionMatrix,
+    this.initialTaskMachineTimes,
   }) : super(key: stateKey);
 
   factory AddJobWidget({
@@ -113,12 +143,14 @@ class AddJobWidget extends StatefulWidget {
     required TimeOfDay? availableHour,
     required TimeOfDay? dueHour,
     required TextEditingController? priorityController,
-    required TextEditingController? quantityController,
     required TextEditingController? idController,
     required int index,
     required List<dartz.Tuple2<int, String>> sequences,
     int? selectedSequence,
     GlobalKey<AddJobState>? stateKey,
+    Map<int, String>? initialMachineFinalStates,
+    Map<int, int>? initialPreemptionMatrix,
+    Map<int, Map<int, Map<String, int>>>? initialTaskMachineTimes,
   }) {
     final key = stateKey ?? GlobalKey<AddJobState>();
     return AddJobWidget._(
@@ -128,11 +160,13 @@ class AddJobWidget extends StatefulWidget {
       availableHour: availableHour,
       dueHour: dueHour,
       priorityController: priorityController,
-      quantityController: quantityController,
       idController: idController,
       index: index,
       sequences: sequences,
       selectedSequence: selectedSequence,
+      initialMachineFinalStates: initialMachineFinalStates,
+      initialPreemptionMatrix: initialPreemptionMatrix,
+      initialTaskMachineTimes: initialTaskMachineTimes,
     );
   }
 
@@ -152,12 +186,18 @@ class AddJobState extends State<AddJobWidget> {
   DateTime? dueDate;
   TimeOfDay? availableHour;
   TimeOfDay? dueHour;
+  TimeOfDay? automaticStartHour;
+  TimeOfDay? automaticDueHour;
 
   SequenceEntity? _sequenceDetails;
   bool _loadingStations = false;
   final Map<int, List<MachineEntity>> _machinesByType = {};
+  // taskId → machine shown on the station's row. Keyed by TASK, not by
+  // machine type: two tasks of one route on the same machine type used to
+  // share a single entry and overwrite each other.
   final Map<int, MachineEntity?> _selectedMachines = {};
-  final Map<int, MachineStandardTimes> _stationTimes = {};
+  // taskId → machineId → minutes. One entry for EVERY machine of the task's
+  // station (see seedTaskMachineMinutes), so each machine keeps its own time.
   final Map<int, Map<int, Map<String, int>>> _explicitTaskMachineMinutes = {};
   final Map<int, int> _preemptionMatrix = {};
 
@@ -179,22 +219,6 @@ class AddJobState extends State<AddJobWidget> {
 
   Map<int, int> getPreemptionMatrix() => _preemptionMatrix;
 
-  Map<int, int> getSelectedMachines() {
-    final map = <int, int>{};
-    _selectedMachines.forEach((key, value) {
-      if (value != null && value.id != null) map[key] = value.id!;
-    });
-    return map;
-  }
-
-  Map<int, int> getStationProcessingMinutes() {
-    final res = <int, int>{};
-    _stationTimes.forEach((machineTypeId, times) {
-      res[machineTypeId] = times.processing.inMinutes;
-    });
-    return res;
-  }
-
   Map<int, Map<int, Map<String, int>>> getExplicitTaskMachineMinutes() {
     return _explicitTaskMachineMinutes.map((taskId, machines) => MapEntry(
         taskId,
@@ -203,12 +227,6 @@ class AddJobState extends State<AddJobWidget> {
   }
 
   List<TaskEntity>? getSequenceTasks() => _sequenceDetails?.tasks;
-
-  String? getJobState() {
-    if (_machineFinalStates.isEmpty) return null;
-    final values = _machineFinalStates.values.toList();
-    return values.isNotEmpty ? values.first : null;
-  }
 
   /// Returns the display names of all currently selected machines.
   /// Used by the matrix dialog to populate its machine drop-down.
@@ -221,6 +239,24 @@ class AddJobState extends State<AddJobWidget> {
     });
     return names.toList();
   }
+
+  /// Every machine of every station in this job's sequence — not only the
+  /// one currently selected — keyed by station (machine type id). The setup
+  /// matrix and initial-state dialogs use it so a matrix can be registered
+  /// for ANY machine of a station, including those no job has selected.
+  Map<int, List<MachineEntity>> getStationMachines() => {
+        for (final entry in _machinesByType.entries)
+          entry.key: List<MachineEntity>.from(entry.value),
+      };
+
+  /// Display name of each station in this job's sequence, keyed by machine
+  /// type id.
+  Map<int, String> getStationNames() => {
+        for (final task in _sequenceDetails?.tasks ?? const <TaskEntity>[])
+          task.machineTypeId: (task.machineName?.isNotEmpty ?? false)
+              ? task.machineName!
+              : task.description,
+      };
 
   /// Returns Map<machineTypeId, stateLetter> for the "Estado dejado" dropdowns.
   /// Used by the matrix dialog to determine the row/column labels.
@@ -236,7 +272,30 @@ class AddJobState extends State<AddJobWidget> {
     dueDate = widget.dueDate;
     availableHour = widget.availableHour;
     dueHour = widget.dueHour;
+    automaticStartHour = widget.automaticStartHour;
+    automaticDueHour = widget.automaticDueHour;
     selectedSequenceValue = widget.selectedSequence;
+
+    // Seed the saved values BEFORE _loadSequence runs. Order matters:
+    // _loadSequence clears _machinesByType / _selectedMachines but leaves
+    // these three maps alone; it seeds _preemptionMatrix with putIfAbsent
+    // and the times with seedTaskMachineMinutes, where a saved entry wins —
+    // so anything placed here takes precedence over the sequence defaults.
+    if (widget.initialMachineFinalStates != null) {
+      _machineFinalStates.addAll(widget.initialMachineFinalStates!);
+    }
+    if (widget.initialPreemptionMatrix != null) {
+      _preemptionMatrix.addAll(widget.initialPreemptionMatrix!);
+    }
+    if (widget.initialTaskMachineTimes != null) {
+      widget.initialTaskMachineTimes!.forEach((taskId, byMachine) {
+        _explicitTaskMachineMinutes[taskId] = {
+          for (final entry in byMachine.entries)
+            entry.key: Map<String, int>.from(entry.value),
+        };
+      });
+    }
+
     if (selectedSequenceValue != null) {
       _loadSequence(selectedSequenceValue!);
     }
@@ -287,7 +346,6 @@ class AddJobState extends State<AddJobWidget> {
       _sequenceDetails = null;
       _machinesByType.clear();
       _selectedMachines.clear();
-      _stationTimes.clear();
     });
 
     final sequence = await bloc.getSequenceDetails(sequenceId);
@@ -296,20 +354,6 @@ class AddJobState extends State<AddJobWidget> {
     if (sequence != null) {
       final tasks = sequence.tasks ?? [];
       final uniqueTypeIds = tasks.map((task) => task.machineTypeId).toSet();
-      final Map<int, MachineStandardTimes> initialTimes = {};
-
-      for (final task in tasks) {
-        final current = bloc.getStandardTimesForType(task.machineTypeId);
-        final processingTime =
-            current.processing != MachineStandardTimes.defaults().processing
-                ? current.processing
-                : task.processingUnits;
-        final updated = current.copyWith(processing: processingTime);
-        initialTimes[task.machineTypeId] = updated;
-      }
-      initialTimes.forEach((key, value) {
-        bloc.updateStandardTimesForType(key, value);
-      });
 
       if (uniqueTypeIds.isNotEmpty) {
         final futures = uniqueTypeIds
@@ -321,49 +365,63 @@ class AddJobState extends State<AddJobWidget> {
 
         final Map<int, List<MachineEntity>> machinesMap = {};
         for (final entry in results) {
-          final times = initialTimes[entry.value1];
-          machinesMap[entry.value1] = times != null
-              ? entry.value2.map((m) => _applyStandardTimes(m, times)).toList()
-              : entry.value2;
+          machinesMap[entry.value1] = entry.value2;
         }
 
         setState(() {
           _sequenceDetails = sequence;
           _machinesByType.addAll(machinesMap);
-          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
+
+          // Times of a previously chosen route must not be saved with this
+          // one.
+          final taskIds = tasks.map((t) => t.id).toSet();
+          _explicitTaskMachineMinutes
+              .removeWhere((taskId, _) => !taskIds.contains(taskId));
 
           for (final task in tasks) {
             final machineTypeId = task.machineTypeId;
             final machines = machinesMap[machineTypeId];
             if (machines != null && machines.isNotEmpty) {
-              final machine = machines.first;
-              _selectedMachines[machineTypeId] = machine;
+              // The machine shown on the row. Every machine of the station
+              // keeps its own time and all of them are candidates when the
+              // order is scheduled, so this is only what the row displays
+              // and what the time dialog opens on.
+              _selectedMachines[task.id!] = machines.first;
 
-              final times = initialTimes[machineTypeId];
-              final baseProcessingMinutes =
-                  times?.processing.inMinutes ?? task.processingUnits.inMinutes;
+              // One entry per machine of the station. Saved times win over
+              // the values recomputed from the machine's percentage —
+              // otherwise editing an order silently reset every processing
+              // time the user had adjusted by hand. Rebuilding the whole
+              // map also drops entries of machines that are no longer
+              // candidates for this station.
+              _explicitTaskMachineMinutes[task.id!] = seedTaskMachineMinutes(
+                task: task,
+                stationMachines: machines,
+                saved: _explicitTaskMachineMinutes[task.id],
+              );
 
-              final processingMinutes =
-                  (baseProcessingMinutes * machine.processingPercentage / 100)
-                      .round();
-              final preparationMinutes = 0; // comes from matrix — always 0 here
-              final restMinutes = times?.rest?.inMinutes ??
-                  (60 * machine.restPercentage / 100).round();
-
-              _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-              _explicitTaskMachineMinutes[task.id!]![machine.id!] = {
-                'processing': processingMinutes,
-                'preparation': preparationMinutes,
-                'rest': restMinutes,
-              };
+              // Seed the per-job preemption override for EVERY candidate
+              // machine of this station from the sequence's own flag. Two
+              // reasons this matters:
+              //   • what the toggle shows is then always what the scheduler
+              //     will use — an unseeded machine silently falls back to
+              //     task.allowPreemption, so a task seeded as interruptible
+              //     would display "No" while behaving as "Sí";
+              //   • flexible environments only read the FIRST candidate
+              //     machine's entry, so leaving gaps makes the effective
+              //     value depend on map ordering.
+              final int seed = task.allowPreemption ? 1 : 0;
+              for (final candidate in machines) {
+                if (candidate.id == null) continue;
+                _preemptionMatrix.putIfAbsent(candidate.id!, () => seed);
+              }
             }
           }
         });
       } else {
         setState(() {
           _sequenceDetails = sequence;
-          _stationTimes.addAll(initialTimes);
           _loadingStations = false;
         });
       }
@@ -426,24 +484,6 @@ class AddJobState extends State<AddJobWidget> {
             ),
             const SizedBox(height: 8),
             TextFormField(
-              controller: widget.quantityController,
-              decoration: InputDecoration(
-                labelText: 'Cantidad',
-                labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: colorScheme.outline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: colorScheme.primary),
-                ),
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
               controller: widget.priorityController,
               decoration: InputDecoration(
                 labelText: 'Prioridad',
@@ -461,20 +501,74 @@ class AddJobState extends State<AddJobWidget> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: selectDate('Seleccione fecha de disponibilidad',
-                      availableDate, availableHour),
-                ),
-                const Expanded(flex: 2, child: SizedBox()),
-                Expanded(
-                  flex: 3,
-                  child: selectDate(
-                      'Seleccione fecha de entrega', dueDate, dueHour),
-                ),
-              ],
+            BlocBuilder<NewOrderBloc, NewOrderState>(
+              builder: (context, state) {
+                final isAutomatic = state is NewOrdersState &&
+                    state.dateMode == DateRegistrationMode.automatic;
+                if (isAutomatic) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 32,
+                          runSpacing: 4,
+                          children: [
+                            _selectAutomaticHour(
+                              'Hora de inicio',
+                              automaticStartHour,
+                              (picked) => setState(() {
+                                automaticStartHour = picked;
+                                widget.automaticStartHour = picked;
+                              }),
+                            ),
+                            _selectAutomaticHour(
+                              'Hora de entrega',
+                              automaticDueHour,
+                              (picked) => setState(() {
+                                automaticDueHour = picked;
+                                widget.automaticDueHour = picked;
+                              }),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Las fechas se calculan automáticamente al guardar '
+                          'la orden. Si dejas una hora vacía, se usa la hora '
+                          'actual.',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                final available = selectDate(
+                    'Seleccione fecha de disponibilidad',
+                    availableDate,
+                    availableHour);
+                final due = selectDate(
+                    'Seleccione fecha de entrega', dueDate, dueHour);
+                // Side by side when there is room, one under the other on a
+                // narrow screen.
+                return LayoutBuilder(builder: (context, c) {
+                  if (c.maxWidth < 700) {
+                    return Column(children: [available, due]);
+                  }
+                  return Row(
+                    children: [
+                      Expanded(flex: 3, child: available),
+                      const Expanded(flex: 2, child: SizedBox()),
+                      Expanded(flex: 3, child: due),
+                    ],
+                  );
+                });
+              },
             ),
             const SizedBox(height: 8),
             DropdownButton<int>(
@@ -516,14 +610,44 @@ class AddJobState extends State<AddJobWidget> {
 
   // ── date/time row widgets (unchanged) ─────────────────────────────────────
 
+  /// Hour-only picker for "Automático" mode — the date is always computed
+  /// at save time, so unlike [selectHour] there's no date to merge with.
+  Widget _selectAutomaticHour(
+      String label, TimeOfDay? hour, ValueChanged<TimeOfDay> onPicked) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
+        TextButton(
+          onPressed: () async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: hour ?? TimeOfDay.now(),
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: hour == null
+              ? const Text('Hora actual')
+              : Text("${hour.hour.toString().padLeft(2, '0')}:"
+                  "${hour.minute.toString().padLeft(2, '0')}"),
+        ),
+      ],
+    );
+  }
+
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         selectHour(hour, date, label),
-        Text(
-          date == null ? label : DateFormat('dd/MM/yyyy').format(date),
-          style: TextStyle(color: colorScheme.onSurface),
+        // Flexible: a long label ellipsizes instead of overflowing.
+        Flexible(
+          child: Text(
+            date == null ? label : DateFormat('dd/MM/yyyy').format(date),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
         ),
         const Spacer(),
         IconButton(
@@ -586,7 +710,7 @@ class AddJobState extends State<AddJobWidget> {
     final machineTypeId = task.machineTypeId;
     final machineOptions =
         _machinesByType[machineTypeId] ?? const <MachineEntity>[];
-    final selectedMachine = _selectedMachines[machineTypeId];
+    final selectedMachine = _selectedMachines[task.id];
     final defaultLabel = _stationLabel(task);
 
     return Padding(
@@ -629,9 +753,20 @@ class AddJobState extends State<AddJobWidget> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          // Wrap: on a narrow screen the A-J picker moves under its label.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('Estado dejado en la máquina: '),
+              const Text('Estado (familia) del job en esta estación: '),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'La letra identifica la familia de producto de '
+                    'este job en esta estación. Se usa como fila/columna '
+                    'en la matriz de tiempos de alistamiento para calcular '
+                    'el cambio de referencia entre un job y el siguiente.',
+                child: Icon(Icons.info_outline,
+                    size: 16, color: Theme.of(context).colorScheme.primary),
+              ),
               const SizedBox(width: 8),
               DropdownButton<String>(
                 value: _machineFinalStates[machineTypeId],
@@ -650,6 +785,7 @@ class AddJobState extends State<AddJobWidget> {
               ),
             ],
           ),
+          ..._buildPreemptionMatrixForTask(task),
         ],
       ),
     );
@@ -700,29 +836,11 @@ class AddJobState extends State<AddJobWidget> {
 
     if (!mounted || selected == null) return;
 
-    final bloc = context.read<NewOrderBloc>();
-    setState(() {
-      _selectedMachines[task.machineTypeId] = selected;
-      final fallback = _stationTimes[task.machineTypeId];
-      final updated =
-          MachineStandardTimes.fromMachine(selected, fallback: fallback);
-      _stationTimes[task.machineTypeId] = updated;
-
-      // Update explicit times mapping for this task & machine
-      final baseProcessingMinutes = updated.processing.inMinutes;
-      final restMinutes = updated.rest?.inMinutes ??
-          (60 * selected.restPercentage / 100).round();
-      _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-      _explicitTaskMachineMinutes[task.id!]!.clear();
-      _explicitTaskMachineMinutes[task.id!]![selected.id!] = {
-        'processing': baseProcessingMinutes,
-        'preparation': 0, // setup times come from matrix
-        'rest': restMinutes,
-      };
-
-      bloc.updateStandardTimesForType(task.machineTypeId, updated);
-      _syncStandardTimesToMachines(task.machineTypeId, updated);
-    });
+    // Only changes the machine the row shows. It used to wipe the task's
+    // times and rewrite the picked machine's from a per-machine-type value
+    // rescaled by its percentage, so picking a machine could replace a time
+    // typed by hand, and picking twice applied the percentage twice.
+    setState(() => _selectedMachines[task.id!] = selected);
   }
 
   // ── station time dialog — SETUP TIME FIELD REMOVED ────────────────────────
@@ -734,37 +852,40 @@ class AddJobState extends State<AddJobWidget> {
 
   Future<void> _showStationTimeDialog(
       TaskEntity task, int machineTypeId) async {
-    final bloc = context.read<NewOrderBloc>();
     final machines = _machinesByType[machineTypeId] ?? [];
 
-    final existingForTask = _explicitTaskMachineMinutes[task.id];
-    Map<String, int>? existingTimes;
-    int? existingMachineId;
-    if (existingForTask != null && existingForTask.isNotEmpty) {
-      existingMachineId = existingForTask.keys.first;
-      existingTimes = existingForTask[existingMachineId];
-    }
+    // Working copy of this task's minutes on EVERY machine of the station.
+    // The dialog edits the copy, one machine at a time, and only "Aceptar"
+    // writes it back — so each machine keeps its own time and cancelling
+    // changes nothing.
+    final Map<int, int> draft = {
+      for (final machine in machines)
+        if (machine.id != null)
+          machine.id!: _explicitTaskMachineMinutes[task.id]?[machine.id]
+                  ?['processing'] ??
+              nominalTaskMinutesOn(task, machine),
+    };
 
-    int? selectedMachineId =
-        existingMachineId ?? (machines.isNotEmpty ? machines[0].id : null);
+    int? selectedMachineId = _selectedMachines[task.id]?.id ??
+        (machines.isNotEmpty ? machines[0].id : null);
 
-    final stationDefaults = _stationTimes[machineTypeId] ??
-        bloc.getStandardTimesForType(machineTypeId);
+    final processingController = TextEditingController(
+        text: _formatDuration(
+            Duration(minutes: draft[selectedMachineId] ?? 0)));
 
-    Duration processingDuration = existingTimes != null
-        ? Duration(minutes: existingTimes['processing'] ?? 0)
-        : stationDefaults.processing;
-
-    // Rest time — still configurable here.
-    Duration restDuration = existingTimes != null
-        ? Duration(minutes: existingTimes['rest'] ?? 0)
-        : stationDefaults.rest ?? Duration.zero;
-
-    final processingController =
-        TextEditingController(text: _formatDuration(processingDuration));
-    final restController =
-        TextEditingController(text: _formatDuration(restDuration));
-
+    // Without this, tapping into a pre-filled field (e.g. showing the
+    // stale "00:05:00" default) places the cursor instead of selecting the
+    // existing text — since _HhMmSsTextInputFormatter always keeps only the
+    // FIRST 6 digits of the resulting string, typing a new value without
+    // first clearing the field just gets truncated away and the old value
+    // silently "wins", making the field look impossible to edit.
+    final processingFocusNode = FocusNode();
+    processingFocusNode.addListener(() {
+      if (processingFocusNode.hasFocus) {
+        processingController.selection = TextSelection(
+            baseOffset: 0, extentOffset: processingController.text.length);
+      }
+    });
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -784,8 +905,28 @@ class AddJobState extends State<AddJobWidget> {
                         .map((m) => DropdownMenuItem<int>(
                             value: m.id, child: Text(m.name)))
                         .toList(),
-                    onChanged: (v) =>
-                        setDialogState(() => selectedMachineId = v),
+                    // Keep what was typed for the machine being left and
+                    // show the time of the machine being entered. Without
+                    // the reload the field kept the previous machine's
+                    // time, which "Aceptar" then saved on the new one.
+                    onChanged: (v) => setDialogState(() {
+                      if (selectedMachineId != null) {
+                        draft[selectedMachineId!] =
+                            _parseTimeToMinutes(processingController.text);
+                      }
+                      selectedMachineId = v;
+                      processingController.text = _formatDuration(
+                          Duration(minutes: draft[v] ?? 0));
+                    }),
+                  ),
+                if (machines.length > 1)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Cada máquina de la estación guarda su propio tiempo. '
+                      'Cambie de máquina para ver o editar el de las demás.',
+                      style: TextStyle(fontSize: 11),
+                    ),
                   ),
                 const SizedBox(height: 16),
 
@@ -795,25 +936,12 @@ class AddJobState extends State<AddJobWidget> {
                 const SizedBox(height: 4),
                 TextField(
                   controller: processingController,
+                  focusNode: processingFocusNode,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                       hintText: 'HH:MM:SS', border: OutlineInputBorder()),
                   inputFormatters: [_HhMmSsTextInputFormatter()],
                 ),
-                const SizedBox(height: 16),
-
-                // ── rest time ─────────────────────────────────────────────
-                const Text('Tiempo de Descanso:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: restController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
-                  inputFormatters: [_HhMmSsTextInputFormatter()],
-                ),
-
                 // ── info note ─────────────────────────────────────────────
                 const SizedBox(height: 12),
                 Container(
@@ -856,34 +984,31 @@ class AddJobState extends State<AddJobWidget> {
     );
 
     if (result == true) {
-      final processingMinutes = _parseTimeToMinutes(processingController.text);
-      final restMinutes = _parseTimeToMinutes(restController.text);
+      if (selectedMachineId != null) {
+        draft[selectedMachineId!] =
+            _parseTimeToMinutes(processingController.text);
+      }
 
       setState(() {
         if (selectedMachineId != null) {
-          final newSelMachine =
+          _selectedMachines[task.id!] =
               machines.firstWhere((m) => m.id == selectedMachineId);
-          _selectedMachines[machineTypeId] = newSelMachine;
-
-          _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
-          _explicitTaskMachineMinutes[task.id!]!.clear();
-          _explicitTaskMachineMinutes[task.id!]![selectedMachineId!] = {
-            'processing': processingMinutes,
-            'preparation': 0, // comes from matrix — always 0 here
-            'rest': restMinutes,
-          };
         }
-        _stationTimes[machineTypeId] = MachineStandardTimes(
-          processing: Duration(minutes: processingMinutes),
-          preparation: Duration.zero, // from matrix
-          rest: Duration(minutes: restMinutes),
-        );
+        // Each machine's own entry — never clear() the task's map here:
+        // that is what erased the sibling machines' times.
+        final byMachine =
+            _explicitTaskMachineMinutes.putIfAbsent(task.id!, () => {});
+        draft.forEach((machineId, minutes) {
+          byMachine[machineId] = {
+            'processing': minutes,
+            'preparation': 0, // comes from matrix — always 0 here
+            'rest': 0, // real rest is the machine's own policy
+          };
+        });
       });
-      bloc.updateStandardTimesForType(
-          machineTypeId, _stationTimes[machineTypeId]!);
-      _syncStandardTimesToMachines(
-          machineTypeId, _stationTimes[machineTypeId]!);
     }
+
+    processingFocusNode.dispose();
   }
 
   // ── helpers (unchanged) ───────────────────────────────────────────────────
@@ -899,24 +1024,6 @@ class AddJobState extends State<AddJobWidget> {
     return h * 60 + m + (s >= 30 ? 1 : 0);
   }
 
-  MachineEntity _applyStandardTimes(
-          MachineEntity machine, MachineStandardTimes times) =>
-      machine;
-
-  void _syncStandardTimesToMachines(
-      int machineTypeId, MachineStandardTimes times) {
-    final machines = _machinesByType[machineTypeId];
-    if (machines == null) return;
-    setState(() {
-      _machinesByType[machineTypeId] =
-          machines.map((m) => _applyStandardTimes(m, times)).toList();
-      final selected = _selectedMachines[machineTypeId];
-      if (selected != null) {
-        _selectedMachines[machineTypeId] = _applyStandardTimes(selected, times);
-      }
-    });
-  }
-
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
@@ -926,13 +1033,41 @@ class AddJobState extends State<AddJobWidget> {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
-  // ignore: unused_element
-  List<Widget> _buildPreemptionMatrixForTask(int machineTypeId) {
-    final machines = _machinesByType[machineTypeId] ?? [];
-    if (machines.isEmpty) return [];
-    return machines.map((machine) {
-      final currentValue = _preemptionMatrix[machine.id] ?? 0;
-      return Padding(
+  // ── per-job preemption ────────────────────────────────────────────────────
+
+  /// One "¿Interrumpible?" switch per candidate machine of this station.
+  ///
+  /// The value lands in `job_preemption` and wins over the sequence's own
+  /// `allow_preemption`, so two jobs of the same order — even on the same
+  /// route — can be interruptible independently. Values are seeded from the
+  /// sequence when it loads, so the switch never shows something different
+  /// from what the scheduler will do.
+  List<Widget> _buildPreemptionMatrixForTask(TaskEntity task) {
+    final machines = _machinesByType[task.machineTypeId] ?? const [];
+    if (machines.isEmpty) return const [];
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final widgets = <Widget>[
+      const SizedBox(height: 12),
+      const Text(
+        '¿Se puede interrumpir en esta máquina?',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      const Text(
+        'Si no, el trabajo espera a que haya un bloque libre completo en vez '
+        'de partirse.',
+        style: TextStyle(fontSize: 11),
+      ),
+    ];
+
+    for (final machine in machines) {
+      if (machine.id == null) continue;
+      final int currentValue =
+          _preemptionMatrix[machine.id] ?? (task.allowPreemption ? 1 : 0);
+      final String? warning =
+          currentValue == 0 ? _uninterruptibleWarning(task, machine) : null;
+
+      widgets.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Row(
           children: [
@@ -948,15 +1083,84 @@ class AddJobState extends State<AddJobWidget> {
               children: const [
                 Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('0')),
+                    child: Text('No')),
                 Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('1')),
+                    child: Text('Sí')),
               ],
             ),
           ],
         ),
-      );
-    }).toList();
+      ));
+
+      if (warning != null) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8, right: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 16, color: colorScheme.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  warning,
+                  style: TextStyle(fontSize: 11, color: colorScheme.error),
+                ),
+              ),
+            ],
+          ),
+        ));
+      }
+    }
+
+    return widgets;
+  }
+
+  /// Explains, before the order is even saved, why marking this job as
+  /// non-interruptible on [machine] cannot be honoured — the scheduler will
+  /// split it anyway rather than search forever for a block that does not
+  /// exist. Returns null when the choice is satisfiable.
+  String? _uninterruptibleWarning(TaskEntity task, MachineEntity machine) {
+    final duration = _effectiveProcessingDuration(task, machine);
+    if (duration <= Duration.zero) return null;
+
+    if (machine.continueCapacity > 0 &&
+        duration.inMinutes > machine.continueCapacity) {
+      return 'Dura ${_formatDuration(duration)} y la máquina descansa cada '
+          '${machine.continueCapacity} min de uso continuo, así que se '
+          'partirá de todos modos.';
+    }
+
+    // Same calculation the scheduler uses, so the warning cannot disagree
+    // with what actually happens.
+    final engine = PreemptionEngine(
+      workingSchedule: dartz.Tuple2(START_SCHEDULE, END_SCHEDULE),
+      maintenanceWindows: machine.scheduledInactivities,
+    );
+    final longest = engine.largestContiguousWindow();
+
+    if (longest <= Duration.zero) {
+      return 'La máquina no tiene ningún horario disponible: la jornada '
+          'laboral está vacía o los mantenimientos la cubren por completo. '
+          'La orden no se podrá planificar.';
+    }
+    if (duration > longest) {
+      return 'Dura ${_formatDuration(duration)} y el bloque libre más largo '
+          'de esta máquina es ${_formatDuration(longest)} (jornada menos '
+          'mantenimientos), así que se partirá de todos modos.';
+    }
+    return null;
+  }
+
+  /// The processing time the scheduler will actually use for this
+  /// task/machine pair, following the same precedence as the adapters:
+  /// explicit time first, then the sequence's own time scaled by the
+  /// machine's percentage.
+  Duration _effectiveProcessingDuration(TaskEntity task, MachineEntity machine) {
+    final explicit = _explicitTaskMachineMinutes[task.id]?[machine.id]
+        ?['processing'];
+    if (explicit != null) return Duration(minutes: explicit);
+    return Duration(minutes: nominalTaskMinutesOn(task, machine));
   }
 }

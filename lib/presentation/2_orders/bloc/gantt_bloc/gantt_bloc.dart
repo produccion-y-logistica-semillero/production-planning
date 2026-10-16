@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planning/core/errors/failure.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/services/orders_service.dart';
 
@@ -68,7 +69,16 @@ class GanttBloc extends Cubit<GanttState> {
       response.fold(
             (failure) {
           print("ERROR: Fallo en la planificación para regla $ruleId");
-          emit(GanttPlanningError(state.orderId, state.enviroment, ruleId));
+          emit(GanttPlanningError(
+            state.orderId,
+            state.enviroment,
+            ruleId,
+            // An unschedulable calendar is the user's to fix, so pass the
+            // reason through instead of the generic message.
+            message: failure is UnschedulableOrderFailure
+                ? failure.reason
+                : null,
+          ));
         },
             (result) {
           if (result == null) {

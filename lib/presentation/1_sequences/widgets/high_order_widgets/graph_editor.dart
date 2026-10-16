@@ -1,134 +1,106 @@
 // widgets/high_order_widgets/graph_editor.dart
 //
 // Editor de grafo para rutas de proceso (Flutter desktop).
-// - Nodos rectangulares (máquinas) y aristas dirigidas (source -> target).
-// - Tap-to-connect: tap nodo A -> aparece flecha fantasma -> tap nodo B para crear A->B.
-// - Selección de nodo/arista y borrado con Esc.
-// - Reasignación de extremos de la arista mediante "handles" (círculos azules).
-// - Validación DAG: no permite autolazos ni ciclos.
-// - API pública estable: loadNodesAndConnections / getNodes / getConnections.
-// - Compatibilidad: acepta `machines` y `onlyGraph` por constructor (como usa tu SequenceEditorPanel).
 //
-// NOTA: Este archivo define la clase `Connection` canónica (source/target).
+// - Cada nodo es una TAREA de la ruta (RouteNode); las flechas van de tarea
+//   a tarea.
+// - Barra de herramientas: Seleccionar / Conectar, Eliminar, Ordenar,
+//   Ver todo y zoom.
+// - Seleccionar: clic selecciona nodo o flecha; arrastrar mueve el nodo;
+//   arrastrar el fondo desplaza la vista; la rueda del ratón hace zoom.
+// - Conectar: clic en el origen y luego en el destino. Si ya había una
+//   estación seleccionada, la flecha sale de ella. Esc cancela.
+// - Ordenar: columnas por precedencia, sin cruces de flechas cuando es
+//   posible (ver layeredLayout); las flechas largas pasan por puntos
+//   intermedios.
+// - Supr / Retroceso borran la selección. No se permiten ciclos ni autolazos.
+// - [NodeEditor.readOnly]: solo se puede mirar (desplazar y hacer zoom).
+//
+// Todas las posiciones se guardan en coordenadas del "mundo"; la vista
+// aplica una escala y un desplazamiento propios.
 
 import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Usa tu entidad real:
 import 'package:production_planning/entities/machine_type_entity.dart';
+import 'package:production_planning/entities/route_draft.dart';
 
-/// ---------------------------------------------------------------------------
-/// Arista dirigida del grafo (canónica en el proyecto).
-/// - source: id del nodo origen
-/// - target: id del nodo destino
-/// ---------------------------------------------------------------------------
-class Connection {
-  final int source;
-  final int target;
-
-  const Connection(this.source, this.target);
-
-  Connection copyWith({int? source, int? target}) =>
-      Connection(source ?? this.source, target ?? this.target);
-}
-
-/// ---------------------------------------------------------------------------
-/// Tipos de selección posibles dentro del editor.
-/// ---------------------------------------------------------------------------
 enum _SelectionType { none, node, edge }
 
-/// ---------------------------------------------------------------------------
-/// Estructura de selección actual.
-/// - nodeId: id del nodo seleccionado (si aplica)
-/// - edgeIndex: índice de la arista seleccionada (si aplica)
-/// ---------------------------------------------------------------------------
 class _Selection {
   final _SelectionType type;
-  final int? nodeId;
+  final int? nodeKey;
   final int? edgeIndex;
 
-  const _Selection._(this.type, {this.nodeId, this.edgeIndex});
+  const _Selection._(this.type, {this.nodeKey, this.edgeIndex});
   const _Selection.none() : this._(_SelectionType.none);
-  const _Selection.node(int id) : this._(_SelectionType.node, nodeId: id);
-  const _Selection.edge(int index) : this._(_SelectionType.edge, edgeIndex: index);
-
+  const _Selection.node(int key) : this._(_SelectionType.node, nodeKey: key);
+  const _Selection.edge(int index)
+      : this._(_SelectionType.edge, edgeIndex: index);
 }
 
-/// ---------------------------------------------------------------------------
-/// Modos de arrastre temporal.
-/// ---------------------------------------------------------------------------
-enum _DragMode { none, draggingNode, draggingHandleSource, draggingHandleTarget }
+enum _DragMode { none, node, handleSource, handleTarget, pan }
 
+/// Herramienta activa de la barra.
+enum EditorTool { select, connect }
 
-/// ---------------------------------------------------------------------------
-/// Widget principal del editor de grafo.
-/// Acepta `machines` y `onlyGraph` por compatibilidad con SequenceEditorPanel.
-/// ---------------------------------------------------------------------------
 class NodeEditor extends StatefulWidget {
-  /// Lista inicial de máquinas (opcional). Si viene, se dibujan al montar.
-  final List<MachineTypeEntity>? machines;
+  /// Solo lectura: sin barra de edición ni panel; se puede desplazar y hacer
+  /// zoom para mirar la ruta.
+  final bool readOnly;
 
-  /// Bandera de "solo grafo" (disponible para quien la necesite; aquí no se usa).
-  final bool onlyGraph;
+  /// Route shown when the editor is built. To show another route, build a
+  /// new editor (give it a different key).
+  final RouteDraft? initialDraft;
 
-  const NodeEditor({
-    super.key,
-    this.machines,
-    this.onlyGraph = false,
-  });
+  const NodeEditor({super.key, this.readOnly = false, this.initialDraft});
 
   @override
   State<NodeEditor> createState() => NodeEditorState();
 }
 
 class NodeEditorState extends State<NodeEditor> {
-  // ==========================
-  //   ESTADO DEL GRAFO
-  // ==========================
+  static const Size _nodeSize = Size(150, 64);
+  static const double _minScale = 0.3;
+  static const double _maxScale = 2.0;
 
-  /// Posición (esquina superior izquierda) de cada nodo por id.
-  final Map<int, Offset> _nodePos = {};
+  // ── Grafo ────────────────────────────────────────────────────────────────
+  final Map<int, RouteNode> _nodes = {}; // conserva el orden de inserción
+  final Map<int, Offset> _pos = {}; // esquina superior izquierda, mundo
+  final List<RouteArrow> _arrows = [];
 
-  /// Tamaño de cada nodo dibujado (rectángulo).
-  static const Size _nodeSize = Size(140, 60);
+  /// Waypoints of the arrows that skip columns, set by Ordenar
+  /// ([layeredLayout]). An arrow loses them as soon as one of its ends
+  /// moves, and is drawn straight again.
+  final Map<RouteArrow, List<Offset>> _bends = {};
+  int _nextKey = -1;
 
-  /// Entidad de máquina por id (usamos el tipo real del proyecto).
-  final Map<int, MachineTypeEntity> _machineById = {};
-
-  /// Lista de aristas dirigidas (source -> target).
-  final List<Connection> _connections = [];
-
-  /// Selección (nodo o arista).
+  // ── Interacción ──────────────────────────────────────────────────────────
+  EditorTool _tool = EditorTool.select;
   _Selection _sel = const _Selection.none();
-
-  /// Modo de arrastre activo (nodo o handles).
-  _DragMode _dragMode = _DragMode.none;
-
-  /// Tap-to-connect: id del nodo origen en preparación.
+  _DragMode _drag = _DragMode.none;
   int? _connectingFrom;
-
-  /// Posición del cursor (para dibujar flecha temporal).
-  Offset? _cursor;
-
-  /// Índice de la arista que se está retocando al arrastrar un handle.
+  Offset? _cursor; // mundo
   int? _dragEdgeIndex;
 
-  /// Foco (necesario para que Esc funcione).
+  // ── Vista ────────────────────────────────────────────────────────────────
+  double _scale = 1.0;
+  Offset _pan = Offset.zero;
+  Size _viewport = Size.zero;
+
   final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-  }
-
-  @override
-  void didUpdateWidget(covariant NodeEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Si cambió la lista de máquinas que llegan por arriba, recargamos
-    // manteniendo las conexiones actuales (si existen).
-    if (widget.machines != oldWidget.machines && widget.machines != null) {
-      loadNodesAndConnections(widget.machines!, _connections);
+    if (widget.initialDraft != null) {
+      _applyDraft(widget.initialDraft!);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) fitView();
+      });
     }
   }
 
@@ -139,904 +111,799 @@ class NodeEditorState extends State<NodeEditor> {
   }
 
   // ==============================================================
-  //   API PÚBLICA (SE MANTIENE PARA NO ROMPER FLUJO DE GUARDADO)
+  //   API PÚBLICA
   // ==============================================================
 
-  /// Carga nodos (máquinas) y conexiones.
-  /// - [machines]: lista de entidades con al menos `id` (int) y opcionalmente `name` (String).
-  /// - [connections]: lista de aristas dirigidas (source -> target).
-  void loadNodesAndConnections(
+  /// Carga una ruta y la acomoda por niveles.
+  void loadDraft(RouteDraft draft) {
+    setState(() => _applyDraft(draft));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) fitView();
+    });
+  }
 
-      List<MachineTypeEntity> machines,
-      List<Connection> connections,
-      ) {
+  void _applyDraft(RouteDraft draft) {
+    _nodes.clear();
+    _pos.clear();
+    _arrows
+      ..clear()
+      ..addAll(draft.arrows);
+    for (final n in draft.nodes) {
+      _nodes[n.key] = n.copy();
+    }
+    _nextKey = math.min(-1, _nodes.keys.fold<int>(0, math.min) - 1);
+    _applyLayout();
+    _clearTransient();
+  }
 
+  void _applyLayout() {
+    final layout = layeredLayout(_nodes.keys.toList(), _arrows,
+        nodeWidth: _nodeSize.width, nodeHeight: _nodeSize.height);
+    _pos
+      ..clear()
+      ..addAll(layout.positions);
+    _bends
+      ..clear()
+      ..addAll(layout.bends);
+  }
+
+  void clear() => loadDraft(const RouteDraft(name: ''));
+
+  /// Las tareas actuales, en el orden en que se agregaron.
+  List<RouteNode> currentNodes() =>
+      [for (final n in _nodes.values) n.copy()];
+
+  List<RouteArrow> currentArrows() => List.unmodifiable(_arrows);
+
+  /// Agrega una estación como nueva tarea, a la derecha de lo que ya hay.
+  /// Devuelve false (y avisa) si la estación ya está en la ruta.
+  bool addStation(MachineTypeEntity station) {
+    if (widget.readOnly || station.id == null) return false;
+    if (_nodes.values.any((n) => n.machineTypeId == station.id)) {
+      _flashWarn('La estación "${station.name}" ya está en la ruta');
+      return false;
+    }
+    final key = _nextKey--;
     setState(() {
-      _nodePos.clear();
-      _machineById.clear();
-      _connections
-        ..clear()
-        ..addAll(connections);
+      _nodes[key] = RouteNode(
+        key: key,
+        machineTypeId: station.id!,
+        machineName: station.name,
+      );
+      _pos[key] = _nextFreePosition();
+      _sel = _Selection.node(key);
+    });
+    _ensureVisible(key);
+    return true;
+  }
 
-      // Layout inicial simple en grilla:
-      final cols = math.max(1, (machines.length / 3.0).ceil());
-      const dx = 220.0, dy = 140.0;
-      int i = 0;
-      for (final m in machines) {
-        final id = _extractId(m);
-        _machineById[id] = m;
-        final col = i % cols;
-        final row = (i / cols).floor();
-        _nodePos[id] = Offset(120 + col * dx, 120 + row * dy);
-        i++;
+  // ==============================================================
+  //   ACCIONES DE LA BARRA
+  // ==============================================================
+
+  void _setTool(EditorTool tool) {
+    setState(() {
+      _tool = tool;
+      _cursor = null;
+      // With a station already selected, Conectar starts the arrow from it:
+      // the next click only has to pick the destination.
+      _connectingFrom =
+          tool == EditorTool.connect && _sel.type == _SelectionType.node
+              ? _sel.nodeKey
+              : null;
+    });
+  }
+
+  void autoLayout() {
+    setState(_applyLayout);
+    fitView();
+  }
+
+  /// Ajusta escala y desplazamiento para que quepa toda la ruta.
+  void fitView() {
+    if (_viewport == Size.zero) return;
+    if (_nodes.isEmpty) {
+      setState(() {
+        _scale = 1;
+        _pan = Offset.zero;
+      });
+      return;
+    }
+    final box = _boundingBox().inflate(40);
+    final scale = math
+        .min(_viewport.width / box.width, _viewport.height / box.height)
+        .clamp(_minScale, 1.2)
+        .toDouble();
+    setState(() {
+      _scale = scale;
+      _pan = Offset(
+        (_viewport.width - box.width * scale) / 2 - box.left * scale,
+        (_viewport.height - box.height * scale) / 2 - box.top * scale,
+      );
+    });
+  }
+
+  void _zoomBy(double factor, {Offset? focus}) {
+    final f = focus ?? _viewport.center(Offset.zero);
+    final newScale = (_scale * factor).clamp(_minScale, _maxScale).toDouble();
+    final world = _toWorld(f);
+    setState(() {
+      _scale = newScale;
+      _pan = f - world * newScale;
+    });
+  }
+
+  void _deleteSelection() {
+    if (widget.readOnly) return;
+    setState(() {
+      switch (_sel.type) {
+        case _SelectionType.none:
+          return;
+        case _SelectionType.node:
+          final key = _sel.nodeKey!;
+          _nodes.remove(key);
+          _pos.remove(key);
+          _arrows.removeWhere((a) => a.from == key || a.to == key);
+          _bends.removeWhere((a, _) => a.from == key || a.to == key);
+        case _SelectionType.edge:
+          final idx = _sel.edgeIndex!;
+          if (idx >= 0 && idx < _arrows.length) {
+            _bends.remove(_arrows.removeAt(idx));
+          }
       }
-
       _clearTransient();
     });
   }
 
-  /// Retorna las entidades de máquina presentes (para persistencia).
-  List<MachineTypeEntity> getNodes() => _machineById.values.toList();
+  // ==============================================================
+  //   INTERACCIÓN
+  // ==============================================================
 
+  Offset _toWorld(Offset local) => (local - _pan) / _scale;
 
-  /// Retorna las conexiones actuales (copia defensiva para evitar problemas al guardar).
-  List<Connection> getConnections() {
-    // Limpiar estados transitorios antes de retornar
-    _clearTransientBeforeSave();
-    return List.unmodifiable(_connections);
-  }
+  void _onTapDown(Offset local) {
+    _focusNode.requestFocus();
+    if (widget.readOnly) return;
+    final p = _toWorld(local);
 
-  /// Limpia estados transitorios antes de guardar para evitar inconsistencias.
-  void _clearTransientBeforeSave() {
-    if (_dragMode != _DragMode.none ||
-        _connectingFrom != null ||
-        _cursor != null) {
+    final nodeKey = _hitNode(p);
+    if (_tool == EditorTool.connect) {
       setState(() {
-        _dragMode = _DragMode.none;
-        _connectingFrom = null;
-        _cursor = null;
-        _dragEdgeIndex = null;
+        if (nodeKey == null) {
+          _connectingFrom = null;
+          _cursor = null;
+        } else if (_connectingFrom == null) {
+          _connectingFrom = nodeKey;
+          _sel = _Selection.node(nodeKey);
+        } else {
+          _tryConnect(_connectingFrom!, nodeKey);
+          _connectingFrom = null;
+          _cursor = null;
+        }
       });
+      return;
     }
-  }
 
-
-  /// Compat: algunos flujos llaman a esto para agregar un nodo suelto.
-  /// - Si `position` no se indica, se ubica en la siguiente celda de una grilla simple.
-  void addNodeForMachine(MachineTypeEntity m, {Offset? position}) {
-    final id = _extractId(m);
-    if (_machineById.containsKey(id)) return; // ya existe
+    final edge = nodeKey == null ? _hitEdge(p) : null;
     setState(() {
-      _machineById[id] = m;
-
-      // Posición por defecto: siguiente hueco en una grilla de 3 filas aprox.
-      final count = _machineById.length - 1; // índice del nuevo
-      const dx = 220.0, dy = 140.0;
-      final cols = math.max(1, ((_machineById.length) / 3.0).ceil());
-      final col = count % cols;
-      final row = (count / cols).floor();
-      _nodePos[id] = position ?? Offset(120 + col * dx, 120 + row * dy);
-    });
-  }
-
-  // =======================================
-  //   INTERACCIÓN: TAP, DRAG, TECLADO
-  // =======================================
-
-  /// Tap en canvas vacío: cancela conexión en preparación o limpia selección.
-  void _onTapCanvas() {
-    setState(() {
-
-      _cursor = null;                // <-- limpiar la guía
-      if (_connectingFrom != null) {
-        _connectingFrom = null;      // cancelar tap-to-connect
-
+      if (nodeKey != null) {
+        _sel = _Selection.node(nodeKey);
+      } else if (edge != null) {
+        _sel = _Selection.edge(edge);
       } else {
         _sel = const _Selection.none();
       }
     });
   }
 
-  /// Tap en un nodo:
-  /// - Si no hay conexión en preparación, inicia tap-to-connect.
-  /// - Si ya hay origen, intenta crear source->id (validando DAG).
-  void _onTapNode(int id) {
-    setState(() {
-      if (_connectingFrom == null) {
-        _connectingFrom = id;
-        _sel = _Selection.node(id);
-
-      } else {
-        final from = _connectingFrom!;
-        final to = id;
-        if (from != to && !_hasEdge(from, to)) {
-          if (!_wouldCreateCycle(from, to)) {
-            _connections.add(Connection(from, to));
-          } else {
-            _flashWarn(context, 'Esa conexión crearía un ciclo');
-          }
-        }
-        _connectingFrom = null;
-        _cursor = null;              // <-- importante: limpiar al salir del modo conectar
-
-        _sel = _Selection.node(id);
-      }
-    });
-  }
-
-  /// Selección de arista (por índice) para mostrar handles.
-  void _onSelectEdge(int edgeIndex) {
-    setState(() {
-      _sel = _Selection.edge(edgeIndex);
-      _cursor = null;                // <-- no mostrar guía si solo está seleccionada
-
-    });
-  }
-
-  /// Inicio de drag sobre un nodo.
-  void _startDragNode(int id) {
-    setState(() {
-      _sel = _Selection.node(id);
-      _dragMode = _DragMode.draggingNode;
-    });
-  }
-
-  /// Actualización de drag de nodo (se suma el delta).
-  void _updateDragNode(Offset delta) {
-    if (_dragMode != _DragMode.draggingNode) return;
-    final id = _sel.nodeId!;
-    setState(() {
-      final p = _nodePos[id]!;
-      _nodePos[id] = p + delta;
-    });
-  }
-
-  /// Fin de drag de nodo.
-  void _endDragNode() {
-    if (_dragMode == _DragMode.draggingNode) {
-      setState(() => _dragMode = _DragMode.none);
+  void _tryConnect(int from, int to) {
+    if (from == to) {
+      _flashWarn('No se permiten autolazos');
+    } else if (_hasEdge(from, to)) {
+      // Ya existe.
+    } else if (_wouldCreateCycle(from, to)) {
+      _flashWarn('Esa conexión crearía un ciclo');
+    } else {
+      _arrows.add(RouteArrow(from, to));
     }
   }
 
-  /// Inicio de drag del handle de ORIGEN de una arista.
-  void _startDragHandleSource(int edgeIndex) {
-    setState(() {
-      _dragMode = _DragMode.draggingHandleSource;
-      _dragEdgeIndex = edgeIndex;
-    });
-  }
-
-  /// Inicio de drag del handle de DESTINO de una arista.
-  void _startDragHandleTarget(int edgeIndex) {
-    setState(() {
-      _dragMode = _DragMode.draggingHandleTarget;
-      _dragEdgeIndex = edgeIndex;
-    });
-  }
-
-  /// Durante drag de handle, actualizamos `_cursor` para previsualizar la flecha.
-  void _updateDragHandle(Offset cursor) {
-    if (_dragMode == _DragMode.draggingHandleSource ||
-        _dragMode == _DragMode.draggingHandleTarget) {
-      setState(() => _cursor = cursor);
-    }
-  }
-
-  /// Fin de drag de handle: si suelta sobre nodo, reasigna source/target (validando DAG).
-  void _endDragHandle() {
-    if (_dragEdgeIndex == null) {
-      setState(() {
-        _dragMode = _DragMode.none;
-        _cursor = null;
-      });
-      return;
-    }
-    final idx = _dragEdgeIndex!;
-    final hit = _hitNodeAt(_cursor);
-    if (hit != null) {
-      final e = _connections[idx];
-      final newConn = (_dragMode == _DragMode.draggingHandleSource)
-          ? e.copyWith(source: hit)
-          : e.copyWith(target: hit);
-
-      if (newConn.source == newConn.target) {
-        _flashWarn(context, 'No se permiten autolazos');
-      } else if (_hasEdge(newConn.source, newConn.target, ignoreIndex: idx)) {
-        // Ya existe esa conexión exacta (ignorando la propia).
-      } else if (_wouldCreateCycle(newConn.source, newConn.target, ignoreIndex: idx)) {
-
-        _flashWarn(context, 'Esa reasignación crea un ciclo');
-      } else {
-        setState(() => _connections[idx] = newConn);
-      }
-    }
-    setState(() {
-      _dragMode = _DragMode.none;
-      _dragEdgeIndex = null;
-      _cursor = null;
-    });
-  }
-
-  // =======================================
-  //   TECLADO: ESC PARA ELIMINAR
-  // =======================================
-
-  /// Atajo: Supr/Delete/Backspace -> borrar selección.
-  Map<ShortcutActivator, Intent> get _shortcuts => {
-    // Supr (Delete) borra nodo/arista seleccionada
-    const SingleActivator(LogicalKeyboardKey.delete): const _DeleteIntent(),
-    // Backspace como alternativa (algunos teclados)
-    const SingleActivator(LogicalKeyboardKey.backspace): const _DeleteIntent(),
-  };
-  /// Acción asociada a Supr.
-  Map<Type, Action<Intent>> get _actions => {
-    _DeleteIntent: CallbackAction<_DeleteIntent>(onInvoke: (intent) {
-      _deleteSelection();
-      return null;
-    })
-  };
-
-  /// Borrado de selección:
-  /// - Nodo: elimina el nodo y sus aristas incidentes.
-  /// - Arista: elimina solo esa arista.
-  void _deleteSelection() {
-    if (_sel.type == _SelectionType.none) return;
-
-    setState(() {
-      switch (_sel.type) {
-        case _SelectionType.none:
+  void _onPanStart(Offset local) {
+    final p = _toWorld(local);
+    if (!widget.readOnly && _tool == EditorTool.select) {
+      if (_sel.type == _SelectionType.edge) {
+        final handles = _edgeHandles(_sel.edgeIndex!);
+        final tolerance = 10 / _scale;
+        if ((handles.$1 - p).distance <= tolerance) {
+          setState(() {
+            _drag = _DragMode.handleSource;
+            _dragEdgeIndex = _sel.edgeIndex;
+          });
           return;
-        case _SelectionType.node:
-          final id = _sel.nodeId;
-          if (id == null) return;
-
-          // Verificar que el nodo existe antes de eliminarlo
-          if (!_nodePos.containsKey(id)) return;
-
-
-          _nodePos.remove(id);
-          _machineById.remove(id);
-          _connections.removeWhere((e) => e.source == id || e.target == id);
-          _sel = const _Selection.none();
-          _connectingFrom = null;
-          _cursor = null;
-          break;
-
-        case _SelectionType.edge:
-          final idx = _sel.edgeIndex;
-          if (idx == null || idx < 0 || idx >= _connections.length) return;
-
-          _connections.removeAt(idx);
-          _sel = const _Selection.none();
-          _cursor = null;
-          break;
-
+        }
+        if ((handles.$2 - p).distance <= tolerance) {
+          setState(() {
+            _drag = _DragMode.handleTarget;
+            _dragEdgeIndex = _sel.edgeIndex;
+          });
+          return;
+        }
       }
-    });
+      final nodeKey = _hitNode(p);
+      if (nodeKey != null) {
+        setState(() {
+          _sel = _Selection.node(nodeKey);
+          _drag = _DragMode.node;
+        });
+        return;
+      }
+    }
+    setState(() => _drag = _DragMode.pan);
   }
 
-  // =======================================
-  //   UTILIDADES DE GRAFO (DAG)
-  // =======================================
+  void _onPanUpdate(DragUpdateDetails d) {
+    switch (_drag) {
+      case _DragMode.node:
+        final key = _sel.nodeKey!;
+        setState(() {
+          _pos[key] = _pos[key]! + d.delta / _scale;
+          // Its arrows' waypoints no longer fit: draw them straight.
+          _bends.removeWhere((a, _) => a.from == key || a.to == key);
+        });
+      case _DragMode.handleSource:
+      case _DragMode.handleTarget:
+        setState(() => _cursor = _toWorld(d.localPosition));
+      case _DragMode.pan:
+        setState(() => _pan += d.delta);
+      case _DragMode.none:
+        break;
+    }
+  }
 
-  /// ¿Existe ya la arista source->target? (opcionalmente ignorando una por índice).
-  bool _hasEdge(int source, int target, {int? ignoreIndex}) {
-    for (var i = 0; i < _connections.length; i++) {
-      if (ignoreIndex != null && i == ignoreIndex) continue;
-      final e = _connections[i];
-      if (e.source == source && e.target == target) return true;
+  void _onPanEnd() {
+    if (_drag == _DragMode.handleSource || _drag == _DragMode.handleTarget) {
+      _endDragHandle();
+    }
+    setState(() => _drag = _DragMode.none);
+  }
+
+  void _endDragHandle() {
+    final idx = _dragEdgeIndex;
+    final hit = _cursor == null ? null : _hitNode(_cursor!);
+    if (idx != null && hit != null) {
+      final e = _arrows[idx];
+      final updated = _drag == _DragMode.handleSource
+          ? RouteArrow(hit, e.to)
+          : RouteArrow(e.from, hit);
+      if (updated.from == updated.to) {
+        _flashWarn('No se permiten autolazos');
+      } else if (_hasEdge(updated.from, updated.to, ignoreIndex: idx)) {
+        // Ya existe esa conexión.
+      } else if (_wouldCreateCycle(updated.from, updated.to,
+          ignoreIndex: idx)) {
+        _flashWarn('Esa reasignación crea un ciclo');
+      } else {
+        _bends.remove(_arrows[idx]);
+        _arrows[idx] = updated;
+      }
+    }
+    _dragEdgeIndex = null;
+    _cursor = null;
+  }
+
+  void _onHover(Offset local) {
+    if (_connectingFrom != null) {
+      setState(() => _cursor = _toWorld(local));
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (e is PointerScrollEvent) {
+      _zoomBy(e.scrollDelta.dy > 0 ? 1 / 1.1 : 1.1, focus: e.localPosition);
+    }
+  }
+
+  // ==============================================================
+  //   UTILIDADES
+  // ==============================================================
+
+  bool _hasEdge(int from, int to, {int? ignoreIndex}) {
+    for (var i = 0; i < _arrows.length; i++) {
+      if (i == ignoreIndex) continue;
+      if (_arrows[i].from == from && _arrows[i].to == to) return true;
     }
     return false;
   }
 
-  /// Verifica si agregar/reasignar (from->to) crearía un ciclo.
-  /// Estrategia: comprobar si ya existe un camino to -> from en el grafo.
+  /// ¿Agregar from → to cerraría un ciclo? Es decir, ¿ya hay camino to → from?
   bool _wouldCreateCycle(int from, int to, {int? ignoreIndex}) {
-    final adj = <int, Set<int>>{};
-    for (var i = 0; i < _connections.length; i++) {
-      if (ignoreIndex != null && i == ignoreIndex) continue;
-      final e = _connections[i];
-      adj.putIfAbsent(e.source, () => <int>{}).add(e.target);
+    final adj = <int, List<int>>{};
+    for (var i = 0; i < _arrows.length; i++) {
+      if (i == ignoreIndex) continue;
+      adj.putIfAbsent(_arrows[i].from, () => []).add(_arrows[i].to);
     }
-    adj.putIfAbsent(from, () => <int>{}).add(to); // simular nueva arista
-    return _reachable(adj, to, from);
-  }
-
-  /// DFS iterativo para saber si dst es alcanzable desde src.
-  bool _reachable(Map<int, Set<int>> adj, int src, int dst) {
     final seen = <int>{};
-    final stack = <int>[src];
+    final stack = <int>[to];
     while (stack.isNotEmpty) {
       final v = stack.removeLast();
-      if (v == dst) return true;
-      if (!seen.add(v)) continue;
-      final ns = adj[v];
-      if (ns != null) stack.addAll(ns);
+      if (v == from) return true;
+      if (seen.add(v)) stack.addAll(adj[v] ?? const []);
     }
     return false;
   }
 
-  /// Devuelve el id de un nodo bajo el punto p (si hay).
-  int? _hitNodeAt(Offset? p) {
-    if (p == null) return null;
-    for (final entry in _nodePos.entries) {
-      final id = entry.key;
-      final rect = _nodeRect(id);
-      if (rect.contains(p)) return id;
+  Rect _nodeRect(int key) => _pos[key]! & _nodeSize;
+
+  int? _hitNode(Offset p) {
+    // De arriba hacia abajo: el último dibujado queda encima.
+    for (final key in _pos.keys.toList().reversed) {
+      if (_nodeRect(key).contains(p)) return key;
     }
     return null;
   }
 
-  /// Rectángulo de un nodo por id.
-  Rect _nodeRect(int id) {
-    final pos = _nodePos[id]!;
-    return Rect.fromLTWH(pos.dx, pos.dy, _nodeSize.width, _nodeSize.height);
-  }
-
-  // =======================================
-  //   WIDGET / RENDERIZADO
-  // =======================================
-
-  @override
-  Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: _shortcuts,
-      child: Actions(
-        actions: _actions,
-        child: Focus(
-          focusNode: _focusNode,
-          autofocus: true, // para que Esc funcione sin clicks previos
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque, // IMPORTANTE: captura todos los eventos
-             onTap: () {
-            // Recuperar el foco al hacer clic en cualquier parte
-             if (!_focusNode.hasFocus) {
-            _focusNode.requestFocus();
-              }
-            },
-          child: MouseRegion(
-            onHover: (e) {
-              final isConnecting = _connectingFrom != null;
-              final isDraggingHandle = _dragMode == _DragMode.draggingHandleSource ||
-                  _dragMode == _DragMode.draggingHandleTarget;
-
-
-              if (isConnecting || isDraggingHandle) {
-                if (_cursor != e.localPosition) {
-                  setState(() => _cursor = e.localPosition);
-                }
-              } else if (_cursor != null) {
-                setState(() => _cursor = null);  // <-- evita que quede una guía “fantasma”
-
-              }
-            },
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Lienzo amplio para permitir mover con comodidad
-                final canvasSize = Size(
-                  math.max(constraints.maxWidth, 1200),
-                  math.max(constraints.maxHeight, 800),
-                );
-                return GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTapDown: (d) {
-                    // 1) ¿clic cerca de una arista? -> selección de arista
-                    final edgeIdx = _hitEdge(d.localPosition);
-                    if (edgeIdx != null) {
-                      _onSelectEdge(edgeIdx);
-                      return;
-                    }
-                    // 2) ¿clic sobre un nodo? -> tap-to-connect / seleccionar
-                    final nodeId = _hitNodeAt(d.localPosition);
-                    if (nodeId != null) {
-                      _onTapNode(nodeId);
-                      return;
-                    }
-                    // 3) canvas vacío
-                    _onTapCanvas();
-                  },
-                  onPanStart: (d) {
-                    // ¿Arranca sobre handle de arista seleccionada?
-                    if (_sel.type == _SelectionType.edge) {
-                      final idx = _sel.edgeIndex!;
-                      final handles = _edgeHandles(idx);
-                      if ((handles.$1 - d.localPosition).distance <= 10) {
-                        _startDragHandleSource(idx);
-                        return;
-                      }
-                      if ((handles.$2 - d.localPosition).distance <= 10) {
-                        _startDragHandleTarget(idx);
-                        return;
-                      }
-                    }
-                    // ¿Arranca sobre un nodo? -> drag de nodo
-                    final nodeId = _hitNodeAt(d.localPosition);
-                    if (nodeId != null) {
-                      _startDragNode(nodeId);
-                      return;
-                    }
-                  },
-                  onPanUpdate: (d) {
-                    switch (_dragMode) {
-                      case _DragMode.draggingNode:
-                        _updateDragNode(d.delta);
-                        break;
-                      case _DragMode.draggingHandleSource:
-                      case _DragMode.draggingHandleTarget:
-                        _updateDragHandle(d.localPosition);
-                        break;
-                      case _DragMode.none:
-                        break;
-                    }
-                  },
-                  onPanEnd: (d) {
-                    switch (_dragMode) {
-                      case _DragMode.draggingNode:
-                        _endDragNode();
-                        break;
-                      case _DragMode.draggingHandleSource:
-                      case _DragMode.draggingHandleTarget:
-                        _endDragHandle();
-                        break;
-                      case _DragMode.none:
-                        break;
-                    }
-                  },
-                  child: CustomPaint(
-                    painter: _GraphPainter(
-                      nodePos: _nodePos,
-                      nodeSize: _nodeSize,
-                      connections: _connections,
-                      selection: _sel,
-                      connectingFrom: _connectingFrom,
-                      cursor: _cursor,
-                      machineById: _machineById,
-
-                      isDraggingHandle: _dragMode == _DragMode.draggingHandleSource ||
-                          _dragMode == _DragMode.draggingHandleTarget,
-                      draggingEdgeIndex: _dragEdgeIndex,
-                      draggingHandleIsSource: _dragMode == _DragMode.draggingHandleSource,
-                    ),
-                    size: canvasSize,
-                  ),
-
-
-                );
-              },
-            ),
-          ),
-          ),
-
-        ),
-      ),
-    );
-  }
-
-  /// Hit-test de aristas: devuelve índice si el punto está "cerca" del segmento.
   int? _hitEdge(Offset p) {
-    const threshold = 8.0; // tolerancia de clic sobre línea
-    for (var i = 0; i < _connections.length; i++) {
-      final e = _connections[i];
-      final a = _nodeCenter(e.source);
-      final b = _nodeCenter(e.target);
-      // Anclar a los bordes exactos del rectángulo del nodo
-      final from = _shrinkToRectEdge(a, b, _nodeRect(e.source));
-      final to = _shrinkToRectEdge(b, a, _nodeRect(e.target));
-      final d = _distancePointToSegment(p, from, to);
-      if (d <= threshold) return i;
+    final threshold = 8 / _scale;
+    for (var i = 0; i < _arrows.length; i++) {
+      final pts = _arrowPoints(_arrows[i], _pos, _bends, _nodeSize);
+      for (var j = 0; j + 1 < pts.length; j++) {
+        if (_distanceToSegment(p, pts[j], pts[j + 1]) <= threshold) return i;
+      }
     }
     return null;
   }
 
-  /// Centro geométrico de un rectángulo de nodo.
-  Offset _nodeCenter(int id) {
-    final r = _nodeRect(id);
-    return Offset(r.left + r.width / 2, r.top + r.height / 2);
+  (Offset, Offset) _edgeHandles(int index) {
+    final pts = _arrowPoints(_arrows[index], _pos, _bends, _nodeSize);
+    return (pts.first, pts.last);
   }
 
-  /// Intersección del segmento [from->toward] con el borde del rectángulo `rect`.
-  /// Sirve para que la línea toque exactamente el borde del nodo.
-  Offset _shrinkToRectEdge(Offset from, Offset toward, Rect rect) {
-    final dir = (from - toward);
-    if (dir.distance < 1e-6) return from;
-    final candidates = <Offset>[];
-    final lines = <(Offset, Offset)>[
-
-      (Offset(rect.left, rect.top), Offset(rect.right, rect.top)),       // top
-      (Offset(rect.left, rect.bottom), Offset(rect.right, rect.bottom)), // bottom
-      (Offset(rect.left, rect.top), Offset(rect.left, rect.bottom)),     // left
-      (Offset(rect.right, rect.top), Offset(rect.right, rect.bottom)),   // right
-    ];
-    for (final seg in lines) {
-      final p = _segmentIntersection(from, toward, seg.$1, seg.$2);
-      if (p != null) candidates.add(p);
+  Rect _boundingBox() {
+    Rect? box;
+    for (final key in _pos.keys) {
+      final r = _nodeRect(key);
+      box = box == null ? r : box.expandToInclude(r);
     }
-    if (candidates.isEmpty) return from;
-    candidates.sort((a, b) => (a - from).distance.compareTo((b - from).distance));
-
-    return candidates.first;
+    return box ?? Rect.zero;
   }
 
-  /// Intersección de dos segmentos (p1-p2) y (p3-p4). Null si no se cortan.
-  Offset? _segmentIntersection(Offset p1, Offset p2, Offset p3, Offset p4) {
-    final x1 = p1.dx, y1 = p1.dy;
-    final x2 = p2.dx, y2 = p2.dy;
-    final x3 = p3.dx, y3 = p3.dy;
-    final x4 = p4.dx, y4 = p4.dy;
-
-    final denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (denom.abs() < 1e-9) return null;
-
-    final det1 = x1 * y2 - y1 * x2;
-    final det2 = x3 * y4 - y3 * x4;
-    final px = (det1 * (x3 - x4) - (x1 - x2) * det2) / denom;
-    final py = (det1 * (y3 - y4) - (y1 - y2) * det2) / denom;
-    final p = Offset(px, py);
-
-    bool onSeg(Offset a, Offset b, Offset p) {
-      final minX = math.min(a.dx, b.dx) - 1e-6, maxX = math.max(a.dx, b.dx) + 1e-6;
-      final minY = math.min(a.dy, b.dy) - 1e-6, maxY = math.max(a.dy, b.dy) + 1e-6;
-
-      return p.dx >= minX && p.dx <= maxX && p.dy >= minY && p.dy <= maxY;
-    }
-
-    if (onSeg(p1, p2, p) && onSeg(p3, p4, p)) return p;
-    return null;
+  Offset _nextFreePosition() {
+    if (_pos.isEmpty) return const Offset(60, 60);
+    final box = _boundingBox();
+    return Offset(box.right + 70, box.top);
   }
 
-  /// Distancia del punto `p` al segmento `a-b` (para hit-test de aristas).
-  double _distancePointToSegment(Offset p, Offset a, Offset b) {
-    final ap = p - a;
-    final ab = b - a;
-    final ab2 = ab.dx * ab.dx + ab.dy * ab.dy;
-    if (ab2 == 0) return (p - a).distance;
-    final t = ((ap.dx * ab.dx + ap.dy * ab.dy) / ab2).clamp(0.0, 1.0);
-    final proj = Offset(a.dx + ab.dx * t, a.dy + ab.dy * t);
-    return (p - proj).distance;
+  void _ensureVisible(int key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _viewport == Size.zero || !_pos.containsKey(key)) {
+        return;
+      }
+      final r = _nodeRect(key);
+      final screen = Rect.fromPoints(
+          r.topLeft * _scale + _pan, r.bottomRight * _scale + _pan);
+      final view = Offset.zero & _viewport;
+      if (!view.contains(screen.topLeft) ||
+          !view.contains(screen.bottomRight)) {
+        fitView();
+      }
+    });
   }
 
-  /// Coordenadas de los handles (círculos) en los extremos de una arista seleccionada.
-  (Offset, Offset) _edgeHandles(int edgeIndex) {
-    final e = _connections[edgeIndex];
-    final a = _nodeCenter(e.source);
-    final b = _nodeCenter(e.target);
-    final from = _shrinkToRectEdge(a, b, _nodeRect(e.source));
-    final to = _shrinkToRectEdge(b, a, _nodeRect(e.target));
-    return (from, to);
-  }
-
-  /// Limpia estados transitorios (selección, drags, conexión en preparación).
   void _clearTransient() {
     _sel = const _Selection.none();
-    _dragMode = _DragMode.none;
+    _drag = _DragMode.none;
     _connectingFrom = null;
     _dragEdgeIndex = null;
     _cursor = null;
   }
 
-  // ==========================
-  //   LECTURA DE ENTIDADES
-  // ==========================
-
-  /// Extrae el id desde tu entidad (ajústalo si se llama distinto).
-  int _extractId(MachineTypeEntity m) {
-    final dynamic raw = (m as dynamic).id; // admite int?, String?, etc.
-    if (raw == null) {
-      throw StateError('MachineTypeEntity.id es null');
-    }
-    if (raw is int) return raw;
-    // Si el id llega como String u otro tipo numérico
-    return int.parse(raw.toString());
-  }
-
-  /// Un label legible para pintar dentro del nodo.
-  /// Ajusta si tu entidad expone otro campo (p.ej., `m.machineName`).
-  String _extractLabel(MachineTypeEntity m) {
-    try {
-      // Si tu clase tiene 'name' opcional:
-      final nameField = (m as dynamic).name;
-      if (nameField is String && nameField.isNotEmpty) return nameField;
-    } catch (_) {
-      // Ignora si no existe el campo 'name'
-    }
-    return 'Nodo ${m.id}';
-  }
-
-
-  /// SnackBar corto de advertencia (e.g., intento de crear ciclo).
-  void _flashWarn(BuildContext context, String msg) {
+  void _flashWarn(String msg) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.orange.shade700,
-          duration: const Duration(seconds: 2),
-        ),
+      ..showSnackBar(SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.orange.shade700,
+        duration: const Duration(seconds: 2),
+      ));
+  }
+
+  // ==============================================================
+  //   WIDGETS
+  // ==============================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildToolbar(context),
+        const SizedBox(height: 8),
+        Expanded(child: _buildCanvas(context)),
+      ],
+    );
+  }
+
+  Widget _buildToolbar(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasSelection = _sel.type != _SelectionType.none;
+
+    final viewButtons = <Widget>[
+      IconButton(
+        tooltip: 'Alejar',
+        onPressed: () => _zoomBy(1 / 1.2),
+        icon: const Icon(Icons.zoom_out),
+      ),
+      IconButton(
+        tooltip: 'Acercar',
+        onPressed: () => _zoomBy(1.2),
+        icon: const Icon(Icons.zoom_in),
+      ),
+      TextButton.icon(
+        onPressed: fitView,
+        icon: const Icon(Icons.fit_screen),
+        label: const Text('Ver todo'),
+      ),
+    ];
+
+    if (widget.readOnly) {
+      return Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: viewButtons,
       );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SegmentedButton<EditorTool>(
+              segments: const [
+                ButtonSegment(
+                  value: EditorTool.select,
+                  icon: Icon(Icons.near_me_outlined),
+                  label: Text('Seleccionar'),
+                ),
+                ButtonSegment(
+                  value: EditorTool.connect,
+                  icon: Icon(Icons.trending_flat),
+                  label: Text('Conectar'),
+                ),
+              ],
+              selected: {_tool},
+              onSelectionChanged: (s) => _setTool(s.first),
+            ),
+            OutlinedButton.icon(
+              onPressed: hasSelection ? _deleteSelection : null,
+              icon: Icon(Icons.delete_outline,
+                  color: hasSelection ? colorScheme.error : null),
+              label: const Text('Eliminar'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _nodes.isEmpty ? null : autoLayout,
+              icon: const Icon(Icons.account_tree_outlined),
+              label: const Text('Ordenar'),
+            ),
+            ...viewButtons,
+          ],
+        ),
+        if (_tool == EditorTool.connect)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              _connectingFrom == null
+                  ? 'Haz clic en la estación de origen.'
+                  : 'Ahora haz clic en la estación de destino (Esc cancela).',
+              style: TextStyle(
+                  fontSize: 12, color: colorScheme.onSurfaceVariant),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCanvas(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.delete): _DeleteIntent(),
+        SingleActivator(LogicalKeyboardKey.backspace): _DeleteIntent(),
+        SingleActivator(LogicalKeyboardKey.escape): _CancelIntent(),
+      },
+      child: Actions(
+        actions: {
+          _DeleteIntent: CallbackAction<_DeleteIntent>(
+              onInvoke: (_) => _deleteSelection()),
+          _CancelIntent: CallbackAction<_CancelIntent>(
+              onInvoke: (_) => setState(() {
+                    _connectingFrom = null;
+                    _cursor = null;
+                  })),
+        },
+        child: Focus(
+          focusNode: _focusNode,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                border: Border.all(color: colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: LayoutBuilder(builder: (context, constraints) {
+                _viewport = constraints.biggest;
+                return Listener(
+                  onPointerSignal: _onPointerSignal,
+                  child: MouseRegion(
+                    cursor: _tool == EditorTool.connect && !widget.readOnly
+                        ? SystemMouseCursors.precise
+                        : MouseCursor.defer,
+                    onHover: (e) => _onHover(e.localPosition),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (d) => _onTapDown(d.localPosition),
+                      onPanStart: (d) => _onPanStart(d.localPosition),
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: (_) => _onPanEnd(),
+                      child: CustomPaint(
+                        size: constraints.biggest,
+                        painter: _GraphPainter(
+                          nodes: Map.of(_nodes),
+                          pos: Map.of(_pos),
+                          nodeSize: _nodeSize,
+                          arrows: List.of(_arrows),
+                          bends: Map.of(_bends),
+                          selection: _sel,
+                          connectingFrom: _connectingFrom,
+                          cursor: _cursor,
+                          draggingEdgeIndex: _dragEdgeIndex,
+                          draggingSource: _drag == _DragMode.handleSource,
+                          scale: _scale,
+                          pan: _pan,
+                          gridColor: colorScheme.outlineVariant,
+                          nodeColor: colorScheme.surfaceContainerHighest,
+                          selectedColor: colorScheme.primary,
+                          textColor: colorScheme.onSurface,
+                          mutedTextColor: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
-/// ---------------------------------------------------------------------------
-/// Painter del grafo: grilla, aristas, flecha temporal y nodos.
-/// ---------------------------------------------------------------------------
+/// Edge point of [rect] on the segment from its centre [from] toward [toward].
+Offset _edgePoint(Offset from, Offset toward, Rect rect) {
+  final d = toward - from;
+  if (d.distance < 1e-6) return from;
+  final halfW = rect.width / 2, halfH = rect.height / 2;
+  final tx = d.dx.abs() < 1e-9 ? double.infinity : halfW / d.dx.abs();
+  final ty = d.dy.abs() < 1e-9 ? double.infinity : halfH / d.dy.abs();
+  final t = math.min(math.min(tx, ty), 1.0);
+  return from + d * t;
+}
+
+double _distanceToSegment(Offset p, Offset a, Offset b) {
+  final ab = b - a;
+  final len2 = ab.dx * ab.dx + ab.dy * ab.dy;
+  if (len2 == 0) return (p - a).distance;
+  final t = (((p - a).dx * ab.dx + (p - a).dy * ab.dy) / len2).clamp(0.0, 1.0);
+  return (p - (a + ab * t)).distance;
+}
+
+/// The points an arrow is drawn through: the edge of its source node, its
+/// waypoints (if any), and the edge of its target node.
+List<Offset> _arrowPoints(RouteArrow a, Map<int, Offset> pos,
+    Map<RouteArrow, List<Offset>> bends, Size nodeSize) {
+  final ra = pos[a.from]! & nodeSize, rb = pos[a.to]! & nodeSize;
+  final via = bends[a] ?? const <Offset>[];
+  final firstToward = via.isEmpty ? rb.center : via.first;
+  final lastFrom = via.isEmpty ? ra.center : via.last;
+  return [
+    _edgePoint(ra.center, firstToward, ra),
+    ...via,
+    _edgePoint(rb.center, lastFrom, rb),
+  ];
+}
+
 class _GraphPainter extends CustomPainter {
   _GraphPainter({
-    required this.nodePos,
+    required this.nodes,
+    required this.pos,
     required this.nodeSize,
-    required this.connections,
+    required this.arrows,
+    required this.bends,
     required this.selection,
     required this.connectingFrom,
     required this.cursor,
-    required this.machineById,
-    // NUEVO:
-    required this.isDraggingHandle,
     required this.draggingEdgeIndex,
-    required this.draggingHandleIsSource,
+    required this.draggingSource,
+    required this.scale,
+    required this.pan,
+    required this.gridColor,
+    required this.nodeColor,
+    required this.selectedColor,
+    required this.textColor,
+    required this.mutedTextColor,
   });
 
-  final Map<int, Offset> nodePos;
+  final Map<int, RouteNode> nodes;
+  final Map<int, Offset> pos;
   final Size nodeSize;
-  final List<Connection> connections;
+  final List<RouteArrow> arrows;
+  final Map<RouteArrow, List<Offset>> bends;
   final _Selection selection;
   final int? connectingFrom;
   final Offset? cursor;
-  final Map<int, MachineTypeEntity> machineById;
-
-  // NUEVO:
-  final bool isDraggingHandle;
   final int? draggingEdgeIndex;
-  final bool draggingHandleIsSource;
+  final bool draggingSource;
+  final double scale;
+  final Offset pan;
+  final Color gridColor;
+  final Color nodeColor;
+  final Color selectedColor;
+  final Color textColor;
+  final Color mutedTextColor;
+
+  Rect _rect(int key) => pos[key]! & nodeSize;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // (1) Grilla de fondo
-    _drawGrid(canvas, size);
+    canvas.save();
+    canvas.translate(pan.dx, pan.dy);
+    canvas.scale(scale);
 
-    // (2) Aristas (líneas rectas con flecha)
-    for (var i = 0; i < connections.length; i++) {
-      // NUEVO: si estamos arrastrando el handle de ESTA arista, no pintes la línea sólida
-      if (isDraggingHandle && draggingEdgeIndex == i) {
+    // (1) Grilla sobre el área visible.
+    final visible = Rect.fromLTWH(
+        -pan.dx / scale, -pan.dy / scale, size.width / scale, size.height / scale);
+    final grid = Paint()
+      ..color = gridColor.withValues(alpha: 0.35)
+      ..strokeWidth = 1 / scale;
+    const step = 32.0;
+    for (double x = (visible.left / step).floor() * step;
+        x < visible.right;
+        x += step) {
+      canvas.drawLine(Offset(x, visible.top), Offset(x, visible.bottom), grid);
+    }
+    for (double y = (visible.top / step).floor() * step;
+        y < visible.bottom;
+        y += step) {
+      canvas.drawLine(Offset(visible.left, y), Offset(visible.right, y), grid);
+    }
+
+    // (2) Flechas: recta, o por sus puntos intermedios si "Ordenar" se los
+    // dio (flechas que saltan columnas).
+    for (var i = 0; i < arrows.length; i++) {
+      final a = arrows[i];
+      if (!pos.containsKey(a.from) || !pos.containsKey(a.to)) continue;
+      final pts = _arrowPoints(a, pos, bends, nodeSize);
+      if (i == draggingEdgeIndex && cursor != null) {
+        final ra = _rect(a.from), rb = _rect(a.to);
+        draggingSource
+            ? _arrow(canvas, cursor!, _edgePoint(rb.center, cursor!, rb),
+                dashed: true)
+            : _arrow(canvas, _edgePoint(ra.center, cursor!, ra), cursor!,
+                dashed: true);
         continue;
       }
-
-      final e = connections[i];
-      final fromRect = _nodeRect(e.source);
-      final toRect = _nodeRect(e.target);
-
-      final a = _center(fromRect);
-      final b = _center(toRect);
-
-      // Anclar a los bordes del rectángulo (más prolijo que al centro)
-      final p1 = _shrinkToRectEdge(a, b, fromRect);
-      final p2 = _shrinkToRectEdge(b, a, toRect);
-      final selected = selection.type == _SelectionType.edge && selection.edgeIndex == i;
-      _drawArrow(canvas, p1, p2, selected: selected);
-
-
-    }
-
-    // (3) Handles en extremos de la arista seleccionada
-    if (selection.type == _SelectionType.edge) {
-      final idx = selection.edgeIndex!;
-      final e = connections[idx];
-      final p1 = _shrinkToRectEdge(
-          _center(_nodeRect(e.source)), _center(_nodeRect(e.target)), _nodeRect(e.source));
-      final p2 = _shrinkToRectEdge(
-          _center(_nodeRect(e.target)), _center(_nodeRect(e.source)), _nodeRect(e.target));
-
-      final paint = Paint()..color = Colors.blue;
-      canvas.drawCircle(p1, 6, paint);
-      canvas.drawCircle(p2, 6, paint);
-    }
-
-    // (4) Flecha temporal
-    //  a) durante tap-to-connect
-    //  b) durante arrastre de handle (preview)
-    // Flecha temporal (a) tap-to-connect  (b) arrastre de handle
-    if (connectingFrom != null && cursor != null) {
-      final fromRect = _nodeRect(connectingFrom!);
-      final a = _center(fromRect);
-      final p1 = _shrinkToRectEdge(a, cursor!, fromRect);
-      _drawArrow(canvas, p1, cursor!, dashed: true);
-    } else if (isDraggingHandle && cursor != null && draggingEdgeIndex != null) {
-      // NUEVO: preview de la arista que estamos editando
-      final e = connections[draggingEdgeIndex!];
-      final fromRect = _nodeRect(e.source);
-      final toRect   = _nodeRect(e.target);
-      final from = _shrinkToRectEdge(_center(fromRect), _center(toRect), fromRect);
-      final to   = _shrinkToRectEdge(_center(toRect), _center(fromRect), toRect);
-
-
-      if (draggingHandleIsSource) {
-        // Mueves el ORIGEN: cursor -> to
-        _drawArrow(canvas, cursor!, to, dashed: true);
-      } else {
-        // Mueves el DESTINO: from -> cursor
-        _drawArrow(canvas, from, cursor!, dashed: true);
+      final selected =
+          selection.type == _SelectionType.edge && selection.edgeIndex == i;
+      final line = Paint()
+        ..color = selected ? selectedColor : textColor
+        ..strokeWidth = (selected ? 2.5 : 1.6) / scale
+        ..style = PaintingStyle.stroke;
+      for (var j = 0; j + 2 < pts.length; j++) {
+        canvas.drawLine(pts[j], pts[j + 1], line);
+      }
+      _arrow(canvas, pts[pts.length - 2], pts.last, selected: selected);
+      if (selected) {
+        final h = Paint()..color = selectedColor;
+        canvas.drawCircle(pts.first, 6 / scale, h);
+        canvas.drawCircle(pts.last, 6 / scale, h);
       }
     }
 
-    // (5) Nodos (rectángulos con etiqueta)
-    for (final entry in nodePos.entries) {
-      final id = entry.key;
-      final pos = entry.value;
-      final rect = Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
-      final isSel = selection.type == _SelectionType.node && selection.nodeId == id;
+    // (3) Flecha guía al conectar.
+    if (connectingFrom != null &&
+        cursor != null &&
+        pos.containsKey(connectingFrom)) {
+      final r = _rect(connectingFrom!);
+      _arrow(canvas, _edgePoint(r.center, cursor!, r), cursor!, dashed: true);
+    }
 
+    // (4) Nodos: nombre de la estación.
+    for (final key in pos.keys) {
+      final node = nodes[key];
+      if (node == null) continue;
+      final rect = _rect(key);
+      final isSel =
+          selection.type == _SelectionType.node && selection.nodeKey == key;
+      final rr = RRect.fromRectAndRadius(rect, const Radius.circular(10));
+      canvas.drawRRect(
+          rr,
+          Paint()
+            ..color =
+                isSel ? selectedColor.withValues(alpha: 0.15) : nodeColor);
+      canvas.drawRRect(
+          rr,
+          Paint()
+            ..color = isSel ? selectedColor : mutedTextColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = (isSel ? 2.4 : 1.2) / scale);
 
-      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(10));
-      final fill = Paint()..color = isSel ? Colors.blue.shade100 : Colors.white;
-      final stroke = Paint()
-        ..color = isSel ? Colors.blue : Colors.grey.shade600
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSel ? 2.4 : 1.2;
-
-      canvas.drawRRect(rrect, fill);
-      canvas.drawRRect(rrect, stroke);
-
-      final label = _extractLabel(machineById[id]!);
-      final tp = TextPainter(
+      final title = TextPainter(
         text: TextSpan(
-          text: label,
+          text: node.machineName.isEmpty
+              ? 'Estación ${node.machineTypeId}'
+              : node.machineName,
           style: TextStyle(
-            color: Colors.grey.shade900,
-            fontSize: 13,
-            height: 1.2,
-          ),
+              color: textColor, fontSize: 13, fontWeight: FontWeight.w600),
         ),
         textDirection: TextDirection.ltr,
         maxLines: 2,
         ellipsis: '…',
       )..layout(maxWidth: nodeSize.width - 16);
-
-      final labelOffset = Offset(
-        rect.left + 8,
-        rect.top + (rect.height - tp.height) / 2,
-      );
-      tp.paint(canvas, labelOffset);
-    }
-  }
-
-  /// Grilla liviana de fondo.
-  void _drawGrid(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.15)
-      ..strokeWidth = 1;
-    const step = 32.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  /// Rect de un nodo por id (según estado actual).
-  Rect _nodeRect(int id) {
-    final pos = nodePos[id]!;
-    return Rect.fromLTWH(pos.dx, pos.dy, nodeSize.width, nodeSize.height);
-  }
-
-  /// Centro geométrico de un rect.
-  Offset _center(Rect r) => Offset(r.left + r.width / 2, r.top + r.height / 2);
-
-  /// Intersección del segmento [from->toward] con los bordes del rectángulo.
-  Offset _shrinkToRectEdge(Offset from, Offset toward, Rect rect) {
-    final candidates = <Offset>[];
-    final edges = <(Offset, Offset)>[
-      (Offset(rect.left, rect.top), Offset(rect.right, rect.top)),
-      (Offset(rect.right, rect.top), Offset(rect.right, rect.bottom)),
-      (Offset(rect.right, rect.bottom), Offset(rect.left, rect.bottom)),
-      (Offset(rect.left, rect.bottom), Offset(rect.left, rect.top)),
-    ];
-    for (final e in edges) {
-      final p = _segmentIntersection(from, toward, e.$1, e.$2);
-      if (p != null) candidates.add(p);
-    }
-    if (candidates.isEmpty) return from;
-    candidates.sort((a, b) => (a - from).distance.compareTo((b - from).distance));
-
-    return candidates.first;
-  }
-
-  /// Intersección de segmentos; null si no intersectan.
-  Offset? _segmentIntersection(Offset p1, Offset p2, Offset p3, Offset p4) {
-    final x1 = p1.dx, y1 = p1.dy;
-    final x2 = p2.dx, y2 = p2.dy;
-    final x3 = p3.dx, y3 = p3.dy;
-    final x4 = p4.dx, y4 = p4.dy;
-    final denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (denom.abs() < 1e-9) return null;
-
-    final det1 = x1 * y2 - y1 * x2;
-    final det2 = x3 * y4 - y3 * x4;
-    final px = (det1 * (x3 - x4) - (x1 - x2) * det2) / denom;
-    final py = (det1 * (y3 - y4) - (y1 - y2) * det2) / denom;
-    final p = Offset(px, py);
-
-    bool onSeg(Offset a, Offset b, Offset p) {
-      final minX = math.min(a.dx, b.dx) - 1e-6, maxX = math.max(a.dx, b.dx) + 1e-6;
-      final minY = math.min(a.dy, b.dy) - 1e-6, maxY = math.max(a.dy, b.dy) + 1e-6;
-
-      return p.dx >= minX && p.dx <= maxX && p.dy >= minY && p.dy <= maxY;
+      title.paint(
+          canvas,
+          Offset(rect.left + 8,
+              rect.top + (rect.height - title.height) / 2));
     }
 
-    if (onSeg(p1, p2, p) && onSeg(p3, p4, p)) return p;
-    return null;
+    canvas.restore();
   }
 
-  /// Dibuja flecha (línea + triángulo). `dashed` para guías/preview; `selected` resalta.
-  void _drawArrow(Canvas canvas, Offset from, Offset to,
+  void _arrow(Canvas canvas, Offset from, Offset to,
       {bool dashed = false, bool selected = false}) {
+    final color = selected ? selectedColor : textColor;
     final paint = Paint()
-      ..color = selected ? Colors.blue : Colors.black87
-      ..strokeWidth = selected ? 2.5 : 1.6
+      ..color = color
+      ..strokeWidth = (selected ? 2.5 : 1.6) / scale
       ..style = PaintingStyle.stroke;
-
+    final v = to - from;
+    final len = v.distance;
+    if (len < 1e-6) return;
+    final u = v / len;
     if (!dashed) {
       canvas.drawLine(from, to, paint);
     } else {
       const dash = 8.0, gap = 6.0;
-      final total = (to - from).distance;
-      final dir = (to - from) / total;
-      double t = 0;
-      while (t < total) {
-        final p1 = from + dir * t;
-        final p2 = from + dir * math.min(t + dash, total);
-        canvas.drawLine(p1, p2, paint);
-        t += dash + gap;
+      for (double t = 0; t < len; t += dash + gap) {
+        canvas.drawLine(from + u * t, from + u * math.min(t + dash, len), paint);
       }
     }
-
-    // Triángulo de flecha en el extremo "to"
-    final v = (to - from);
-    final len = v.distance;
-    if (len < 1e-6) return;
-    final u = v / len;
     const arrowLen = 12.0, arrowWidth = 5.5;
-    final tip = to;
-    final left = tip - u * arrowLen + Offset(-u.dy, u.dx) * arrowWidth;
-    final right = tip - u * arrowLen + Offset(u.dy, -u.dx) * arrowWidth;
-
-    final path = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..lineTo(right.dx, right.dy)
-      ..close();
-
-    final fill = Paint()
-      ..color = selected ? Colors.blue : Colors.black87
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(path, fill);
-  }
-
-  /// Extrae un label legible desde la entidad (usa `name` si existe).
-  String _extractLabel(MachineTypeEntity m) {
-    try {
-      final nameField = (m as dynamic).name;
-      if (nameField is String && nameField.isNotEmpty) return nameField;
-    } catch (_) {}
-    return 'Nodo ${m.id}';
+    final left = to - u * arrowLen + Offset(-u.dy, u.dx) * arrowWidth;
+    final right = to - u * arrowLen + Offset(u.dy, -u.dx) * arrowWidth;
+    canvas.drawPath(
+      Path()
+        ..moveTo(to.dx, to.dy)
+        ..lineTo(left.dx, left.dy)
+        ..lineTo(right.dx, right.dy)
+        ..close(),
+      Paint()..color = color,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _GraphPainter old) {
-    // Re-pintar al cambiar nodos, conexiones o estados transitorios/selección.
-    return old.nodePos != nodePos ||
-        old.connections != connections ||
-        old.selection.type != selection.type ||
-        old.selection.nodeId != selection.nodeId ||
-        old.selection.edgeIndex != selection.edgeIndex ||
-        old.connectingFrom != connectingFrom ||
-        old.cursor != cursor ||
-        old.machineById.length != machineById.length;
-  }
+  bool shouldRepaint(covariant _GraphPainter old) => true;
 }
 
-/// Intent interno para borrar con Supr.
 class _DeleteIntent extends Intent {
   const _DeleteIntent();
+}
+
+class _CancelIntent extends Intent {
+  const _CancelIntent();
 }

@@ -20,7 +20,6 @@ import 'package:production_planning/presentation/2_orders/widgets/low_order/task
 import 'package:production_planning/services/machines_service.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/services/sequences_service.dart';
-import 'package:production_planning/services/setup_time_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 final depIn = GetIt.instance;
@@ -64,17 +63,14 @@ Future<void> initDependencies(String workspace) async {
 
     //services
     final machinesService = MachinesService(machineRepo);
-    final setupTimeService = SetupTimeService(daoFactory.getSetupTimeDao());
     final ordersService = OrdersService(
       ordersRepo,
       machineRepo,
-      setupTimeService,
     );
     final seqService = SequencesService(sequencesRepo);
 
     // Register services as singletons
     depIn.registerSingleton<MachinesService>(machinesService);
-    depIn.registerSingleton<SetupTimeService>(setupTimeService);
     depIn.registerSingleton<OrdersService>(ordersService);
     depIn.registerSingleton<SequencesService>(seqService);
 

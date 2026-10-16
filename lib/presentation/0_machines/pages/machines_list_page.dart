@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
@@ -8,9 +7,7 @@ import 'package:production_planning/presentation/0_machines/widgets/high_order_w
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
 
-
 class MachinesListPage extends StatelessWidget {
-
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
 
@@ -18,7 +15,6 @@ class MachinesListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     Color onSecondaryContainer =
         Theme.of(context).colorScheme.onSecondaryContainer;
 
@@ -29,19 +25,24 @@ class MachinesListPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-
               IconButton(
                   onPressed: () => printInfo(context,
                       title: "Manejo de tipos de maquinas",
                       content:
                           "Aca puedes manejar los tipos de maquinas que tienes, un tipo de maquina es un tipo generico no asociado a una maquina fisica, sino a la categoria de la misma, asi como Horno, Microondas, Nevera.\n\nCada tipo de maquina tendra sus maquinas fisicas especificas con sus capacidades, asi como Hornos de hasta 200 grados, hornos que calientan en 1 minuto, mientras otros en 10 minutos"),
                   icon: const Icon(Icons.info)),
-              Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 60, vertical: 10),
+              // The button shrinks with the screen: a fixed 60 px side
+              // margin plus its label used to overflow on a phone.
+              Flexible(
+                child: Container(
+                margin: EdgeInsets.symmetric(
+                    horizontal:
+                        MediaQuery.sizeOf(context).width < 600 ? 12 : 60,
+                    vertical: 10),
                 child: TextButton.icon(
                   label: Text(
                     "Agregar estacion de trabajo",
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: onSecondaryContainer),
                   ),
                   icon: Icon(
@@ -57,11 +58,11 @@ class MachinesListPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10))),
                   ),
                 ),
-              )
+              ),
+              ),
             ],
           ),
           BlocBuilder<MachineTypesBloc, MachineTypeState>(
-
               builder: (context, state) {
             //this is pending for customize, because right now is not showing success or error
             //messages, it simply shows again the list, we need to add success or error dialogs
@@ -86,8 +87,9 @@ class MachinesListPage extends StatelessWidget {
                 ),
             };
             //IF WE ARE IN THE INITIAL STATE, WE TRIGGER THE FETCHING OF THE MACHINES
-            if (state is MachineTypeInitial)
+            if (state is MachineTypeInitial) {
               BlocProvider.of<MachineTypesBloc>(context).retrieveMachineTypes();
+            }
 
             return Expanded(
               child: Container(
@@ -96,7 +98,6 @@ class MachinesListPage extends StatelessWidget {
               ),
             );
           })
-
         ],
       ),
     );
@@ -104,7 +105,6 @@ class MachinesListPage extends StatelessWidget {
 
   void _clickNewMachineType(BuildContext context) async {
     await showDialog(
-
         context: context,
         builder: (dialogContext) {
           return AddMachineTypeDialog(
@@ -121,6 +121,5 @@ class MachinesListPage extends StatelessWidget {
             },
           );
         });
-
   }
 }

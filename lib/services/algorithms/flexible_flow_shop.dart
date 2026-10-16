@@ -1,6 +1,8 @@
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
+import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -12,10 +14,16 @@ class FlexibleFlowInput {
   //tuple2 <task id, Map<machineId, Duration of task in machine>>
   final List<Tuple2<int, Map<int, Duration>>> taskSequence;
 
+  /// Whether each task (keyed by task id) may be split by a work-shift
+  /// boundary, the continuous-use rest cap, or a maintenance window.
+  /// Missing entries default to interruptible.
+  final Map<int, bool> interruptibleByTask;
 
   FlexibleFlowInput(this.jobId, this.dueDate, this.priority, this.availableDate,
-      this.taskSequence);
+      this.taskSequence,
+      {this.interruptibleByTask = const {}});
 
+  bool isTaskInterruptible(int taskId) => interruptibleByTask[taskId] ?? true;
 }
 
 class FlexibleFlowOutput {
@@ -26,9 +34,68 @@ class FlexibleFlowOutput {
   //map<task id, tuple2<machineId, range scheuled>>
   final Map<int, Tuple2<int, Range>> scheduling;
 
+  /// Processing segments per station (stationId → segments), for tasks that
+  /// were preempted mid-processing.
+  final Map<int, List<ProcessingSegment>> segmentsByStation;
+
+  /// Setup/changeover segments per station (stationId → segments), if any.
+  final Map<int, List<ProcessingSegment>> setupSegmentsByStation;
 
   FlexibleFlowOutput(
-      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling);
+      this.jobId, this.dueDate, this.startDate, this.endTime, this.scheduling,
+      {Map<int, List<ProcessingSegment>>? segmentsByStation,
+      this.setupSegmentsByStation = const {}})
+      : segmentsByStation = segmentsByStation ??
+            scheduling.map((stationId, entry) => MapEntry(
+                stationId,
+                [ProcessingSegment(entry.value2.start, entry.value2.end)]));
+}
+
+/// One task priced on one machine, not yet committed.
+class _FlexibleFlowTask {
+  final int machineId;
+  final List<ProcessingSegment> setupSegments;
+  final SegmentedSchedule schedule;
+
+  /// The machine's continuous-use streak once this task is done.
+  final Duration continuousUsageAfter;
+
+  const _FlexibleFlowTask({
+    required this.machineId,
+    required this.setupSegments,
+    required this.schedule,
+    required this.continuousUsageAfter,
+  });
+
+  /// When the machine starts working: setup if there is one, else processing.
+  DateTime get start =>
+      setupSegments.isNotEmpty ? setupSegments.first.start : schedule.startDate;
+}
+
+/// A whole job's route through the stations, priced but not committed.
+///
+/// The two `*After` maps hold the per-machine state the route would leave
+/// behind, applied only by `FlexibleFlowShop._commitPlacement`.
+class _FlexibleFlowPlacement {
+  final FlexibleFlowInput job;
+  final DateTime startTime;
+  final DateTime endTime;
+  final Map<int, Tuple2<int, Range>> scheduling;
+  final Map<int, List<ProcessingSegment>> segmentsByStation;
+  final Map<int, List<ProcessingSegment>> setupSegmentsByStation;
+  final Map<int, DateTime> availabilityAfter;
+  final Map<int, Duration> continuousUsageAfter;
+
+  const _FlexibleFlowPlacement({
+    required this.job,
+    required this.startTime,
+    required this.endTime,
+    required this.scheduling,
+    required this.segmentsByStation,
+    required this.setupSegmentsByStation,
+    required this.availabilityAfter,
+    required this.continuousUsageAfter,
+  });
 }
 
 class FlexibleFlowShop {
@@ -39,13 +106,22 @@ class FlexibleFlowShop {
   List<FlexibleFlowOutput> output = [];
   final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix;
   final Map<int, Map<int, String>>? jobStates;
+
+  /// machineId → state letter (A-J) the machine starts this order in,
+  /// before its first job.
+  final Map<int, String> initialMachineState;
   final Map<int, int?> _machineLastJob = {};
 
-  // Machine inactivity support
+  // Machine inactivity support.
+  // machineContinueCapacity is interpreted as MINUTES of continuous
+  // processing allowed before a mandatory rest — not a job count.
   final Map<int, List<MachineInactivityEntity>> machineInactivities;
   final Map<int, int> machineContinueCapacity;
   final Map<int, Duration?> machineRestTime;
-  Map<int, int> machineProcessedCount = {};
+
+  /// How long each machine has run continuously since its last pause.
+  final Map<int, Duration> _machineContinuousUsage = {};
+  final Map<int, PreemptionEngine> _engineByMachine = {};
 
   FlexibleFlowShop(
     this.startDate,
@@ -55,14 +131,11 @@ class FlexibleFlowShop {
     String rule, {
     this.stateSetupMatrix,
     this.jobStates,
+    this.initialMachineState = const {},
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
   }) {
-    // Inicializar contador de procesamiento por máquina
-    for (final machineId in machinesAvailability.keys) {
-      machineProcessedCount[machineId] = 0;
-    }
     final r = rule.toUpperCase();
     switch (r) {
       case "EDD":
@@ -104,6 +177,12 @@ class FlexibleFlowShop {
       case "ATCS":
         atcRule();
         break;
+      case "LWR":
+        lwrRule();
+        break;
+      case "MWR":
+        mwrRule();
+        break;
       case "JOHNSON":
         _applyJohnsonRuleFlexible(inputJobs);
         break;
@@ -119,23 +198,38 @@ class FlexibleFlowShop {
           return scoreB.compareTo(scoreA);
         });
         break;
+      case "MINSLACK":
+        // The DB grants MINSLACK to some environments and MS to others; they
+        // are the same rule. Accepting both keeps a granted rule from
+        // silently producing an empty schedule.
+        msRule();
+        break;
+      default:
+        throw ArgumentError('Regla de despacho desconocida: "$rule"');
     }
   }
 
-  void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptRule() => _schedule(
-        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
-      );
-  void lptRule() => _schedule(
-        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
-      );
-  void fifoRule() =>
-      _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void wsptRule() => _schedule((a, b) {
-        double wsptA = a.priority / _totalProcessingTime(a);
-        double wsptB = b.priority / _totalProcessingTime(b);
-        return wsptB.compareTo(wsptA);
-      });
+  // ── Static rules ──────────────────────────────────────────────────────────
+  //
+  // A flexible flow shop has no single job order to keep: a station with
+  // several machines hands jobs on in whatever order they finish. So the
+  // rule is re-applied at EVERY station, to the jobs queued there, with the
+  // job's NOMINAL time at that station (on the machine chosen for it) as
+  // `p_j`. FIFO is first to arrive at the station.
+  //
+  // These used to sort the jobs once by the sum of the whole route and walk
+  // each job through every station in that order, which is a permutation
+  // schedule imposed on a shop that does not keep permutations.
+
+  void eddRule() => _runDynamicStagewise(DispatchCriterion.edd);
+  void sptRule() => _runDynamicStagewise(DispatchCriterion.sptNominal);
+  void lptRule() => _runDynamicStagewise(DispatchCriterion.lptNominal);
+  void fifoRule() => _runDynamicStagewise(DispatchCriterion.fifoArrival);
+  void wsptRule() => _runDynamicStagewise(DispatchCriterion.wsptNominal);
+
+  // LWR / MWR: nominal work the job still has from this station on.
+  void lwrRule() => _runDynamicStagewise(DispatchCriterion.lwr);
+  void mwrRule() => _runDynamicStagewise(DispatchCriterion.mwr);
 
   void _schedule(
       int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
@@ -146,69 +240,177 @@ class FlexibleFlowShop {
     }
   }
 
+  PreemptionEngine _engineFor(int machineId) {
+    return _engineByMachine.putIfAbsent(machineId, () {
+      final capacityMinutes = machineContinueCapacity[machineId] ?? 0;
+      return PreemptionEngine(
+        workingSchedule: workingSchedule,
+        maintenanceWindows: machineInactivities[machineId] ?? const [],
+        continuousUseCap: capacityMinutes > 0
+            ? Duration(minutes: capacityMinutes)
+            : Duration.zero,
+        restDuration: machineRestTime[machineId] ?? Duration.zero,
+      );
+    });
+  }
+
   void _assignJobToMachines(FlexibleFlowInput job) {
+    _commitPlacement(_simulateJob(job, notBefore: null));
+  }
+
+  /// Schedules ONE task of [jobId] on [machineId], setup then processing,
+  /// without writing anything.
+  ///
+  /// This is the single definition of what a task costs on a machine. Both
+  /// [_selectBestMachine] and [_simulateJob] go through it, which is what
+  /// keeps the machine chosen and the machine scheduled in agreement — they
+  /// used to disagree, because selection priced setup+processing as one
+  /// combined block while assignment scheduled them as two separate ones. A
+  /// boundary falling between the two, or an uninterruptible task, made the
+  /// combined estimate longer than reality and could hand the task to the
+  /// wrong machine.
+  _FlexibleFlowTask _scheduleTaskOn({
+    required int machineId,
+    required int jobId,
+    required DateTime earliestStart,
+    required Duration processingTime,
+    required bool interruptible,
+  }) {
+    final DateTime machineFree = machinesAvailability[machineId] ?? startDate;
+    DateTime startTime =
+        earliestStart.isAfter(machineFree) ? earliestStart : machineFree;
+    startTime = _adjustForWorkingSchedule(startTime);
+
+    final Duration setupDuration = _getSetupDuration(
+      machineId,
+      jobId,
+      _machineLastJob[machineId],
+    );
+
+    // Setup then processing, both through the preemption engine. The task's
+    // interruption flag governs the pair: interruptible → each may be split
+    // by a shift end / maintenance / rest cap; not interruptible → one
+    // contiguous block, processing starting the instant setup ends.
+    final placed = _engineFor(machineId).computeSetupAndProcessing(
+      earliestStart: startTime,
+      setupDuration: setupDuration,
+      processingDuration: processingTime,
+      priorContinuousUsage:
+          _machineContinuousUsage[machineId] ?? Duration.zero,
+      interruptible: interruptible,
+    );
+
+    return _FlexibleFlowTask(
+      machineId: machineId,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      continuousUsageAfter: placed.continuousUsageAfter,
+    );
+  }
+
+  /// Walks [job] through every station and returns the placement WITHOUT
+  /// committing it — no field is written, so contenders can be priced and
+  /// discarded. [_commitPlacement] does the writing.
+  _FlexibleFlowPlacement _simulateJob(
+    FlexibleFlowInput job, {
+    DateTime? notBefore,
+  }) {
     DateTime jobStartTime = job.availableDate;
+    if (notBefore != null && notBefore.isAfter(jobStartTime)) {
+      jobStartTime = notBefore;
+    }
     DateTime? actualStartTime;
     DateTime? finalEndTime;
 
     Map<int, Tuple2<int, Range>> scheduling = {};
+    Map<int, List<ProcessingSegment>> segmentsByStation = {};
+    Map<int, List<ProcessingSegment>> setupSegmentsByStation = {};
+    Map<int, DateTime> availabilityAfter = {};
+    Map<int, Duration> continuousUsageAfter = {};
 
     for (var task in job.taskSequence) {
       int stationId = task.value1;
       Map<int, Duration> machinesInStation = task.value2;
 
-      Tuple2<int, int> selectedMachine =
-          _selectBestMachine(stationId, machinesInStation, job.jobId, jobStartTime);
-      int machineId = selectedMachine.value2;
-      Duration processingTime = machinesInStation[machineId]!;
-
-      DateTime machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable)
-          ? jobStartTime
-          : machineAvailable;
-
-      startTime = _adjustForWorkingSchedule(startTime);
-
-      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(
-        machineId,
+      final bool taskInterruptible = job.isTaskInterruptible(stationId);
+      final int machineId = _selectBestMachine(
+        machinesInStation,
         job.jobId,
-        previousJob,
+        jobStartTime,
+        taskInterruptible,
       );
 
-      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
-          startTime, startTime.add(setupDuration));
-      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-          taskStart, taskStart.add(processingTime));
+      final placed = _scheduleTaskOn(
+        machineId: machineId,
+        jobId: job.jobId,
+        earliestStart: jobStartTime,
+        processingTime: machinesInStation[machineId]!,
+        interruptible: taskInterruptible,
+      );
+
+      final DateTime taskStart = placed.schedule.startDate;
+      final DateTime endTime = placed.schedule.completionTime;
 
       // Guarda el primer tiempo real de inicio
-      actualStartTime ??= taskStart;
+      actualStartTime ??= placed.start;
       // Guarda el último tiempo de finalización
       finalEndTime = endTime;
 
       scheduling[stationId] = Tuple2(machineId, Range(taskStart, endTime));
-      machinesAvailability[machineId] = endTime;
-      _machineLastJob[machineId] = job.jobId;
+      segmentsByStation[stationId] = placed.schedule.segments;
+      setupSegmentsByStation[stationId] = placed.setupSegments;
+      availabilityAfter[machineId] = endTime;
+      continuousUsageAfter[machineId] = placed.continuousUsageAfter;
 
       jobStartTime = endTime;
     }
 
+    return _FlexibleFlowPlacement(
+      job: job,
+      startTime: actualStartTime ?? jobStartTime,
+      endTime: finalEndTime ?? jobStartTime,
+      scheduling: scheduling,
+      segmentsByStation: segmentsByStation,
+      setupSegmentsByStation: setupSegmentsByStation,
+      availabilityAfter: availabilityAfter,
+      continuousUsageAfter: continuousUsageAfter,
+    );
+  }
+
+  /// Applies a placement produced by [_simulateJob] to the real schedule.
+  void _commitPlacement(_FlexibleFlowPlacement placement) {
+    final job = placement.job;
+
+    placement.availabilityAfter.forEach((machineId, endTime) {
+      machinesAvailability[machineId] = endTime;
+      _rememberLastJob(machineId, job.jobId);
+    });
+    placement.continuousUsageAfter.forEach((machineId, usage) {
+      _machineContinuousUsage[machineId] = usage;
+    });
+
     output.add(FlexibleFlowOutput(
       job.jobId,
       job.dueDate,
-      actualStartTime!,
-      finalEndTime!,
-      scheduling,
+      placement.startTime,
+      placement.endTime,
+      placement.scheduling,
+      segmentsByStation: placement.segmentsByStation,
+      setupSegmentsByStation: placement.setupSegmentsByStation,
     ));
   }
 
 
-  Tuple2<int, int> _selectBestMachine(
-      int stationId,
-      Map<int, Duration> machinesInStation,
-      int jobId,
-      DateTime jobStartTime,
+  /// Picks the machine in a station that finishes the task soonest.
+  ///
+  /// Prices every option through [_scheduleTaskOn] — the same code path the
+  /// task is actually scheduled with — so the machine chosen here is the one
+  /// that really is fastest, setup and preemptions included.
+  int _selectBestMachine(
+    Map<int, Duration> machinesInStation,
+    int jobId,
+    DateTime jobStartTime,
+    bool taskInterruptible,
   ) {
     int bestMachineId = -1;
     DateTime bestEndTime = DateTime(9999);
@@ -216,35 +418,33 @@ class FlexibleFlowShop {
 
     for (var entry in machinesInStation.entries) {
       final machineId = entry.key;
-      final processingTime = entry.value;
-      final machineAvailable = machinesAvailability[machineId] ?? startDate;
-      DateTime startTime = jobStartTime.isAfter(machineAvailable)
-          ? jobStartTime
-          : machineAvailable;
-      startTime = _adjustForWorkingSchedule(startTime);
 
-      final int? previousJob = _machineLastJob.putIfAbsent(machineId, () => null);
-      final Duration setupDuration = _getSetupDuration(machineId, jobId, previousJob);
-      DateTime setupEnd = _adjustEndTimeForWorkingSchedule(
-        startTime,
-        startTime.add(setupDuration),
+      final placed = _scheduleTaskOn(
+        machineId: machineId,
+        jobId: jobId,
+        earliestStart: jobStartTime,
+        processingTime: entry.value,
+        interruptible: taskInterruptible,
       );
-      DateTime taskStart = _adjustForWorkingSchedule(setupEnd);
-      DateTime endTime = _adjustEndTimeForWorkingSchedule(
-        taskStart,
-        taskStart.add(processingTime),
-      );
+      final DateTime taskStart = placed.start;
+      final DateTime endTime = placed.schedule.completionTime;
 
+      // Earliest finish wins; ties go to the earliest start, then to the
+      // lowest machine id so the choice is deterministic.
       if (bestMachineId == -1 ||
           endTime.isBefore(bestEndTime) ||
-          (endTime.isAtSameMomentAs(bestEndTime) && taskStart.isBefore(bestStartTime))) {
+          (endTime.isAtSameMomentAs(bestEndTime) &&
+              taskStart.isBefore(bestStartTime)) ||
+          (endTime.isAtSameMomentAs(bestEndTime) &&
+              taskStart.isAtSameMomentAs(bestStartTime) &&
+              machineId < bestMachineId)) {
         bestMachineId = machineId;
         bestEndTime = endTime;
         bestStartTime = taskStart;
       }
     }
 
-    return Tuple2(stationId, bestMachineId);
+    return bestMachineId;
   }
 
   int _totalProcessingTime(FlexibleFlowInput job) {
@@ -314,98 +514,22 @@ class FlexibleFlowShop {
     return end;
   }
 
-  // Obtener las inactividades de una máquina para un día específico
-  List<Range> _getInactivitiesForDay(int machineId, DateTime day) {
-    final inactivities = machineInactivities[machineId] ?? [];
-    final weekday = day.weekday;
-    final List<Range> dayInactivities = [];
-
-    for (final inactivity in inactivities) {
-      final inactivityWeekdays =
-          inactivity.weekdays.map((wd) => wd.index + 1).toSet();
-
-      if (inactivityWeekdays.contains(weekday)) {
-        final startHour = inactivity.startTime.inHours;
-        final startMinute = inactivity.startTime.inMinutes % 60;
-
-        final inactivityStart = DateTime(
-          day.year, day.month, day.day, startHour, startMinute,
-        );
-
-        final inactivityEnd = inactivityStart.add(inactivity.duration);
-        dayInactivities.add(Range(inactivityStart, inactivityEnd));
-      }
-    }
-
-    return dayInactivities;
-  }
-
-  // Ajustar el tiempo de finalización considerando inactividades programadas
-  DateTime _adjustEndTimeWithInactivities(
-      int machineId, DateTime start, DateTime end) {
-    DateTime current = start;
-    Duration remaining = end.difference(start);
-
-    while (remaining > Duration.zero) {
-      current = _adjustForWorkingSchedule(current);
-
-      final dayInactivities = _getInactivitiesForDay(machineId, current);
-
-      final dayEnd = DateTime(
-        current.year, current.month, current.day,
-        workingSchedule.value2.hour, workingSchedule.value2.minute,
-      );
-
-      DateTime nextAvailable = current;
-      for (final inactivity in dayInactivities) {
-        if (nextAvailable.isBefore(inactivity.end) &&
-            inactivity.start.isBefore(dayEnd)) {
-          if (nextAvailable.isBefore(inactivity.start)) {
-            final availableBeforeInactivity =
-                inactivity.start.difference(nextAvailable);
-
-            if (remaining <= availableBeforeInactivity) {
-              return nextAvailable.add(remaining);
-            } else {
-              remaining -= availableBeforeInactivity;
-              nextAvailable = inactivity.end;
-            }
-          } else {
-            if (nextAvailable.isBefore(inactivity.end)) {
-              nextAvailable = inactivity.end;
-            }
-          }
-        }
-      }
-
-      final availableToday = dayEnd.difference(nextAvailable);
-
-      if (availableToday > Duration.zero && remaining <= availableToday) {
-        return nextAvailable.add(remaining);
-      } else {
-        if (availableToday > Duration.zero) {
-          remaining -= availableToday;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return current;
-  }
-
   Duration _getSetupDuration(
     int machineId,
     int currentJobId,
     int? previousJobId,
   ) {
-    // Only apply state-based setup if we have previous job and both matrices
-    if (previousJobId != null && 
-        previousJobId > 0 && 
-        stateSetupMatrix != null && 
-        jobStates != null) {
+    // With no previous job on this machine yet, fall back to the machine's
+    // configured initial state for this order.
+    if (stateSetupMatrix != null && jobStates != null) {
       final machineStates = stateSetupMatrix![machineId];
       if (machineStates != null) {
-        final previousState = jobStates![previousJobId]?[machineId];
+        String? previousState;
+        if (previousJobId != null && previousJobId > 0) {
+          previousState = jobStates![previousJobId]?[machineId];
+        } else {
+          previousState = initialMachineState[machineId];
+        }
         final currentState = jobStates![currentJobId]?[machineId];
         if (previousState != null && currentState != null) {
           final setupMinutes = machineStates[previousState]?[currentState];
@@ -418,125 +542,326 @@ class FlexibleFlowShop {
     return Duration.zero;
   }
 
-  void eddaRule() => _dynamicSchedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptaRule() => _dynamicSchedule(
-      (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)));
-  void lptaRule() => _dynamicSchedule(
-      (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)));
-  void fifoaRule() =>
-      _dynamicSchedule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void wsptaRule() => _dynamicSchedule((a, b) {
-        double wsptA = a.priority / _totalProcessingTime(a);
-        double wsptB = b.priority / _totalProcessingTime(b);
-        return wsptB.compareTo(wsptA);
-      });
-
-
-  void msRule() {
-    int accumulatedProcessingTime = 0;
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
-
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        int slackA = _calculateSlack(a, accumulatedProcessingTime, currentTime);
-        int slackB = _calculateSlack(b, accumulatedProcessingTime, currentTime);
-        return slackA.compareTo(slackB);
-      });
-
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      accumulatedProcessingTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
+  /// Records [jobId] as the last job on [machineId] — the job whose state
+  /// the next changeover starts from. A job with no state (A-J) registered
+  /// for this machine leaves the machine in the state it found it;
+  /// recording it anyway made the NEXT changeover look up a null state and
+  /// cost zero.
+  void _rememberLastJob(int machineId, int jobId) {
+    if (jobStates == null || jobStates![jobId]?[machineId] != null) {
+      _machineLastJob[machineId] = jobId;
     }
   }
 
-  void crRule() {
-    int accumulatedProcessingTime = 0;
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
+  // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
+  //
+  // Same loop as the static rules above (_runDynamicStagewise); the only
+  // difference is the index: the operation's EFFECTIVE span on its machine
+  // — setup out of the machine's current state, processing, and every
+  // interruption — instead of its nominal time.
 
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort((a, b) {
-        double crA = _calculateCR(a, accumulatedProcessingTime, currentTime);
-        double crB = _calculateCR(b, accumulatedProcessingTime, currentTime);
-        return crA.compareTo(crB);
-      });
+  void eddaRule() => _runDynamicStagewise(DispatchCriterion.edd);
+  void sptaRule() => _runDynamicStagewise(DispatchCriterion.spt);
+  void lptaRule() => _runDynamicStagewise(DispatchCriterion.lpt);
+  void fifoaRule() => _runDynamicStagewise(DispatchCriterion.fifo);
+  void wsptaRule() => _runDynamicStagewise(DispatchCriterion.wspt);
 
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      accumulatedProcessingTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
-    }
-  }
+  // MS, CR and ATCS are dynamic by definition — their index depends on the
+  // clock t — so they run through the same event-driven dispatch as the
+  // *_ADAPTADO rules.
+  void msRule() => _runDynamicStagewise(DispatchCriterion.ms);
+  void crRule() => _runDynamicStagewise(DispatchCriterion.cr);
+  void atcRule() => _runDynamicStagewise(DispatchCriterion.atcs);
 
-  void atcRule() {
-    DateTime currentTime = startDate;
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
-    output.clear();
-    int elapsedTime = 0;
+  /// Stage-by-stage event-driven dispatch for every dispatching rule of a
+  /// (flexible) hybrid flow shop: the static ones, LWR/MWR, the *_ADAPTADO
+  /// ones and MS/CR/ATCS. They differ only in the index [criterion] reads.
+  ///
+  /// Earlier this priced and ranked whole ROUTES (see the removed
+  /// `_runDynamic`): at every decision it simulated each pending job clear
+  /// through every remaining station and picked the one with the best
+  /// route-level index. That matches a strict permutation flow shop, where
+  /// one machine per stage keeps a single global order — but a station with
+  /// several parallel machines does not keep one order at all, so ranking
+  /// whole routes does not match how the shop actually queues work at each
+  /// station. The standard treatment of a hybrid/flexible flow shop in the
+  /// literature dispatches at EACH station, among the jobs actually queued
+  /// there (Ruiz & Vázquez-Rodríguez 2010; Pinedo, *Scheduling*, ch. 4 on
+  /// hybrid flow shops) — the same operation-level treatment Open Shop and
+  /// Flexible Job Shop already use in this codebase.
+  ///
+  /// One non-delay loop drives every station at once, mirroring
+  /// `OpenShop._schedule`: each round collects the (job, machine) pairings
+  /// whose job is ready at that job's CURRENT station (its route order is
+  /// still fixed — only the ranking is per-station now), prices every one of
+  /// them through [_scheduleTaskOn], and commits the pairing that can start
+  /// earliest — ties broken by the dispatch rule. `remainingWork`, which
+  /// MS/CR/ATCS charge against the due date, is the job's own nominal time
+  /// over the stations still ahead of it (mirrors Vepsäläinen & Morton 1987's
+  /// use of remaining work in slack-based indices).
+  void _runDynamicStagewise(DispatchCriterion criterion) {
+    if (inputJobs.isEmpty) return;
 
-    double K = 3.0;
+    final AtcsParameters? atcs =
+        criterion == DispatchCriterion.atcs ? _atcsParametersStagewise() : null;
 
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(
-        (a, b) => _calculateATCPriority(b, currentTime, elapsedTime, K)
-            .compareTo(_calculateATCPriority(a, currentTime, elapsedTime, K)),
+    final Map<int, int> stageIndex = {
+      for (final job in inputJobs) job.jobId: 0,
+    };
+    final Map<int, DateTime> jobReadyAt = {
+      for (final job in inputJobs) job.jobId: job.availableDate,
+    };
+    final Map<int, Map<int, Tuple2<int, Range>>> jobScheduling = {
+      for (final job in inputJobs) job.jobId: {},
+    };
+    final Map<int, Map<int, List<ProcessingSegment>>> jobSegments = {
+      for (final job in inputJobs) job.jobId: {},
+    };
+    final Map<int, Map<int, List<ProcessingSegment>>> jobSetupSegments = {
+      for (final job in inputJobs) job.jobId: {},
+    };
+    final Map<int, DateTime> jobActualStart = {};
 
+    bool isActive(FlexibleFlowInput job) =>
+        stageIndex[job.jobId]! < job.taskSequence.length;
+
+    while (inputJobs.any(isActive)) {
+      final candidates = <({
+        FlexibleFlowInput job,
+        int stationId,
+        int machineId,
+        DateTime earliestStart,
+        _FlexibleFlowTask placed,
+        DispatchCandidate<FlexibleFlowInput> dispatch,
+      })>[];
+      SchedulingHorizonException? pricingFailure;
+
+      for (final job in inputJobs) {
+        if (!isActive(job)) continue;
+        final int stage = stageIndex[job.jobId]!;
+        final task = job.taskSequence[stage];
+        final int stationId = task.value1;
+        final Map<int, Duration> machines = task.value2;
+        final bool interruptible = job.isTaskInterruptible(stationId);
+        final DateTime ready = jobReadyAt[job.jobId]!;
+
+        for (final entry in machines.entries) {
+          final machineId = entry.key;
+          final DateTime machineFree =
+              machinesAvailability[machineId] ?? startDate;
+          final DateTime earliestStart = _adjustForWorkingSchedule(
+              ready.isAfter(machineFree) ? ready : machineFree);
+
+          final _FlexibleFlowTask placed;
+          try {
+            placed = _scheduleTaskOn(
+              machineId: machineId,
+              jobId: job.jobId,
+              earliestStart: earliestStart,
+              processingTime: entry.value,
+              interruptible: interruptible,
+            );
+          } on SchedulingHorizonException catch (e) {
+            pricingFailure ??= e;
+            continue;
+          }
+
+          final DateTime end = placed.schedule.completionTime;
+          // Measured from the EFFECTIVE start (after maintenance, rest caps
+          // and non-interruptible waits), which is what the loop ranks on.
+          final Duration span = end.difference(placed.start);
+          candidates.add((
+            job: job,
+            stationId: stationId,
+            machineId: machineId,
+            earliestStart: earliestStart,
+            placed: placed,
+            dispatch: DispatchCandidate(
+              job: job,
+              start: placed.start,
+              end: end,
+              span: span.isNegative ? Duration.zero : span,
+              dueDate: job.dueDate,
+              releaseDate: job.availableDate,
+              priority: job.priority,
+              jobId: job.jobId,
+              setup: segmentsDuration(placed.setupSegments),
+              remainingWork: _remainingWorkAfterStage(job, stage),
+              processing: entry.value,
+              arrival: ready,
+            ),
+          ));
+        }
+      }
+
+      if (candidates.isEmpty) {
+        // Every ready operation was unplaceable on every candidate machine:
+        // that is the calendar's fault, and the user has to hear about it.
+        if (pricingFailure != null) throw pricingFailure;
+        break;
+      }
+
+      // Non-delay on EFFECTIVE starts — the start the preemption engine
+      // returns, after maintenance, rest caps and the wait for a window that
+      // fits a non-interruptible block — so a job the calendar would hold
+      // back never beats one that can really run now. If nothing can start
+      // at the current instant the clock effectively jumps to the earliest
+      // effective start (Giffler & Thompson 1960, non-delay).
+      //
+      // Two decisions, kept apart (see nonDelayConflictSet): each job that
+      // can start at t* first gets its machine — earliest completion among
+      // the station's machines available at t* — and only then does the
+      // dispatch rule choose among the jobs.
+      final contenders = nonDelayConflictSet(
+        candidates,
+        operationKey: (c) => c.job.jobId,
+        candidate: (c) => c.dispatch,
+        machineId: (c) => c.machineId,
       );
-      FlexibleFlowInput selectedJob = remainingJobs.removeAt(0);
-      _assignJobToMachines(selectedJob);
-      elapsedTime += _totalProcessingTime(selectedJob);
-      currentTime = output.last.endTime;
-    }
-  }
+      contenders.sort((a, b) {
+        final cmp = compareCandidates<FlexibleFlowInput>(
+          criterion,
+          a.dispatch,
+          b.dispatch,
+          decisionTime: a.placed.start,
+          atcs: atcs,
+        );
+        if (cmp != 0) return cmp;
+        if (a.stationId != b.stationId) {
+          return a.stationId.compareTo(b.stationId);
+        }
+        return a.machineId.compareTo(b.machineId);
+      });
 
-  double _calculateATCPriority(
-    FlexibleFlowInput job,
-    DateTime currentTime,
-    int elapsedTime,
-    double K,
-  ) {
-    int processingTime = _totalProcessingTime(job);
-    double avgProcessingTime = processingTime / job.taskSequence.length;
-    double timeDiff = job.dueDate.difference(currentTime).inMinutes.toDouble();
-    return (job.priority / processingTime) *
-        (exp(
-          -max(timeDiff - processingTime - elapsedTime, 0) /
-              (K * avgProcessingTime),
+      final selected = contenders.first;
+      final job = selected.job;
+      final placed = selected.placed;
+      final DateTime taskStart = placed.schedule.startDate;
+      final DateTime end = placed.schedule.completionTime;
+
+      jobActualStart.putIfAbsent(job.jobId, () => placed.start);
+      jobScheduling[job.jobId]![selected.stationId] =
+          Tuple2(selected.machineId, Range(taskStart, end));
+      jobSegments[job.jobId]![selected.stationId] = placed.schedule.segments;
+      jobSetupSegments[job.jobId]![selected.stationId] = placed.setupSegments;
+
+      machinesAvailability[selected.machineId] = end;
+      _rememberLastJob(selected.machineId, job.jobId);
+      _machineContinuousUsage[selected.machineId] = placed.continuousUsageAfter;
+
+      stageIndex[job.jobId] = stageIndex[job.jobId]! + 1;
+      jobReadyAt[job.jobId] = end;
+
+      // Append the moment the job finishes its LAST station, so `output`
+      // reflects the order jobs actually finish in — same convention the
+      // static rules and the old route-level dispatch both kept (and what
+      // callers like the Gantt adapter and these tests read as "the
+      // schedule's order"). Building it from `inputJobs` at the very end,
+      // as this used to, always produced the ORIGINAL input order — it
+      // silently discarded every dispatch decision the loop just made.
+      if (stageIndex[job.jobId] == job.taskSequence.length) {
+        output.add(FlexibleFlowOutput(
+          job.jobId,
+          job.dueDate,
+          jobActualStart[job.jobId] ?? job.availableDate,
+          end,
+          Map<int, Tuple2<int, Range>>.from(jobScheduling[job.jobId]!),
+          segmentsByStation:
+              Map<int, List<ProcessingSegment>>.from(jobSegments[job.jobId]!),
+          setupSegmentsByStation: Map<int, List<ProcessingSegment>>.from(
+              jobSetupSegments[job.jobId]!),
         ));
-  }
-
-
-  void _dynamicSchedule(
-      int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
-
-    List<FlexibleFlowInput> remainingJobs = List.from(inputJobs);
-    while (remainingJobs.isNotEmpty) {
-      remainingJobs.sort(comparator);
-      FlexibleFlowInput job = remainingJobs.removeAt(0);
-      _assignJobToMachines(job);
+      }
     }
   }
 
-  double _calculateCR(
-      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
-    int remainingTime =
-        job.dueDate.difference(currentTime).inMinutes - accumulatedTime;
-    int processingTime = _totalProcessingTime(job);
-    return processingTime > 0
-        ? (remainingTime > 0 ? remainingTime / processingTime : double.infinity)
-        : double.infinity;
+  /// Nominal work [job] still has after stage [currentStageIndex]: every
+  /// later station's mean duration over its candidate machines. Mirrors
+  /// OpenShop._remainingWorkAfter.
+  Duration _remainingWorkAfterStage(
+      FlexibleFlowInput job, int currentStageIndex) {
+    Duration total = Duration.zero;
+    for (int i = currentStageIndex + 1; i < job.taskSequence.length; i++) {
+      final machines = job.taskSequence[i].value2;
+      if (machines.isEmpty) continue;
+      total +=
+          machines.values.fold(Duration.zero, (sum, d) => sum + d) ~/
+              machines.length;
+    }
+    return total;
   }
 
-  int _calculateSlack(
-      FlexibleFlowInput job, int accumulatedTime, DateTime currentTime) {
-    int totalProcessingTime = _totalProcessingTime(job);
-    int slack = job.dueDate.difference(currentTime).inMinutes -
-        totalProcessingTime -
-        accumulatedTime;
+  /// Fits the ATCS parameters to this instance (see
+  /// [AtcsParameters.calibrate]) for the STAGE-WISE dispatcher: a candidate
+  /// here is one operation (one job at one station), so p̄ and s̄ must be
+  /// per-operation — mirrors OpenShop._atcsParameters.
+  AtcsParameters _atcsParametersStagewise() {
+    double totalProcessing = 0;
+    int operationCount = 0;
+    final Map<int, double> stationLoad = {};
+    final Set<int> allMachineIds = {};
 
-    return slack < 0 ? 0 : slack;
+    for (final job in inputJobs) {
+      for (final task in job.taskSequence) {
+        final machines = task.value2;
+        if (machines.isEmpty) continue;
+        final double mean = machines.values
+                .fold<double>(0, (sum, d) => sum + d.inSeconds / 60.0) /
+            machines.length;
+        totalProcessing += mean;
+        operationCount++;
+        // A station of k machines works through its queue k times faster.
+        stationLoad[task.value1] =
+            (stationLoad[task.value1] ?? 0) + mean / machines.length;
+        allMachineIds.addAll(machines.keys);
+      }
+    }
+    final double meanProcessing =
+        operationCount == 0 ? 1 : totalProcessing / operationCount;
+
+    // Mean pairwise changeover, at the OPERATION level: over every machine
+    // that appears in some station, and every ordered pair of distinct jobs
+    // that both have a state on it.
+    double setupTotal = 0;
+    int setupCount = 0;
+    if (stateSetupMatrix != null && jobStates != null) {
+      for (final machineId in allMachineIds) {
+        final matrix = stateSetupMatrix![machineId];
+        if (matrix == null) continue;
+        for (final from in inputJobs) {
+          final fromState = jobStates![from.jobId]?[machineId];
+          if (fromState == null) continue;
+          for (final to in inputJobs) {
+            if (identical(from, to)) continue;
+            final toState = jobStates![to.jobId]?[machineId];
+            final minutes =
+                toState == null ? null : matrix[fromState]?[toState];
+            if (minutes == null) continue;
+            setupTotal += minutes;
+            setupCount++;
+          }
+        }
+      }
+    }
+    final double meanSetup = setupCount == 0 ? 0 : setupTotal / setupCount;
+
+    final double bottleneck =
+        stationLoad.values.fold(0.0, (a, b) => max(a, b));
+    final int stationCount = max(stationLoad.length, 1);
+    final double workMinutes =
+        bottleneck + operationCount * meanSetup / stationCount;
+
+    return AtcsParameters.calibrate(
+      start: startDate,
+      dueDates: inputJobs.map((job) => job.dueDate),
+      meanProcessingMinutes: meanProcessing,
+      meanSetupMinutes: meanSetup,
+      makespanMinutes: calendarMinutes(
+        PreemptionEngine(workingSchedule: workingSchedule),
+        startDate,
+        Duration(minutes: workMinutes.round()),
+      ),
+    );
   }
 
   void cdsAlgorithm() {
@@ -768,6 +1093,48 @@ List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload
   final machinesAvailability = (payload['machinesAvailability'] as Map<dynamic, dynamic>)
       .map((key, value) => MapEntry(key as int, DateTime.fromMillisecondsSinceEpoch(value as int)));
 
+  // Calendar inputs — inactivity windows, the continuous-use cap and the
+  // rest duration — used to be dropped on the floor here, so an order run
+  // through this isolate entry point ignored maintenance/shift/rest
+  // altogether. Parsed the same way openShopSchedule does.
+  final machineInactivities = <int, List<MachineInactivityEntity>>{};
+  final rawInactivities = payload['machineInactivities'];
+  if (rawInactivities != null) {
+    for (final entry in (rawInactivities as Map<dynamic, dynamic>).entries) {
+      final machineId = entry.key as int;
+      machineInactivities[machineId] = (entry.value as List<dynamic>)
+          .map((item) {
+            final map = Map<String, dynamic>.from(item as Map);
+            return MachineInactivityEntity(
+              machineId: map['machineId'] as int,
+              name: map['name'] as String,
+              weekdays: (map['weekdays'] as List<dynamic>)
+                  .map((w) => Weekday.values[w as int])
+                  .toSet(),
+              startTime: Duration(minutes: map['startTimeMinutes'] as int),
+              duration: Duration(minutes: map['durationMinutes'] as int),
+            );
+          })
+          .cast<MachineInactivityEntity>()
+          .toList();
+    }
+  }
+
+  final machineContinueCapacity = payload['machineContinueCapacity'] == null
+      ? const <int, int>{}
+      : (payload['machineContinueCapacity'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as int));
+
+  final machineRestTime = <int, Duration?>{};
+  final rawRestTime = payload['machineRestTime'];
+  if (rawRestTime != null) {
+    for (final entry in (rawRestTime as Map<dynamic, dynamic>).entries) {
+      machineRestTime[entry.key as int] = entry.value == null
+          ? null
+          : Duration(milliseconds: entry.value as int);
+    }
+  }
+
   final stateSetupMatrix = payload['stateSetupMatrix'] == null
       ? null
       : (payload['stateSetupMatrix'] as Map<dynamic, dynamic>).map(
@@ -793,15 +1160,34 @@ List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload
           ),
         );
 
+  final initialMachineState = payload['initialMachineState'] == null
+      ? const <int, String>{}
+      : (payload['initialMachineState'] as Map<dynamic, dynamic>)
+          .map((key, value) => MapEntry(key as int, value as String));
+
   final output = FlexibleFlowShop(
     startDate,
     workingSchedule,
     inputJobs,
     machinesAvailability,
     payload['rule'] as String,
+    initialMachineState: initialMachineState,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    machineInactivities: machineInactivities,
+    machineContinueCapacity: machineContinueCapacity,
+    machineRestTime: machineRestTime,
   ).output;
+
+  List<Map<String, dynamic>> segmentsToPayload(
+      List<ProcessingSegment> segments) {
+    return segments
+        .map((s) => {
+              'start': s.start.millisecondsSinceEpoch,
+              'end': s.end.millisecondsSinceEpoch,
+            })
+        .toList();
+  }
 
   return output.map((out) {
     return {
@@ -814,6 +1200,11 @@ List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload
             'start': value.value2.startDate.millisecondsSinceEpoch,
             'end': value.value2.endDate.millisecondsSinceEpoch,
           })),
+      'segmentsByStation': out.segmentsByStation.map((key, segments) =>
+          MapEntry(key.toString(), segmentsToPayload(segments))),
+      'setupSegmentsByStation': out.setupSegmentsByStation.map(
+          (key, segments) =>
+              MapEntry(key.toString(), segmentsToPayload(segments))),
     };
   }).toList();
 }

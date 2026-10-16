@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
+import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
@@ -8,7 +9,6 @@ import 'package:production_planning/services/algorithms/parallel_machine.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
-import 'package:production_planning/services/setup_time_service.dart';
 import '../../entities/job_entity.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
@@ -16,34 +16,18 @@ import '../../shared/utils/task_time_utils.dart';
 class ParallelMachineAdapter {
   final OrderRepository orderRepository;
   final MachineRepository machineRepository;
-  final SetupTimeService setupTimeService; // <── added
 
   ParallelMachineAdapter({
     required this.orderRepository,
     required this.machineRepository,
-    required this.setupTimeService, // <── added
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
       int orderId, String rule) async {
-    // ── 1. Load order and attach any in-memory setup matrices ──────────────
+    // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
-    OrderEntity? baseOrder = responseOrder.fold((f) => null, (or) => or);
-    if (baseOrder == null) return null;
-
-    final attachedSetupTimeMatrix = <String, Map<String, Map<String, int>>>{};
-    if (baseOrder.setupTimeMatrix != null) {
-      attachedSetupTimeMatrix.addAll(baseOrder.setupTimeMatrix!);
-    }
-    attachedSetupTimeMatrix.addAll(setupTimeService.allCachedMatrices);
-
-    final OrderEntity order = OrderEntity(
-      baseOrder.orderId,
-      baseOrder.regDate,
-      baseOrder.orderJobs,
-      setupTimeMatrix:
-          attachedSetupTimeMatrix.isNotEmpty ? attachedSetupTimeMatrix : null,
-    );
+    OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
+    if (order == null) return null;
 
     // ── 2. Resolve machines ────────────────────────────────────────────────
     final int machineTypeId = order.orderJobs![0].sequence!.tasks![0].machineTypeId;
@@ -58,13 +42,17 @@ class ParallelMachineAdapter {
     // environments that already support setup times.
     //
     // For Parallel Machines every machine is of the SAME type (that is the
-    // definition of the environment), so all machines share the same
-    // fromState → toState costs.  buildMachineStateSetupMatrix handles this
-    // transparently because it iterates over the provided machine list.
+    // definition of the environment). The matrix is still registered per
+    // machine NAME in the UI (one machine at a time), so a machine only
+    // gets its own entry when its name was picked there; the others
+    // inherit that entry as their station default — see
+    // buildMachineStateSetupMatrix's same-type fallback.
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =
         buildMachineStateSetupMatrix(machineEntities, order.setupTimeMatrix);
     final Map<int, Map<int, String>> jobStates =
         buildJobMachineStates(order.orderJobs!, machineEntities);
+    final Map<int, String> initialMachineState =
+        resolveMachineInitialStates(machineEntities, order.machineInitialStates);
 
     // ── 4. Build ParallelInput list ────────────────────────────────────────
     final List<ParallelInput> inputJobs = [];
@@ -92,18 +80,20 @@ class ParallelMachineAdapter {
         machineTypeId,
       );
 
-      // Expand by amount; carry per-machine states for setup matrix lookups.
-      for (var i = 0; i < job.amount; i++) {
-        inputJobs.add(ParallelInput(
-          job.jobId!,
-          job.dueDate,
-          job.priority,
-          job.availableDate,
-          durationsInMachines,
-          jobState: defaultJobState,
-          jobStatesByMachine: statesForJob,
-        ));
-      }
+      inputJobs.add(ParallelInput(
+        job.jobId!,
+        job.dueDate,
+        job.priority,
+        job.availableDate,
+        durationsInMachines,
+        jobState: defaultJobState,
+        jobStatesByMachine: statesForJob,
+        interruptible: task.allowPreemption,
+        interruptibleByMachine: {
+          for (final machine in machineEntities)
+            machine.id!: resolveInterruptible(job, task, machine.id!),
+        },
+      ));
     }
 
     // ── 5. Build empty machine slot map ───────────────────────────────────
@@ -112,6 +102,18 @@ class ParallelMachineAdapter {
     };
 
     // ── 6. Run algorithm ──────────────────────────────────────────────────
+    // continueCapacity is interpreted as minutes of continuous processing
+    // before a mandatory rest (see PreemptionEngine), not a job count.
+    final Map<int, List<MachineInactivityEntity>> machineInactivitiesMap = {};
+    final Map<int, int> machineContinueCapacityMap = {};
+    final Map<int, Duration?> machineRestTimeMap = {};
+    for (final machine in machineEntities) {
+      machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
+      final restPolicy = machineRestPolicy(machine);
+      machineContinueCapacityMap[machine.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[machine.id!] = restPolicy.rest;
+    }
+
     final output = ParallelMachine(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
@@ -119,31 +121,35 @@ class ParallelMachineAdapter {
       machineSlots,
       rule.toUpperCase(),
       stateSetupMatrix: stateSetupMatrix, // <── passed through
+      initialMachineState: initialMachineState,
+      machineInactivities: machineInactivitiesMap,
+      machineContinueCapacity: machineContinueCapacityMap,
+      machineRestTime: machineRestTimeMap,
     ).output;
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────
     final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
 
-    final Map<int, int> jobCounter = {};
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       final jobSequence = job.sequence!;
-      final current = (jobCounter[out.jobId] ?? 0) + 1;
-      jobCounter[out.jobId] = current;
       final jobName = job.jobName ?? 'Job ${out.jobId}';
-      final displayName = current == 1 ? jobName : '$jobName (${current - 1})';
 
       final planningTask = PlanningTaskEntity(
         sequenceId: jobSequence.id!,
         sequenceName: jobSequence.name,
-        displayName: displayName,
+        displayName: jobName,
         taskId: jobSequence.tasks![0].id!,
-        numberProcess: current,
+        numberProcess: 1,
         startDate: out.startDate,
         endDate: out.endDate,
         retarded: out.dueDate.isBefore(out.endDate),
         jobId: job.jobId!,
         orderId: orderId,
+        machineName:
+            machineEntities.firstWhere((m) => m.id == out.machineId).name,
+        segments: out.segments,
+        setupSegments: out.setupSegments,
       );
 
       machineTasksMap.putIfAbsent(out.machineId, () => []).add(planningTask);

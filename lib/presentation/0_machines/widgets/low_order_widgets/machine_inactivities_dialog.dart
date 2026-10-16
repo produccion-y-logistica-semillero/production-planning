@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
@@ -27,6 +28,9 @@ class _MachineInactivitiesDialogState
   final List<bool> _weekdaySelections =
       List<bool>.filled(Weekday.values.length, false);
   bool _automaticInitialized = false;
+
+  /// "No aplica descanso automático": saved as capacity 0 and rest 0.
+  bool _noAutomaticRest = false;
   bool _scheduledCountInitialized = false;
   int _lastScheduledCount = 0;
 
@@ -76,13 +80,7 @@ class _MachineInactivitiesDialogState
       },
       builder: (context, state) {
         if (!_automaticInitialized && state.hasMachine) {
-          _continueCapacityController.text = state.continueCapacity > 0
-              ? state.continueCapacity.toString()
-              : '';
-          _restMinutesController.text =
-              state.restTime != null && state.restTime!.inMinutes > 0
-                  ? state.restTime!.inMinutes.toString()
-                  : '';
+          _syncAutomaticFieldsFromState(state);
           _automaticInitialized = true;
         }
 
@@ -142,22 +140,35 @@ class _MachineInactivitiesDialogState
         ),
         const SizedBox(height: 12),
         Text(
-          'Define el tiempo máximo de procesamiento continuo que la máquina '
-          'puede realizar antes de tomar un descanso y la duración en minutos '
-          'de esa pausa.',
+          'Define cuántos minutos de procesamiento continuo puede realizar '
+          'la máquina antes de tomar un descanso y la duración en minutos de '
+          'esa pausa. Si la máquina no descansa, marca "No aplica".',
           style: theme.textTheme.bodySmall,
         ),
-        const SizedBox(height: 16),
+        CheckboxListTile(
+          value: _noAutomaticRest,
+          onChanged: (value) =>
+              setState(() => _noAutomaticRest = value ?? false),
+          title: const Text('No aplica descanso automático'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+        ),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _continueCapacityController,
+                enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
                 decoration: const InputDecoration(
-                  // Label descriptivo del archivo 7.
-                  labelText: 'Tiempo máximo de procesamiento continuo',
-                  hintText: 'Ej. 4',
+                  labelText: 'Procesamiento continuo (minutos)',
+                  hintText: 'Ej. 240',
                 ),
               ),
             ),
@@ -165,9 +176,14 @@ class _MachineInactivitiesDialogState
             Expanded(
               child: TextField(
                 controller: _restMinutesController,
+                enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Minutos de descanso',
+                  labelText: 'Descanso (minutos)',
                   hintText: 'Ej. 15',
                 ),
               ),
@@ -351,6 +367,14 @@ class _MachineInactivitiesDialogState
   // ─── Event handlers ────────────────────────────────────────────────────────
 
   void _onSaveAutomatic() {
+    if (_noAutomaticRest) {
+      context.read<MachineInactivitiesCubit>().saveAutomatic(
+            continueCapacity: 0,
+            restTime: Duration.zero,
+          );
+      return;
+    }
+
     final continueCapacity =
         int.tryParse(_continueCapacityController.text.trim());
     if (continueCapacity == null || continueCapacity <= 0) {
@@ -430,6 +454,9 @@ class _MachineInactivitiesDialogState
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
   void _syncAutomaticFieldsFromState(MachineInactivitiesState state) {
+    _noAutomaticRest = state.continueCapacity <= 0 ||
+        state.restTime == null ||
+        state.restTime!.inMinutes <= 0;
     _continueCapacityController.text =
         state.continueCapacity > 0 ? state.continueCapacity.toString() : '';
     _restMinutesController.text =

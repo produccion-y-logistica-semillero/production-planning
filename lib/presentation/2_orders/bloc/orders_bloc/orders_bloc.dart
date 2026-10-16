@@ -9,34 +9,47 @@ class OrderBloc extends Cubit<OrdersState> {
   final OrdersService service;
   OrderBloc(this.service) : super(OrdersInitialState());
 
+  // fetchOrders/deleteOrderById/duplicateOrder all await a DB call before
+  // emitting. If the page that owns this bloc is popped (or, in dev mode,
+  // a hot reload tears the widget down) while that await is in flight,
+  // OrdersPage.dispose() closes this bloc before the callback runs, and
+  // the bare emit() then throws "Cannot emit new states after calling
+  // close" — a widget-lifecycle race, not a data error. Silently dropping
+  // the state once closed is the standard fix: nothing is listening to a
+  // closed bloc anyway.
+  @override
+  void emit(OrdersState state) {
+    if (isClosed) return;
+    super.emit(state);
+  }
+
   Future<void> fetchOrders() async {
     emit(OrdersLoadingState());
 
     final Either<Failure, List<OrderEntity>> result = await service.getOrders();
 
-    result.fold(
-      (failure) {
-        print("DEBUG: Error al cargar órdenes: ${failure.toString()}");
-        emit(OrdersErrorState("Error al cargar órdenes"));
-      },
-      (orders) {
-        print(
-            "DEBUG: Órdenes cargadas exitosamente: ${orders.length} órdenes");
-        for (int i = 0; i < orders.length; i++) {
-          print(
-              "DEBUG: Orden $i - ID: ${orders[i].orderId}, Fecha: ${orders[i].regDate}");
-        }
-        // Sort by regDate descending; break ties by orderId descending so
-        // duplicates stay grouped together (file 1).
-        orders.sort((a, b) {
-          final dateCompare = b.regDate.compareTo(a.regDate);
-          if (dateCompare != 0) return dateCompare;
-          return (b.orderId ?? 0).compareTo(a.orderId ?? 0);
-        });
-        emit(OrdersLoadedState(orders));
-        print("DEBUG: Estado cambiado a OrdersLoadedState");
-      },
-    );
+    final orders = result.fold((failure) {
+      print("DEBUG: Error al cargar órdenes: ${failure.toString()}");
+      emit(OrdersErrorState("Error al cargar órdenes"));
+      return null;
+    }, (orders) => orders);
+    if (orders == null) return;
+
+    // Sort by regDate descending; break ties by orderId descending so
+    // duplicates stay grouped together (file 1).
+    orders.sort((a, b) {
+      final dateCompare = b.regDate.compareTo(a.regDate);
+      if (dateCompare != 0) return dateCompare;
+      return (b.orderId ?? 0).compareTo(a.orderId ?? 0);
+    });
+    // Show the list right away; the environments (for the filter) arrive a
+    // moment later, unless the list changed in between.
+    emit(OrdersLoadedState(orders));
+    final environments = await service.environmentsByOrder(orders);
+    final current = state;
+    if (current is OrdersLoadedState && identical(current.orders, orders)) {
+      emit(OrdersLoadedState(orders, environments: environments));
+    }
   }
 
   Future<void> deleteOrderById(int orderId) async {
@@ -50,15 +63,17 @@ class OrderBloc extends Cubit<OrdersState> {
       (res) {
         print("DEBUG: Orden eliminada exitosamente");
 
-        final List<OrderEntity> orders = switch (state) {
-          OrdersLoadedState(:final orders) => orders,
-          _ => [],
-        };
+        final current = state;
+        final List<OrderEntity> orders =
+            current is OrdersLoadedState ? current.orders : [];
+        final environments = current is OrdersLoadedState
+            ? current.environments
+            : const <int, String>{};
         final updatedOrders =
             orders.where((o) => o.orderId != orderId).toList();
         print("DEBUG: Lista actualizada: ${updatedOrders.length} órdenes");
 
-        emit(OrdersLoadedState(updatedOrders));
+        emit(OrdersLoadedState(updatedOrders, environments: environments));
       },
     );
   }

@@ -9,7 +9,11 @@ class OrdersLoadingState extends OrdersState {}
 class OrdersLoadedState extends OrdersState {
   final List<OrderEntity> orders;
 
-  OrdersLoadedState(this.orders);
+  /// Environment of each order (orderId → name, e.g. "FLOW SHOP"), for the
+  /// list's filter. An order missing here could not be classified.
+  final Map<int, String> environments;
+
+  OrdersLoadedState(this.orders, {this.environments = const {}});
 }
 
 class OrdersErrorState extends OrdersState {

@@ -157,6 +157,40 @@ class OrdersService {
     return orderRepo.getFullOrder(orderId);
   }
 
+  /// Environment of every order in [orders] (orderId → name), with the same
+  /// classification as [getOrderEnvironment]. The machine count of each
+  /// station is looked up once for the whole list. An order that cannot be
+  /// classified (a station with no machines, no jobs) is left out.
+  Future<Map<int, String>> environmentsByOrder(List<OrderEntity> orders) async {
+    final Map<int, int> machineCountByType = {};
+    final result = <int, String>{};
+    for (final order in orders) {
+      final jobs = order.orderJobs ?? const [];
+      if (order.orderId == null || jobs.isEmpty) continue;
+      final routes = [
+        for (final job in jobs)
+          if (job.sequence != null) JobRoute.fromSequence(job.sequence!),
+      ];
+      if (routes.isEmpty) continue;
+      for (final route in routes) {
+        for (final task in route.tasks) {
+          if (machineCountByType.containsKey(task.machineTypeId)) continue;
+          final r = await machineRepo.countMachinesOf(task.machineTypeId);
+          machineCountByType[task.machineTypeId] = r.fold((_) => 0, (n) => n);
+        }
+      }
+      try {
+        result[order.orderId!] =
+            classifyOrderEnvironment(routes, machineCountByType);
+      } on StationWithoutMachinesException {
+        // Not classifiable: shown without an environment.
+      } on ArgumentError {
+        // No jobs.
+      }
+    }
+    return result;
+  }
+
   /// ═══════════════════════════════════════════════════════════════════════════
   /// DETECCIÓN DE AMBIENTE DE PROGRAMACIÓN DE PRODUCCIÓN
   /// ═══════════════════════════════════════════════════════════════════════════

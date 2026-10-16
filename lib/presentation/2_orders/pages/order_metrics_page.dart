@@ -8,17 +8,22 @@ import 'package:production_planning/presentation/2_orders/pages/gantt_page.dart'
 import 'package:production_planning/presentation/2_orders/pages/gantt_data_table_page.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/planning_machine_entity.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_stats_card.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_dashboard.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_table.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
   final List<int>? selectedRuleIndexes;
+  final TabuParams? tabuParams;
 
   const OrderMetrics({
     super.key,
     required this.orderId,
     this.selectedRuleIndexes,
+    this.tabuParams,
   });
 
   @override
@@ -29,6 +34,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
   late MetricsBloc _metricsBloc;
   late GanttBloc _ganttBloc;
 
+  // Lo que calculó la tabla, alineado por índice (el mismo que _navigateToGantt
+  // recibe como originalIndex): el Gantt muestra estos horarios tal cual.
+  List<Metrics> _loadedMetrics = const [];
+  List<List<PlanningMachineEntity>> _loadedSchedules = const [];
+  List<int> _loadedRuleIds = const [];
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +47,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
     _ganttBloc = GetIt.instance<GanttBloc>();
 
     // Cargar métricas
-    _metricsBloc.getTable(widget.orderId);
+    _metricsBloc.getTable(widget.orderId, tabuParams: widget.tabuParams);
     // Cargar environment para obtener nombres de reglas
     _ganttBloc.assignOrderId(widget.orderId);
   }
@@ -77,9 +88,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-
                       state.message,
-
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 16,
@@ -89,7 +98,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
-                      onPressed: () => _metricsBloc.getTable(widget.orderId),
+                      onPressed: () => _metricsBloc.getTable(
+                        widget.orderId,
+                        tabuParams: widget.tabuParams,
+                      ),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Reintentar'),
                     ),
@@ -98,6 +110,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
               );
             } else if (state is MetricsLoadedState) {
               final allMetrics = state.metrics;
+              _loadedMetrics = state.metrics;
+              _loadedSchedules = state.schedules;
+              _loadedRuleIds = state.ruleIds;
 
               return BlocBuilder<GanttBloc, GanttState>(
                 bloc: _ganttBloc,
@@ -105,7 +120,6 @@ class _OrderMetricsState extends State<OrderMetrics> {
                   final env = ganttState.enviroment;
 
                   final allRuleNames = env != null
-
                       ? env.rules.map((r) => r.value2.toString()).toList()
                       : List.generate(
                           allMetrics.length,
@@ -167,7 +181,6 @@ class _OrderMetricsState extends State<OrderMetrics> {
                       ),
                     );
                   }
-
 
                   final totalJobs = filteredMetrics.first.totalJobs;
 
@@ -233,13 +246,31 @@ class _OrderMetricsState extends State<OrderMetrics> {
                             children: [
                               SingleChildScrollView(
                                 padding: const EdgeInsets.all(16),
-                                child: MetricsTable(
-                                  ruleNames: filteredRuleNames,
-                                  metrics: filteredMetrics,
-                                  onGantt: (row) =>
-                                      _navigateToGantt(filteredIndexes[row]),
-                                  onDetail: (row) => _navigateToGanttData(
-                                      filteredIndexes[row]),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    MetricsTable(
+                                      ruleNames: filteredRuleNames,
+                                      metrics: filteredMetrics,
+                                      onGantt: (row) => _navigateToGantt(
+                                          filteredIndexes[row]),
+                                      onDetail: (row) => _navigateToGanttData(
+                                          filteredIndexes[row]),
+                                    ),
+                                    // Resumen de la búsqueda tabu: solo la
+                                    // regla TABU trae tabuStats, el resto de
+                                    // filas no dibuja nada.
+                                    for (final m in filteredMetrics)
+                                      if (m.tabuStats != null) ...[
+                                        const SizedBox(height: 16),
+                                        ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              maxWidth: 520),
+                                          child:
+                                              TabuStatsCard(stats: m.tabuStats!),
+                                        ),
+                                      ],
+                                  ],
                                 ),
                               ),
                               Padding(
@@ -289,11 +320,34 @@ class _OrderMetricsState extends State<OrderMetrics> {
     );
   }
 
+  /// Carga el Gantt con el MISMO horario que produjo la fila de la tabla, en
+  /// lugar de volver a planificar (TABU para por reloj y daría otro horario).
+  /// Si por algo no hay horario guardado para esa fila, planifica como antes.
+  void _loadGanttFor(int originalIndex) {
+    final bool hasSchedule = originalIndex >= 0 &&
+        originalIndex < _loadedSchedules.length &&
+        originalIndex < _loadedMetrics.length &&
+        originalIndex < _loadedRuleIds.length;
+
+    if (hasSchedule) {
+      _ganttBloc.showSchedule(
+        widget.orderId,
+        _loadedRuleIds[originalIndex],
+        _loadedSchedules[originalIndex],
+        _loadedMetrics[originalIndex],
+        tabuParams: widget.tabuParams,
+      );
+    } else {
+      _ganttBloc.assignOrderAndSelectRuleByIndex(
+        widget.orderId,
+        originalIndex,
+        tabuParams: widget.tabuParams,
+      );
+    }
+  }
+
   void _navigateToGantt(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-    );
+    _loadGanttFor(originalIndex);
 
     Navigator.push(
       context,
@@ -310,10 +364,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
   }
 
   void _navigateToGanttData(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-    );
+    _loadGanttFor(originalIndex);
 
     Navigator.push(
       context,

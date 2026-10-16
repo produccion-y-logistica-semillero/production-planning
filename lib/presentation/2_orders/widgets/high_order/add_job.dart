@@ -664,6 +664,8 @@ class AddJobState extends State<AddJobWidget> {
         final timeOfDay = await showTimePicker(
           context: context,
           initialTime: hour ?? TimeOfDay.now(),
+          initialEntryMode: TimePickerEntryMode.input,
+          helpText: "Cambiar modo"
         );
         if (timeOfDay != null) {
           setState(() {

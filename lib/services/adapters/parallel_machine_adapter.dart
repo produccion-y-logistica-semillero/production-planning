@@ -12,6 +12,7 @@ import 'package:production_planning/services/adapters/metrics.dart';
 import '../../entities/job_entity.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/entities/tabu_params.dart';
 
 class ParallelMachineAdapter {
   final OrderRepository orderRepository;
@@ -23,7 +24,7 @@ class ParallelMachineAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule, {TabuParams? tabuParams}) async  {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -114,7 +115,7 @@ class ParallelMachineAdapter {
       machineRestTimeMap[machine.id!] = restPolicy.rest;
     }
 
-    final output = ParallelMachine(
+    final parallel = ParallelMachine(
       order.regDate,
       Tuple2(START_SCHEDULE, END_SCHEDULE),
       inputJobs,
@@ -125,7 +126,12 @@ class ParallelMachineAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
-    ).output;
+      tabuParams: tabuParams ?? const TabuParams(),
+
+    );final output = parallel.output;
+
+
+
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────
     final Map<int, List<PlanningTaskEntity>> machineTasksMap = {};
@@ -174,6 +180,8 @@ class ParallelMachineAdapter {
         return Tuple5(out.jobId, job.availableDate, out.endDate, out.dueDate,
             job.priority);
       }).toList(),
+      tabuStats: parallel.tabuStats,
+
     );
 
     return Tuple2(machinesResult, metrics);

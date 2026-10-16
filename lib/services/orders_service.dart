@@ -18,6 +18,8 @@ import 'package:production_planning/services/adapters/parallel_machine_adapter.d
 import 'package:production_planning/services/adapters/single_machine_adapter.dart';
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
 import 'package:production_planning/services/environment_detection.dart';
+
+import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 
 class OrdersService {
@@ -83,6 +85,7 @@ class OrdersService {
       return Left(LocalStorageFailure());
     }
   }
+
 
   Future<Either<Failure, bool>> deleteOrder(int id) async {
     return await orderRepo.deleteOrder(id);
@@ -301,29 +304,32 @@ class OrdersService {
   // ------------------------------------------------------------------------
 
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
-      scheduleOrder(Tuple3<int, String, String> sch) async {
+      scheduleOrder(Tuple3<int, String, String> sch,{TabuParams? tabuParams,}) async {
+
     // The preemption engine refuses to search forever when a machine's
     // calendar admits no schedule (see SchedulingHorizonException). Turn
     // that into a Failure carrying the reason, so the user is told what to
     // fix instead of watching a spinner — or, in the five environments that
     // run on the UI isolate, a frozen app.
     try {
-      return await _dispatchSchedule(sch);
+      return await _dispatchSchedule(sch, tabuParams: tabuParams);
     } on SchedulingHorizonException catch (e) {
       print('scheduleOrder: orden imposible de planificar → $e');
       return Left(UnschedulableOrderFailure(e.reason));
     }
   }
-
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
-      _dispatchSchedule(Tuple3<int, String, String> sch) async {
+      _dispatchSchedule(Tuple3<int, String, String> sch, {
+    TabuParams? tabuParams,
+  })async {
+
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
               orderRepository: orderRepo, machineRepository: machineRepo)
           .singleMachineAdapter(sch.value1, sch.value2)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .parallelMachineAdapter(sch.value1, sch.value2)),
+          .parallelMachineAdapter(sch.value1, sch.value2, tabuParams: tabuParams)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
           .flowShopAdapter(sch.value1, sch.value2)),

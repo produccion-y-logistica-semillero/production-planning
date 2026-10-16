@@ -2,10 +2,13 @@ import 'package:dartz/dartz.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 
 
-Metrics getMetricts(List<PlanningMachineEntity> machines,
-    List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates) {
+Metrics  getMetricts(List<PlanningMachineEntity> machines,
+    List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates,
+    {TabuRunStats? tabuStats}) {
 
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
@@ -64,6 +67,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
       makespan: Duration.zero,
       totalFlow: Duration.zero,
       totalTardiness: Duration.zero,
+      tabuStats: tabuStats,
       maxTardiness: Duration.zero,
       totalWeightedTardiness: Duration.zero,
       maxLateness: Duration.zero,
@@ -149,6 +153,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     totalFlow: totalFlowTime,
     totalTardiness: totalTardiness,
     maxTardiness: maxTardiness,
+    tabuStats: tabuStats,
     totalWeightedTardiness:
         Duration(microseconds: totalWeightedTardinessMicros),
     maxLateness: maxLateness,

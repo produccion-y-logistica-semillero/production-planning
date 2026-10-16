@@ -1,3 +1,4 @@
+import 'package:production_planning/entities/tabu_run_stats.dart';
 
 class Metrics {
   final Duration idle;
@@ -15,6 +16,7 @@ class Metrics {
   final Duration maxTardiness;
   final Duration totalWeightedTardiness;
   final Duration maxLateness;
+  final TabuRunStats? tabuStats;
 
   Duration get totalWeightedDelay => totalWeightedTardiness;
 
@@ -32,7 +34,8 @@ class Metrics {
       required this.totalTardiness,
       required this.maxTardiness,
       required this.totalWeightedTardiness,
-      required this.maxLateness})
+      required this.maxLateness,
+      this.tabuStats})
       : percentageDelayedJobs =
             totalJobs == 0 ? 0.0 : (delayedJobs / totalJobs) * 100;
 }

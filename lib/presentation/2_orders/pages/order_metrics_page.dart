@@ -8,7 +8,9 @@ import 'package:production_planning/presentation/2_orders/pages/gantt_page.dart'
 import 'package:production_planning/presentation/2_orders/pages/gantt_data_table_page.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_stats_card.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
@@ -30,6 +32,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
   late MetricsBloc _metricsBloc;
   late GanttBloc _ganttBloc;
   List<int> _visibleToOriginalIndex = const [];
+
+  // Lo que calculó la tabla, alineado por índice (el mismo que _navigateToGantt
+  // recibe como originalIndex): el Gantt muestra estos horarios tal cual.
+  List<Metrics> _loadedMetrics = const [];
+  List<List<PlanningMachineEntity>> _loadedSchedules = const [];
+  List<int> _loadedRuleIds = const [];
   final ScrollController _horizontalScrollController = ScrollController();
 
   @override
@@ -127,6 +135,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
               );
             } else if (state is MetricsLoadedState) {
               final allMetrics = state.metrics;
+              _loadedMetrics = state.metrics;
+              _loadedSchedules = state.schedules;
+              _loadedRuleIds = state.ruleIds;
 
               return BlocBuilder<GanttBloc, GanttState>(
                 bloc: _ganttBloc,
@@ -271,7 +282,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           scrollDirection: Axis.vertical,
-                          child: Scrollbar(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Scrollbar(
                             controller: _horizontalScrollController,
                             thumbVisibility: true,
                             trackVisibility: true,
@@ -623,6 +637,20 @@ class _OrderMetricsState extends State<OrderMetrics> {
                               ),
                             ),
                           ),
+
+                          // Resumen de la busqueda tabu: solo la regla TABU
+                          // trae tabuStats, el resto de filas no dibuja nada.
+                          for (final m in filteredMetrics)
+                            if (m.tabuStats != null) ...[
+                              const SizedBox(height: 16),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 520),
+                                child: TabuStatsCard(stats: m.tabuStats!),
+                              ),
+                            ],
+                            ],
+                          ),
                         ),
                       ),
 
@@ -658,12 +686,34 @@ class _OrderMetricsState extends State<OrderMetrics> {
     );
   }
 
+  /// Carga el Gantt con el MISMO horario que produjo la fila de la tabla, en
+  /// lugar de volver a planificar (TABU para por reloj y daría otro horario).
+  /// Si por algo no hay horario guardado para esa fila, planifica como antes.
+  void _loadGanttFor(int originalIndex) {
+    final bool hasSchedule = originalIndex >= 0 &&
+        originalIndex < _loadedSchedules.length &&
+        originalIndex < _loadedMetrics.length &&
+        originalIndex < _loadedRuleIds.length;
+
+    if (hasSchedule) {
+      _ganttBloc.showSchedule(
+        widget.orderId,
+        _loadedRuleIds[originalIndex],
+        _loadedSchedules[originalIndex],
+        _loadedMetrics[originalIndex],
+        tabuParams: widget.tabuParams,
+      );
+    } else {
+      _ganttBloc.assignOrderAndSelectRuleByIndex(
+        widget.orderId,
+        originalIndex,
+        tabuParams: widget.tabuParams,
+      );
+    }
+  }
+
   void _navigateToGantt(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-      tabuParams: widget.tabuParams,
-    );
+    _loadGanttFor(originalIndex);
 
     Navigator.push(
       context,
@@ -680,11 +730,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
   }
 
   void _navigateToGanttData(int originalIndex) {
-    _ganttBloc.assignOrderAndSelectRuleByIndex(
-      widget.orderId,
-      originalIndex,
-      tabuParams: widget.tabuParams,
-    );
+    _loadGanttFor(originalIndex);
 
     Navigator.push(
       context,

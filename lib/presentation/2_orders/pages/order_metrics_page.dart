@@ -13,6 +13,7 @@ import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_stats_card.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_dashboard.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_table.dart';
+import 'package:production_planning/presentation/2_orders/widgets/metrics/tabu_analysis.dart';
 
 class OrderMetrics extends StatefulWidget {
   final int orderId;
@@ -183,9 +184,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
                   }
 
                   final totalJobs = filteredMetrics.first.totalJobs;
+                  // La pestaña de análisis tabú solo aparece si TABU está
+                  // entre las reglas elegidas.
+                  final hasTabu = filteredRuleNames.any(TabuAnalysis.isTabu);
 
                   return DefaultTabController(
-                    length: 2,
+                    length: hasTabu ? 3 : 2,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -229,16 +233,20 @@ class _OrderMetricsState extends State<OrderMetrics> {
                             ],
                           ),
                         ),
-                        const TabBar(
+                        TabBar(
                           tabAlignment: TabAlignment.start,
                           isScrollable: true,
                           tabs: [
-                            Tab(
+                            const Tab(
                                 icon: Icon(Icons.table_rows_outlined),
                                 text: 'Tabla'),
-                            Tab(
+                            const Tab(
                                 icon: Icon(Icons.dashboard_outlined),
                                 text: 'Dashboard'),
+                            if (hasTabu)
+                              const Tab(
+                                  icon: Icon(Icons.travel_explore),
+                                  text: 'Búsqueda tabú'),
                           ],
                         ),
                         Expanded(
@@ -285,6 +293,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                       filteredIndexes[row]),
                                 ),
                               ),
+                              if (hasTabu)
+                                TabuAnalysis(
+                                  ruleNames: filteredRuleNames,
+                                  metrics: filteredMetrics,
+                                  params: widget.tabuParams,
+                                ),
                             ],
                           ),
                         ),

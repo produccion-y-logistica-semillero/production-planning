@@ -139,6 +139,11 @@ class _ParallelPlacement {
 }
 
 class ParallelMachine {
+  /// Seeded random generator for the metaheuristics: the same order always
+  /// yields the same schedule (it used to be unseeded, so two runs differed).
+  final Random _metaRandom = Random(20261016);
+
+
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule;
   List<ParallelInput> inputJobs = [];
@@ -724,7 +729,7 @@ class ParallelMachine {
   List<List<ParallelInput>> _initializePopulation(int size) {
     return List.generate(size, (_) {
       final shuffled = List<ParallelInput>.from(inputJobs);
-      shuffled.shuffle();
+      shuffled.shuffle(_metaRandom);
       return shuffled;
     });
   }
@@ -790,29 +795,29 @@ class ParallelMachine {
       final p1 = _selectParent(evaluated);
       final p2 = _selectParent(evaluated);
       var child = _crossover(p1, p2);
-      if (Random().nextDouble() < mutationRate) child = _mutate(child);
+      if (_metaRandom.nextDouble() < mutationRate) child = _mutate(child);
       return child;
     });
   }
 
   List<ParallelInput> _selectParent(List<Tuple2<List<ParallelInput>, Duration>> evaluated) {
     const k = 5;
-    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+    final selected = List.generate(k, (_) => evaluated[_metaRandom.nextInt(evaluated.length)]);
     selected.sort((a, b) => a.value2.compareTo(b.value2));
     return selected.first.value1;
   }
 
   List<ParallelInput> _crossover(List<ParallelInput> p1, List<ParallelInput> p2) {
     final length = p1.length;
-    final point = Random().nextInt(length);
+    final point = _metaRandom.nextInt(length);
     final taken = p1.sublist(0, point).map((j) => j.jobId).toSet();
     return [...p1.sublist(0, point), ...p2.where((j) => !taken.contains(j.jobId))];
   }
 
   List<ParallelInput> _mutate(List<ParallelInput> ind) {
     if (ind.length < 2) return ind;
-    final i = Random().nextInt(ind.length);
-    final j = Random().nextInt(ind.length);
+    final i = _metaRandom.nextInt(ind.length);
+    final j = _metaRandom.nextInt(ind.length);
     final tmp = ind[i];
     ind[i] = ind[j];
     ind[j] = tmp;

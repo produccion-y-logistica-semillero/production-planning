@@ -86,6 +86,11 @@ class _SingleMachineTrial {
 }
 
 class SingleMachine {
+  /// Seeded random generator for the metaheuristics: the same order always
+  /// yields the same schedule (it used to be unseeded, so two runs differed).
+  final Random _metaRandom = Random(20261016);
+
+
   final int machineId;
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; // like 8-17
@@ -521,7 +526,7 @@ class SingleMachine {
   List<List<SingleMachineInput>> _initializePopulation(int size) {
     return List.generate(size, (_) {
       final shuffled = List<SingleMachineInput>.from(input);
-      shuffled.shuffle();
+      shuffled.shuffle(_metaRandom);
       return shuffled;
     });
   }
@@ -574,7 +579,7 @@ class SingleMachine {
       final p1 = _selectParent(evaluated);
       final p2 = _selectParent(evaluated);
       var child = _crossover(p1, p2);
-      if (Random().nextDouble() < mutationRate) child = _mutate(child);
+      if (_metaRandom.nextDouble() < mutationRate) child = _mutate(child);
       return child;
     });
   }
@@ -583,7 +588,7 @@ class SingleMachine {
       List<Tuple2<List<SingleMachineInput>, Duration>> evaluated) {
     const k = 5;
     final selected =
-        List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+        List.generate(k, (_) => evaluated[_metaRandom.nextInt(evaluated.length)]);
     selected.sort((a, b) => a.value2.compareTo(b.value2));
     return selected.first.value1;
   }
@@ -591,7 +596,7 @@ class SingleMachine {
   List<SingleMachineInput> _crossover(
       List<SingleMachineInput> p1, List<SingleMachineInput> p2) {
     final length = p1.length;
-    final point = Random().nextInt(length);
+    final point = _metaRandom.nextInt(length);
     final taken = p1.sublist(0, point).map((j) => j.jobId).toSet();
     return [
       ...p1.sublist(0, point),
@@ -601,8 +606,8 @@ class SingleMachine {
 
   List<SingleMachineInput> _mutate(List<SingleMachineInput> individual) {
     if (individual.length < 2) return individual;
-    final i = Random().nextInt(individual.length);
-    final j = Random().nextInt(individual.length);
+    final i = _metaRandom.nextInt(individual.length);
+    final j = _metaRandom.nextInt(individual.length);
     final tmp = individual[i];
     individual[i] = individual[j];
     individual[j] = tmp;
@@ -675,7 +680,7 @@ class SingleMachine {
     const int vecinosPorIteracion = 7;
 
     // Solución inicial aleatoria
-    List<SingleMachineInput> currentSolution = List.from(input)..shuffle();
+    List<SingleMachineInput> currentSolution = List.from(input)..shuffle(_metaRandom);
 
     Duration currentFitness = evaluateFlujoTotal(currentSolution);
     List<SingleMachineInput> bestSolution = List.from(currentSolution);
@@ -684,7 +689,7 @@ class SingleMachine {
     Map<String, int> tabuMap = {};
 
     int sinMejora = 0;
-    final random = Random();
+    final random = _metaRandom;
     int n = currentSolution.length;
 
     for (int iter = 0; iter < maxIterations; iter++) {
@@ -738,7 +743,7 @@ class SingleMachine {
       }
 
       if (sinMejora >= maxNoImprove) {
-        currentSolution = List.from(bestSolution)..shuffle();
+        currentSolution = List.from(bestSolution)..shuffle(_metaRandom);
         currentFitness = evaluateFlujoTotal(currentSolution);
         tabuMap.clear();
         sinMejora = 0;

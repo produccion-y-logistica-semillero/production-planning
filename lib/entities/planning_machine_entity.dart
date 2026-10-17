@@ -8,6 +8,10 @@ class PlanningMachineEntity {
   List<PlanningTaskEntity> tasks;
   final List<MachineInactivityEntity> scheduledInactivities;
 
+  /// Work station (machine type) the machine belongs to; null when the
+  /// adapter did not provide it.
+  final String? stationName;
+
   PlanningMachineEntity(this.machineId, this.machineName, this.tasks,
-      {this.scheduledInactivities = const []});
+      {this.scheduledInactivities = const [], this.stationName});
 }

@@ -8,6 +8,7 @@ import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/ne
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/utils/task_time_utils.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 /// One station (machine type) of the order, with ALL its machines.
 class _OrderStation {
@@ -473,7 +474,8 @@ class NewOrderPage extends StatelessWidget {
         controllers[r] = {};
         for (final c in jobStates) {
           final val = matrix[r]?[c] ?? 0;
-          controllers[r]![c] = TextEditingController(text: val == 0 ? '' : val.toString());
+          controllers[r]![c] = TextEditingController(
+              text: val == 0 ? '' : formatDurationMinutes(val));
         }
       }
     }
@@ -490,7 +492,8 @@ class NewOrderPage extends StatelessWidget {
                 newMatrix[r] = {};
                 for (final c in jobStates) {
                   final text = controllers[r]![c]!.text;
-                  newMatrix[r]![c] = int.tryParse(text) ?? 0;
+                  // Typed in the "Formato de tiempos" setting; minutes here.
+                  newMatrix[r]![c] = parseDurationMinutes(text) ?? 0;
                 }
               }
               existingMatrices[selectedMachine] = newMatrix;
@@ -510,7 +513,8 @@ class NewOrderPage extends StatelessWidget {
                 for (final r in jobStates) {
                   for (final c in jobStates) {
                     final val = matrix[r]?[c] ?? 0;
-                    controllers[r]![c]!.text = val == 0 ? '' : val.toString();
+                    controllers[r]![c]!.text =
+                        val == 0 ? '' : formatDurationMinutes(val);
                   }
                 }
               });
@@ -614,7 +618,7 @@ class NewOrderPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
+                      'Tiempo (${timeFormatLabel(timeInputFormat.value)}) para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 16),
@@ -639,6 +643,24 @@ class NewOrderPage extends StatelessWidget {
                                       controller: controllers[r]![c],
                                       keyboardType: TextInputType.number,
                                       textAlign: TextAlign.center,
+                                      inputFormatters: durationInputFormatters(),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        hintText: durationHint(),
+                                        // An invalid cell used to be saved
+                                        // silently as 0.
+                                        errorText: controllers[r]![c]!
+                                                    .text
+                                                    .trim()
+                                                    .isNotEmpty &&
+                                                parseDurationMinutes(
+                                                        controllers[r]![c]!
+                                                            .text) ==
+                                                    null
+                                            ? '!'
+                                            : null,
+                                      ),
+                                      onChanged: (_) => setState(() {}),
                                     ),
                                   );
                                 }),

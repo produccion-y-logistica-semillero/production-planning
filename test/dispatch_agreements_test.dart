@@ -354,15 +354,16 @@ void main() {
 
     test('LWR / MWR count the operations really left, with a precedence graph',
         () {
-      // Job 1: operations 10 (machine 2, 4h) and 11 (machine 1, 1h) have no
+      // Job 1: operations 10 (machine 1, 4h) and 11 (machine 1, 1h) have no
       // order between them; 12 (machine 3, 1h) needs both. Job 2 is a
-      // single 3h operation on machine 1.
+      // single 3h operation on machine 1. A job is at one station at a
+      // time, so job 1's two free operations go one after the other.
       //
-      // On machine 1 at 06:00, operation 11 competes with job 2. Work
-      // remaining: job 1 = 1h + 4h + 1h = 6h, job 2 = 3h.
+      // On machine 1 at 06:00, job 1 competes with job 2. Work remaining:
+      // job 1 = 4h + 1h + 1h = 6h (both free operations count), job 2 = 3h.
       List<FlexibleJobInput> jobs() => [
             jsJob(1, [
-              const Tuple2(10, {2: Duration(hours: 4)}),
+              const Tuple2(10, {1: Duration(hours: 4)}),
               const Tuple2(11, {1: Duration(hours: 1)}),
               const Tuple2(12, {3: Duration(hours: 1)}),
             ], dependencies: [
@@ -384,10 +385,13 @@ void main() {
           .value2
           .start;
 
-      // MWR: job 1 (6h left) takes machine 1 first.
+      // MWR: job 1 (6h left) takes machine 1 first. Its two free
+      // operations tie at 6h and the shorter span settles it: 11 at 06:00,
+      // then 10 at 07:00 (5h left beats job 2's 3h); job 2 last, at 11:00.
       expect(startOf('MWR', 1, 11), start);
-      expect(startOf('MWR', 2, 20), start.add(const Duration(hours: 1)));
-      // LWR: job 2 (3h left) takes it first.
+      expect(startOf('MWR', 1, 10), start.add(const Duration(hours: 1)));
+      expect(startOf('MWR', 2, 20), start.add(const Duration(hours: 5)));
+      // LWR: job 2 (3h left) takes it first; job 1 follows at 09:00.
       expect(startOf('LWR', 2, 20), start);
       expect(startOf('LWR', 1, 11), start.add(const Duration(hours: 3)));
     });

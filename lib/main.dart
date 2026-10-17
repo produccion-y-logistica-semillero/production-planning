@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
+import 'package:production_planning/shared/duration_input.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -33,6 +34,13 @@ Future<void> main() async {
     }
   } else {
     await scheduleFile.writeAsString('08:00\n16:00');
+  }
+
+  // Format of every duration field: hh:mm:ss or minutes ("Formato de tiempos").
+  final timeFormatFile = File('${dir.path}/$timeFormatFileName');
+  if (await timeFormatFile.exists()) {
+    timeInputFormat.value =
+        timeFormatFromStorage(await timeFormatFile.readAsString());
   }
 
   await initDependencies(workspace);

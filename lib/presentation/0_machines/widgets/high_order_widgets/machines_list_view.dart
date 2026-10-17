@@ -9,6 +9,7 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 // Changed to StatefulWidget to manage list expanded state
 class MachinesListView extends StatefulWidget {
@@ -269,12 +270,12 @@ class _MachinesListViewState extends State<MachinesListView> {
             final preparationPercent =
                 parsePercentage(controllerPreparation.text);
             // Convert minutes → percentage: (minutes * 100) / 60
-            final restMinutes =
-                int.tryParse(controllerRestTime.text.trim());
+            // Typed in the "Formato de tiempos" setting; minutes here.
+            final restMinutes = parseDurationMinutes(controllerRestTime.text);
             final restPercent =
                 restMinutes != null ? (restMinutes * 100) / 60 : null;
             final continueCapacity =
-                int.tryParse(controllerContinue.text.trim());
+                parseDurationMinutes(controllerContinue.text);
             final startMode = startModeNotifier.value;
 
             // The rest policy is either off (both 0, the "No aplica"
@@ -377,9 +378,9 @@ class _MachinesListViewState extends State<MachinesListView> {
     // Convert stored percentage back to minutes for display.
     final restMinutes = (60 * machine.restPercentage / 100).round();
     final restController =
-        TextEditingController(text: restMinutes.toString());
+        TextEditingController(text: formatDurationMinutes(restMinutes));
     final continueController = TextEditingController(
-        text: machine.continueCapacity.toString());
+        text: formatDurationMinutes(machine.continueCapacity ?? 0));
     final availabilityController = TextEditingController(
       text: machine.availabilityDateTime != null
           ? DateFormat('yyyy-MM-dd HH:mm').format(machine.availabilityDateTime!)
@@ -411,8 +412,8 @@ class _MachinesListViewState extends State<MachinesListView> {
               double.tryParse(capacityController.text) ?? 100.0,
               double.tryParse(preparationController.text) ?? 100.0,
               // Convert minutes → percentage before sending to BLoC.
-              ((int.tryParse(restController.text) ?? 60) * 100) / 60,
-              int.tryParse(continueController.text) ?? 1,
+              ((parseDurationMinutes(restController.text) ?? 60) * 100) / 60,
+              parseDurationMinutes(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),
               startMode: startModeNotifier.value,

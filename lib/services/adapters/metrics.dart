@@ -1,14 +1,17 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/metrics_breakdown.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
+import 'package:flutter/material.dart';
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
-import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/services/adapters/metrics_breakdown.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 
 
 Metrics  getMetricts(List<PlanningMachineEntity> machines,
     List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates,
-    {TabuRunStats? tabuStats}) {
+    {TabuRunStats? tabuStats, Tuple2<TimeOfDay, TimeOfDay>? workingSchedule}) {
 
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
@@ -140,7 +143,23 @@ Metrics  getMetricts(List<PlanningMachineEntity> machines,
     microseconds: totalEarliness.inMicroseconds ~/ jobCount,
   );
 
+  // Breakdown per machine / station / job. The shift is the plant's global
+  // one unless the caller passes another.
+  final usage = (earliestTaskStart != null && latestTaskEnd != null)
+      ? machineUsage(
+          machines,
+          from: earliestTaskStart,
+          to: latestTaskEnd,
+          shift: workingSchedule ?? Tuple2(START_SCHEDULE, END_SCHEDULE),
+        )
+      : const <MachineUsage>[];
+  final deliveries = jobDeliveries(machines, jobsDates);
+
   return Metrics(
+    machineUsage: usage,
+    stationUsage: stationUsage(usage),
+    jobDeliveries: deliveries,
+    stationTardiness: stationTardiness(deliveries),
     idle: idle.isNegative ? Duration.zero : idle,
     totalJobs: jobCount,
     maxDelay: maxTardiness,

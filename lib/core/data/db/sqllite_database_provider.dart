@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -414,6 +414,14 @@ class SQLLiteDatabaseProvider {
         batch.insert('dispatch_rules', {'dispatch_rule_id': 26, 'name': 'LWR'});
         batch.insert('dispatch_rules', {'dispatch_rule_id': 27, 'name': 'MWR'});
 
+        // Composite priority (1/CR + w/p; in FFS (w + 1)/route time). It was
+        // offered as GENETICS in these environments; GENETICS is now a real
+        // genetic algorithm everywhere (v14).
+        batch.insert('dispatch_rules', {
+          'dispatch_rule_id': 28,
+          'name': 'PRIORIDAD_COMPUESTA',
+        });
+
         // ─── Types × Rules ─────────────────────────────────────────────────────
         void addRule(int envId, int ruleId) {
           batch.insert('types_x_rules', {
@@ -449,25 +457,25 @@ class SQLLiteDatabaseProvider {
 
         // 4: Flexible Flow Shop
         for (final r in [
-          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24, 26, 27,
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24, 26, 27, 28,
         ]) {
           addRule(4, r);
         }
 
         // 5: Job Shop
-        for (final r in [1, 2, 3, 4, 5, 12, 13, 24, 26, 27]) {
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 24, 26, 27, 28]) {
           addRule(5, r);
         }
 
         // 6: Flexible Job Shop
-        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24, 26, 27]) {
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24, 26, 27, 28]) {
           addRule(6, r);
         }
 
         // 7: Open Shop, 8: Flexible Open Shop, 9: Recurrente,
         // 10: Flexible Recurrente
         for (final env in [7, 8, 9, 10]) {
-          for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+          for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27, 28]) {
             addRule(env, r);
           }
         }
@@ -1615,6 +1623,25 @@ class SQLLiteDatabaseProvider {
                 [environmentId, ruleId, environmentId, ruleId],
               );
             }
+          }
+        }
+
+        if (oldVersion < 14) {
+          // GENETICS is now a real genetic algorithm in every environment.
+          // The score it used to run in FFS, Job Shop, Open Shop and
+          // Recurrente keeps existing under its proper name.
+          await db.execute(
+            "INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) "
+            "VALUES (28, 'PRIORIDAD_COMPUESTA')",
+          );
+          for (final environmentId in const [4, 5, 6, 7, 8, 9, 10]) {
+            await db.execute(
+              'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+              'SELECT ?, ? WHERE NOT EXISTS ('
+              'SELECT 1 FROM types_x_rules '
+              'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+              [environmentId, 28, environmentId, 28],
+            );
           }
         }
       },

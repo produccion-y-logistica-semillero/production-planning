@@ -10,8 +10,8 @@ import 'package:production_planning/services/algorithms/flow_shop.dart';
 
 void main() {
   test('compute exact flow-shop MS segments with all interruptions', () {
-    final workingSchedule =
-        const Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 19, minute: 0));
+    const workingSchedule =
+        Tuple2(TimeOfDay(hour: 6, minute: 0), TimeOfDay(hour: 19, minute: 0));
 
     // Wednesday 2026-09-09, 06:00 start.
     final start = DateTime(2026, 9, 9, 6, 0);
@@ -45,12 +45,16 @@ void main() {
       1, // priority
       start, // availableDate
       const [Tuple2(1, m1), Tuple2(2, m2)],
-      {1: const Duration(minutes: 150), 2: const Duration(hours: 6, minutes: 30)},
+      {
+        1: const Duration(minutes: 150),
+        2: const Duration(hours: 6, minutes: 30)
+      },
     );
     final job2 = FlowShopInput(
       2,
       1,
-      DateTime(2026, 9, 12, 18, 0), // dueDate (looser -> higher slack -> goes second)
+      DateTime(2026, 9, 12, 18,
+          0), // dueDate (looser -> higher slack -> goes second)
       1,
       start,
       const [Tuple2(1, m1), Tuple2(2, m2)],
@@ -80,10 +84,12 @@ void main() {
         final segs = out.segmentsByMachine[machineId] ?? const [];
         print('  Máquina $machineId:');
         for (final s in setup) {
-          print('    [SETUP]  ${_fmt(s.start)} -> ${_fmt(s.end)} (${s.duration.inMinutes} min)');
+          print(
+              '    [SETUP]  ${_fmt(s.start)} -> ${_fmt(s.end)} (${s.duration.inMinutes} min)');
         }
         for (final s in segs) {
-          print('    [PROC ]  ${_fmt(s.start)} -> ${_fmt(s.end)} (${s.duration.inMinutes} min)');
+          print(
+              '    [PROC ]  ${_fmt(s.start)} -> ${_fmt(s.end)} (${s.duration.inMinutes} min)');
         }
       }
     }

@@ -52,7 +52,7 @@ void main() {
       final jobs = List.generate(
         4,
         (i) => job(i + 1, [
-          Tuple2(1, {10: const Duration(hours: 1), 11: const Duration(hours: 1)}),
+          const Tuple2(1, {10: Duration(hours: 1), 11: Duration(hours: 1)}),
         ]),
       );
 
@@ -88,16 +88,16 @@ void main() {
       // one machine per stage keeps that same order at every stage.
       final jobs = [
         job(1, [
-          Tuple2(1, {10: const Duration(minutes: 10)}),
-          Tuple2(2, {20: const Duration(hours: 3)}),
+          const Tuple2(1, {10: Duration(minutes: 10)}),
+          const Tuple2(2, {20: Duration(hours: 3)}),
         ]),
         job(2, [
-          Tuple2(1, {10: const Duration(minutes: 10)}),
-          Tuple2(2, {20: const Duration(hours: 2)}),
+          const Tuple2(1, {10: Duration(minutes: 10)}),
+          const Tuple2(2, {20: Duration(hours: 2)}),
         ]),
         job(3, [
-          Tuple2(1, {10: const Duration(minutes: 10)}),
-          Tuple2(2, {20: const Duration(minutes: 10)}),
+          const Tuple2(1, {10: Duration(minutes: 10)}),
+          const Tuple2(2, {20: Duration(minutes: 10)}),
         ]),
       ];
 
@@ -120,10 +120,10 @@ void main() {
           .value2
           .start;
 
-      final station1Order = [1, 2, 3]..sort(
-          (a, b) => station1Start(a).compareTo(station1Start(b)));
-      final station2Order = [1, 2, 3]..sort(
-          (a, b) => station2Start(a).compareTo(station2Start(b)));
+      final station1Order = [1, 2, 3]
+        ..sort((a, b) => station1Start(a).compareTo(station1Start(b)));
+      final station2Order = [1, 2, 3]
+        ..sort((a, b) => station2Start(a).compareTo(station2Start(b)));
 
       expect(station1Order, [1, 2, 3]);
       expect(station2Order, [1, 3, 2],
@@ -143,8 +143,10 @@ void main() {
 
       final jobs = [
         job(1, [
-          Tuple2(1, {10: const Duration(hours: 2)}),
-        ], interruptibleByTask: const {1: true}),
+          const Tuple2(1, {10: Duration(hours: 2)}),
+        ], interruptibleByTask: const {
+          1: true
+        }),
       ];
 
       final shop = FlexibleFlowShop(
@@ -160,8 +162,9 @@ void main() {
       expect(segments.length, greaterThan(1),
           reason: 'the maintenance window should split the operation');
       for (final s in segments) {
-        final overlapsMaintenance = s.start.isBefore(DateTime(2026, 1, 5, 8, 0)) &&
-            s.end.isAfter(DateTime(2026, 1, 5, 7, 0));
+        final overlapsMaintenance =
+            s.start.isBefore(DateTime(2026, 1, 5, 8, 0)) &&
+                s.end.isAfter(DateTime(2026, 1, 5, 7, 0));
         expect(overlapsMaintenance, isFalse,
             reason: 'no segment should run through the maintenance window');
       }
@@ -183,8 +186,10 @@ void main() {
       // block, rather than starting at 06:00 and being cut in two.
       final jobs = [
         job(1, [
-          Tuple2(1, {10: const Duration(hours: 1, minutes: 20)}),
-        ], interruptibleByTask: const {1: false}),
+          const Tuple2(1, {10: Duration(hours: 1, minutes: 20)}),
+        ], interruptibleByTask: const {
+          1: false
+        }),
       ];
 
       final shop = FlexibleFlowShop(
@@ -199,22 +204,23 @@ void main() {
       final segments = shop.output.single.segmentsByStation[1]!;
       expect(segments, hasLength(1),
           reason: 'a non-interruptible task must run as a single block');
-      expect(segments.single.start.isBefore(DateTime(2026, 1, 5, 8, 0)), isFalse);
+      expect(
+          segments.single.start.isBefore(DateTime(2026, 1, 5, 8, 0)), isFalse);
     });
 
     test('every dynamic rule is deterministic and schedules each op once', () {
       List<FlexibleFlowInput> buildJobs() => [
             job(1, [
-              Tuple2(1, {10: const Duration(minutes: 30)}),
-              Tuple2(2, {20: const Duration(hours: 1)}),
+              const Tuple2(1, {10: Duration(minutes: 30)}),
+              const Tuple2(2, {20: Duration(hours: 1)}),
             ]),
             job(2, [
-              Tuple2(1, {10: const Duration(hours: 1)}),
-              Tuple2(2, {20: const Duration(minutes: 30)}),
+              const Tuple2(1, {10: Duration(hours: 1)}),
+              const Tuple2(2, {20: Duration(minutes: 30)}),
             ]),
             job(3, [
-              Tuple2(1, {10: const Duration(hours: 2)}),
-              Tuple2(2, {20: const Duration(minutes: 15)}),
+              const Tuple2(1, {10: Duration(hours: 2)}),
+              const Tuple2(2, {20: Duration(minutes: 15)}),
             ]),
           ];
 
@@ -248,13 +254,13 @@ void main() {
 
         final firstTimes = {
           for (final o in first.output)
-            o.jobId: o.scheduling.map(
-                (k, v) => MapEntry(k, Tuple2(v.value1, v.value2.start))),
+            o.jobId: o.scheduling
+                .map((k, v) => MapEntry(k, Tuple2(v.value1, v.value2.start))),
         };
         final secondTimes = {
           for (final o in second.output)
-            o.jobId: o.scheduling.map(
-                (k, v) => MapEntry(k, Tuple2(v.value1, v.value2.start))),
+            o.jobId: o.scheduling
+                .map((k, v) => MapEntry(k, Tuple2(v.value1, v.value2.start))),
         };
         expect(firstTimes.length, secondTimes.length, reason: rule);
         for (final jobId in firstTimes.keys) {
@@ -268,7 +274,8 @@ void main() {
       }
     });
 
-    test('MS and CR both prefer the job with less slack once remaining '
+    test(
+        'MS and CR both prefer the job with less slack once remaining '
         'work is counted in', () {
       // Equal station-1 durations, so a plain SPT-style tie would fall back
       // to job id. Job 1's station-2 leg is much longer, which eats its
@@ -277,14 +284,20 @@ void main() {
       // it.
       final due = start.add(const Duration(hours: 8));
       final jobs = [
-        job(1, [
-          Tuple2(1, {10: const Duration(minutes: 30)}),
-          Tuple2(2, {20: const Duration(hours: 5)}),
-        ], due: due),
-        job(2, [
-          Tuple2(1, {10: const Duration(minutes: 30)}),
-          Tuple2(2, {20: const Duration(minutes: 10)}),
-        ], due: due),
+        job(
+            1,
+            [
+              const Tuple2(1, {10: Duration(minutes: 30)}),
+              const Tuple2(2, {20: Duration(hours: 5)}),
+            ],
+            due: due),
+        job(
+            2,
+            [
+              const Tuple2(1, {10: Duration(minutes: 30)}),
+              const Tuple2(2, {20: Duration(minutes: 10)}),
+            ],
+            due: due),
       ];
 
       for (final rule in ['MS', 'CR']) {
@@ -305,8 +318,9 @@ void main() {
             .scheduling[1]!
             .value2
             .start;
-        expect(station1Start.isBefore(station1StartOther) ||
-            station1Start.isAtSameMomentAs(start),
+        expect(
+            station1Start.isBefore(station1StartOther) ||
+                station1Start.isAtSameMomentAs(start),
             isTrue,
             reason: '$rule should start job 1 (the tighter one) first, '
                 'got job1=$station1Start job2=$station1StartOther');

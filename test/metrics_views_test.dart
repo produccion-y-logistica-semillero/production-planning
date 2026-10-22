@@ -66,7 +66,14 @@ void main() {
 
   group('widgets', () {
     final names = [
-      'EDD', 'SPT', 'LPT', 'FIFO', 'WSPT', 'MINSLACK', 'CR', 'ATCS',
+      'EDD',
+      'SPT',
+      'LPT',
+      'FIFO',
+      'WSPT',
+      'MINSLACK',
+      'CR',
+      'ATCS',
     ];
     final eight = [
       for (int i = 0; i < 8; i++)
@@ -92,7 +99,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('the table fits a 912 px window with 8 algorithms, no '
+    testWidgets(
+        'the table fits a 912 px window with 8 algorithms, no '
         'sideways scroll', (tester) async {
       await pumpAt(
         tester,
@@ -112,30 +120,31 @@ void main() {
       expect(find.text('ATCS'), findsOneWidget);
     });
 
-    for (final width in [1280.0, 912.0])
-    testWidgets('the dashboard lays out at $width px and switches metric',
-        (tester) async {
-      tester.view.physicalSize = Size(width, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: MetricsDashboard(
-            ruleNames: names,
-            metrics: eight,
-            onGantt: (_) {},
-            onDetail: (_) {},
+    for (final width in [1280.0, 912.0]) {
+      testWidgets('the dashboard lays out at $width px and switches metric',
+          (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MetricsDashboard(
+              ruleNames: names,
+              metrics: eight,
+              onGantt: (_) {},
+              onDetail: (_) {},
+            ),
           ),
-        ),
-      ));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(find.textContaining('Recomendado para estos objetivos'),
-          findsOneWidget);
+        ));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('Recomendado para estos objetivos'),
+            findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Ociosidad'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    });
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Ociosidad'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 }

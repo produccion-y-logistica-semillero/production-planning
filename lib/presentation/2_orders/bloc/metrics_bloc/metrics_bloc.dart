@@ -4,7 +4,6 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/presentation/2_orders/bloc/metrics_bloc/metrics_state.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/entities/tabu_params.dart';
-import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 
 class MetricsBloc extends Cubit<MetricsState> {
@@ -33,8 +32,9 @@ class MetricsBloc extends Cubit<MetricsState> {
       final ruleName = ev.value1.toString();
       final ruleValue = ev.value2;
 
-      final resp = await service.scheduleOrder(Tuple3(id, ruleValue, environment.name),tabuParams: tabuParams);
-
+      final resp = await service.scheduleOrder(
+          Tuple3(id, ruleValue, environment.name),
+          tabuParams: tabuParams);
 
       if (resp.isRight()) {
         final result = resp.getOrElse(() => null);
@@ -48,7 +48,7 @@ class MetricsBloc extends Cubit<MetricsState> {
         }
       }
     }
-        emit(MetricsLoadedState(metrics, ruleNames,
+    emit(MetricsLoadedState(metrics, ruleNames,
         schedules: schedules, ruleIds: ruleIds));
   }
 }

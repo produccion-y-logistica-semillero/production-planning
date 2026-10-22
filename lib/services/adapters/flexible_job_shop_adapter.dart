@@ -13,7 +13,6 @@ import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
-import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlexibleJobShopAdapter {

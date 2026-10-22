@@ -1,5 +1,4 @@
 import 'package:production_planning/entities/metrics.dart';
-import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 
 abstract class MetricsState {}
@@ -24,12 +23,9 @@ class MetricsLoadedState extends MetricsState {
     this.schedules = const [],
     this.ruleIds = const [],
   });
-
 }
-
 
 class MetricsErrorState extends MetricsState {
   final String message;
   MetricsErrorState(this.message);
 }
-

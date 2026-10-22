@@ -6,9 +6,13 @@ import 'package:production_planning/entities/task_entity.dart';
 /// Returns the explicit Duration for [job]-[taskId]-[machine] when available.
 /// Tries the following fallbacks in order:
 /// 1. inner[machine.id]
-/// 2. inner[machine.machineTypeId]
-/// 3. if inner has exactly one entry, return that value
-/// 4. null if nothing found
+/// 2. if inner has exactly one entry, return that value (orders saved before
+///    the job form stored one entry per machine of the station)
+/// 3. null if nothing found
+///
+/// There used to be a lookup by `machine.machineTypeId` between the two. The
+/// map is keyed by machine id, so that lookup compared ids of two different
+/// tables and could return another machine's time.
 MachineTimes? getExplicitMachineTimes(
     JobEntity job, int taskId, MachineEntity machine) {
   if (job.taskMachineTimes == null) return null;
@@ -20,18 +24,61 @@ MachineTimes? getExplicitMachineTimes(
     return inner[machine.id];
   }
 
-  // 2. Try machineTypeId
-  if (machine.machineTypeId != null &&
-      inner.containsKey(machine.machineTypeId)) {
-    return inner[machine.machineTypeId];
-  }
-
-  // 3. If only one mapping exists, return it (best-effort)
+  // 2. If only one mapping exists, return it (legacy rows)
   if (inner.length == 1) {
     return inner.values.first;
   }
 
   return null;
+}
+
+/// Minutes [task] takes on [machine] before the user types anything: the
+/// task's own time scaled by the machine's processing percentage (100, or a
+/// non-positive value, means "identical machine": the time as is).
+int nominalTaskMinutesOn(TaskEntity task, MachineEntity machine) {
+  final int base = task.processingUnits.inMinutes;
+  final double pct = machine.processingPercentage;
+  if (pct == 100 || pct <= 0) return base;
+  return (base * pct / 100).round();
+}
+
+/// The per-machine times of ONE task of a job, as the job form keeps them:
+/// one entry for EVERY machine of the task's station, keyed by machine id.
+///
+/// The form used to keep a single entry per task (the "selected" machine),
+/// so typing a time for a second machine of the station erased the first
+/// one, and the scheduler then applied that lone entry to every machine.
+///
+/// [saved] is what the job already has for this task (null for a new job).
+/// A saved entry always wins. A machine with no saved entry gets:
+///  * the single saved value, when [saved] has exactly one entry — orders
+///    stored in the old one-entry format were scheduled with that value on
+///    every machine, and reopening one must not change its schedule;
+///  * [nominalTaskMinutesOn] otherwise.
+/// Entries of machines that are no longer in [stationMachines] are dropped.
+Map<int, Map<String, int>> seedTaskMachineMinutes({
+  required TaskEntity task,
+  required List<MachineEntity> stationMachines,
+  Map<int, Map<String, int>>? saved,
+}) {
+  final int? legacyMinutes = (saved != null && saved.length == 1)
+      ? saved.values.first['processing']
+      : null;
+
+  final result = <int, Map<String, int>>{};
+  for (final machine in stationMachines) {
+    final int? id = machine.id;
+    if (id == null) continue;
+    final int minutes = saved?[id]?['processing'] ??
+        legacyMinutes ??
+        nominalTaskMinutesOn(task, machine);
+    result[id] = {
+      'processing': minutes,
+      'preparation': 0, // setup comes from the setup matrix
+      'rest': 0, // rest is the machine's own policy
+    };
+  }
+  return result;
 }
 
 /// Returns the explicit processing Duration for [job]-[taskId]-[machine] when available.
@@ -54,8 +101,75 @@ bool resolveInterruptible(JobEntity job, TaskEntity task, int machineId) {
   return task.allowPreemption;
 }
 
+/// Longest "continuous processing before a rest" that still means anything:
+/// the scheduling horizon (366 days, see PreemptionEngine.maxHorizonDays), in
+/// minutes. A cap at or beyond it can never bind.
+const int maxContinuousCapacityMinutes = 366 * 24 * 60;
+
+/// The automatic-rest policy of [machine] as every algorithm expects it:
+/// minutes of continuous processing before a rest, and how long the rest is.
+///
+/// "No rest" — the machine form's "No aplica descanso automático" — comes
+/// back as capacity 0 and a zero rest, which the preemption engine treats as
+/// no cap at all. That is the case when the capacity is 0 or negative, when
+/// the rest is 0 or negative, or when the capacity is at or beyond the
+/// scheduling horizon (a "very large value" typed to mean the same thing —
+/// kept out of `Duration(minutes:)`, which overflows for absurd inputs).
+///
+/// Every adapter reads the policy through here. They used to disagree: Job
+/// Shop and Flexible Job Shop turned a zero rest into one hour, the others
+/// passed it on and the engine then inserted a one-minute pause at each cap.
+({int capacityMinutes, Duration rest}) machineRestPolicy(
+    MachineEntity machine) {
+  final int capacity = machine.continueCapacity;
+  // rest_percentage stores the rest as a percentage of one hour.
+  final int restMinutes = (60 * machine.restPercentage / 100).round();
+  if (capacity <= 0 ||
+      capacity >= maxContinuousCapacityMinutes ||
+      restMinutes <= 0) {
+    return (capacityMinutes: 0, rest: Duration.zero);
+  }
+  return (capacityMinutes: capacity, rest: Duration(minutes: restMinutes));
+}
+
 String _normalizeMachineName(String machineName) {
   return machineName.trim().toLowerCase();
+}
+
+/// [machines] ordered by id (machines without one last), so "the first
+/// sibling with its own entry" is always the same machine.
+List<MachineEntity> _byId(List<MachineEntity> machines) =>
+    List<MachineEntity>.from(machines)
+      ..sort((a, b) => (a.id ?? 1 << 30).compareTo(b.id ?? 1 << 30));
+
+/// Where a machine's setup matrix (or initial state) comes from — the same
+/// rule [buildMachineStateSetupMatrix] and [resolveMachineInitialStates]
+/// apply, exposed for the order screen so it can show it to the user.
+///
+/// [stationMachines] are every machine of ONE station (same machine type).
+/// [namesWithOwnEntry] are the machine names that have their own entry.
+/// Returns, per machine name of the station: the machine's own name when it
+/// has its own entry, the name of the sibling it inherits from otherwise
+/// (the lowest-id sibling with its own entry), or null when no machine of
+/// the station has one.
+Map<String, String?> stationDefaultSource(
+  List<MachineEntity> stationMachines,
+  Set<String> namesWithOwnEntry,
+) {
+  final own = {for (final n in namesWithOwnEntry) _normalizeMachineName(n)};
+  String? fallback;
+  for (final machine in _byId(stationMachines)) {
+    if (own.contains(_normalizeMachineName(machine.name))) {
+      fallback = machine.name;
+      break;
+    }
+  }
+  return {
+    for (final machine in stationMachines)
+      machine.name: own.contains(_normalizeMachineName(machine.name))
+          ? machine.name
+          : fallback,
+  };
 }
 
 /// Converts an order-level setup matrix keyed by machine name into a matrix keyed by machine id.
@@ -96,9 +210,11 @@ Map<int, Map<String, Map<String, int>>>? buildMachineStateSetupMatrix(
   // registered for another machine of the SAME machine type — the station's
   // default — instead of always getting zero setup. Only machines that
   // matched nothing above are filled this way; an explicit match always
-  // wins.
+  // wins. When several siblings have their own matrix, the one with the
+  // LOWEST machine id is the default (see [stationDefaultSource]), so the
+  // result does not depend on the order machines were loaded in.
   final Map<int, Map<String, Map<String, int>>> defaultByType = {};
-  for (final machine in machines) {
+  for (final machine in _byId(machines)) {
     final typeId = machine.machineTypeId;
     if (machine.id == null || typeId == null) continue;
     final own = result[machine.id!];
@@ -149,7 +265,7 @@ Map<int, String> resolveMachineInitialStates(
   }
 
   final Map<int, String> defaultByType = {};
-  for (final machine in machines) {
+  for (final machine in _byId(machines)) {
     final typeId = machine.machineTypeId;
     if (machine.id == null || typeId == null) continue;
     final own = result[machine.id!];

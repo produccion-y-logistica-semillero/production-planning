@@ -17,6 +17,7 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flow_shop.dart';
 import '../../entities/machine_entity.dart';
+import 'package:production_planning/services/environment_detection.dart';
 import '../../shared/utils/task_time_utils.dart';
 
 class FlowShopAdapter {
@@ -65,7 +66,9 @@ class FlowShopAdapter {
       final Map<int, Duration> taskTimes = {};
       final List<Tuple2<int, int>> taskSequence = [];
       final Map<int, bool> interruptibleByTask = {};
-      for (final task in job.sequence!.tasks!) {
+      // Stations in the order the ARROWS give, not the order the tasks were
+      // created in the route editor (which is the list order).
+      for (final task in orderedTasks(job.sequence!)) {
         final machineOfTask =
             machines.firstWhere((m) => m.machineTypeId == task.machineTypeId);
         final explicit =
@@ -112,9 +115,9 @@ class FlowShopAdapter {
     for (final m in machines) {
       if (m.id == null) continue;
       machineInactivitiesMap[m.id!] = m.scheduledInactivities;
-      machineContinueCapacityMap[m.id!] = m.continueCapacity;
-      machineRestTimeMap[m.id!] =
-          Duration(minutes: (60 * m.restPercentage / 100).round());
+      final restPolicy = machineRestPolicy(m);
+      machineContinueCapacityMap[m.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[m.id!] = restPolicy.rest;
     }
 
     final output = FlowShop(

@@ -68,6 +68,34 @@ enum DispatchCriterion {
   /// Highest ATCS index first (Lee, Bhaskaran & Pinedo, 1997). Needs
   /// [AtcsParameters]. See [atcsLogIndex].
   atcs,
+
+  /// Least work remaining first: the job with the least NOMINAL processing
+  /// still to do, this operation included. See [workRemaining].
+  lwr,
+
+  /// Most work remaining first. See [workRemaining].
+  mwr,
+
+  // ── Static rules inside an operation-level dispatch loop ─────────────────
+  //
+  // In Flexible Flow Shop, Job Shop and Flexible Job Shop a static rule is
+  // still applied queue by queue — at each station, among the operations
+  // that can start — but its index is the fixed, NOMINAL attribute of the
+  // operation, blind to setups and interruptions. That is the only thing
+  // that separates SPT from SPT_ADAPTADO there.
+
+  /// Shortest nominal processing time of the operation first.
+  sptNominal,
+
+  /// Longest nominal processing time of the operation first.
+  lptNominal,
+
+  /// Highest priority per minute of nominal processing time first.
+  wsptNominal,
+
+  /// First to ARRIVE at this queue first (see [DispatchCandidate.arrival]);
+  /// ties broken by release date.
+  fifoArrival,
 }
 
 /// One job simulated at a decision time, with everything the criteria need.
@@ -110,6 +138,17 @@ class DispatchCandidate<T> {
   /// slack-based criteria charge it against the due date.
   final Duration remainingWork;
 
+  /// NOMINAL processing time of this candidate on its machine — what the
+  /// user registered, with no setup and no interruption. Read by the static
+  /// criteria and by LWR/MWR; the dynamic ones read [span] instead.
+  final Duration processing;
+
+  /// When the operation joined the queue it is waiting in: the job's
+  /// release for its first operation, the completion of its predecessors
+  /// afterwards. Null means "the release date". Read by
+  /// [DispatchCriterion.fifoArrival].
+  final DateTime? arrival;
+
   const DispatchCandidate({
     required this.job,
     required this.start,
@@ -121,6 +160,8 @@ class DispatchCandidate<T> {
     required this.jobId,
     this.setup = Duration.zero,
     this.remainingWork = Duration.zero,
+    this.processing = Duration.zero,
+    this.arrival,
   });
 }
 
@@ -318,9 +359,9 @@ double atcsLogIndex<T>(DispatchCandidate<T> c, AtcsParameters params) {
 
 /// Earliest release date among [pending], or null when it is empty.
 ///
-/// Used to advance the clock when nothing is released yet at the current
-/// decision time — without it the dispatch loop would spin forever on a set
-/// of jobs that are all still in the future.
+/// [selectNext] already folds releases into each job's effective start, so
+/// the dispatch loops only use this to seed their clock at the first
+/// release.
 DateTime? earliestRelease<T>(
   List<T> pending,
   DateTime Function(T) releaseTime,
@@ -335,25 +376,59 @@ DateTime? earliestRelease<T>(
   return earliest;
 }
 
-/// Picks the next job to schedule at [decisionTime].
+/// The instant a dispatch loop at clock [decisionTime] should simulate [job]
+/// from: the clock itself, or the job's release if that is later.
 ///
-/// Only jobs whose release date has passed compete. Each of those is handed
-/// to [evaluate], which must simulate it WITHOUT committing anything — the
+/// Callers re-simulate the winner of [selectNext] from exactly this instant
+/// when they commit it, so what is committed is what was judged.
+DateTime evaluationTime<T>(
+  T job,
+  DateTime decisionTime,
+  DateTime Function(T) releaseTime,
+) {
+  final DateTime release = releaseTime(job);
+  return release.isAfter(decisionTime) ? release : decisionTime;
+}
+
+/// Picks the next job to schedule when the machine frees up at
+/// [decisionTime], as a NON-DELAY schedule generator (Giffler & Thompson,
+/// 1960; Baker, 1974, ch. 7) built on EFFECTIVE start times:
+///
+///   1. Every pending job is simulated by [evaluate] from
+///      `max(decisionTime, release)` — see [evaluationTime]. The simulation
+///      runs through the PreemptionEngine, so the candidate's `start` is
+///      when the machine could REALLY begin it: after the release, after
+///      any shift end or maintenance window, and after waiting for a window
+///      long enough for a non-interruptible task (with its setup).
+///   2. `t* = min start` over all of them.
+///   3. Only the jobs that can start exactly at `t*` compete, and the rule
+///      ([criterion]) chooses among them, evaluated at `t*`.
+///
+/// This answers "what if the job the rule prefers cannot start at t?": it
+/// does not get to hold the machine; the next candidate that CAN start at t
+/// is taken instead. And if no candidate can start at t at all, the clock
+/// effectively jumps to `t*`, the earliest effective start — which may be a
+/// job's release, the end of a maintenance window, the next shift, or the
+/// next window that fits an uninterruptible block, whichever comes first.
+/// The release gate is implied: a job released after `t*` can never start
+/// at `t*`.
+///
+/// [evaluate] must simulate WITHOUT committing anything — the
 /// PreemptionEngine is a pure function of its arguments, so simulating is
-/// just calling `computeSegments` and not writing the result back.
+/// just calling it and not writing the result back.
 ///
 /// [atcs] is required when [criterion] is [DispatchCriterion.atcs] and
 /// ignored otherwise.
 ///
-/// Returns null when [pending] is empty, when nothing is released yet (the
-/// caller should then advance its clock via [earliestRelease]), or when no
-/// released candidate turned out to be schedulable.
+/// Returns null only when [pending] is empty or no job is schedulable.
+/// The returned candidate's `span` is re-measured from `t*`, so every
+/// competitor was compared from the same instant.
 ///
 /// A candidate whose simulation throws [SchedulingHorizonException] is
 /// dropped rather than allowed to abort the whole schedule: one job with an
-/// impossible calendar should not sink the other twenty. If EVERY released
-/// candidate fails that way the exception is rethrown, because then the
-/// configuration really is unschedulable and silence would be worse.
+/// impossible calendar should not sink the other twenty. If EVERY candidate
+/// fails that way the exception is rethrown, because then the configuration
+/// really is unschedulable and silence would be worse.
 DispatchCandidate<T>? selectNext<T>({
   required List<T> pending,
   required DateTime decisionTime,
@@ -367,39 +442,143 @@ DispatchCandidate<T>? selectNext<T>({
   }
   if (pending.isEmpty) return null;
 
-  DispatchCandidate<T>? best;
+  final evaluated = <DispatchCandidate<T>>[];
   SchedulingHorizonException? firstFailure;
-  int releasedCount = 0;
 
   for (final job in pending) {
-    if (releaseTime(job).isAfter(decisionTime)) continue;
-    releasedCount++;
-
     final DispatchCandidate<T>? candidate;
     try {
-      candidate = evaluate(job, decisionTime);
+      candidate =
+          evaluate(job, evaluationTime(job, decisionTime, releaseTime));
     } on SchedulingHorizonException catch (e) {
       firstFailure ??= e;
       continue;
     }
-    if (candidate == null) continue;
+    if (candidate != null) evaluated.add(candidate);
+  }
 
+  if (evaluated.isEmpty) {
+    // Every job failed for the same structural reason — the calendar, not
+    // this particular job. Surface it instead of returning null, which the
+    // caller would read as "nothing left" and silently drop the jobs.
+    if (firstFailure != null) throw firstFailure;
+    return null;
+  }
+
+  // t*: the earliest instant any job can really start.
+  DateTime earliestStart = evaluated.first.start;
+  for (final c in evaluated) {
+    if (c.start.isBefore(earliestStart)) earliestStart = c.start;
+  }
+
+  DispatchCandidate<T>? best;
+  for (final c in evaluated) {
+    if (!c.start.isAtSameMomentAs(earliestStart)) continue;
+    final DispatchCandidate<T> atStar = _measuredFrom(c, earliestStart);
     if (best == null ||
-        compareCandidates(criterion, candidate, best,
-                decisionTime: decisionTime, atcs: atcs) <
+        compareCandidates(criterion, atStar, best,
+                decisionTime: earliestStart, atcs: atcs) <
             0) {
-      best = candidate;
+      best = atStar;
     }
   }
+  return best;
+}
 
-  // Every released job failed for the same structural reason — the calendar,
-  // not this particular job. Surface it instead of returning null, which the
-  // caller would read as "nothing is ready yet" and loop on.
-  if (best == null && firstFailure != null && releasedCount > 0) {
-    throw firstFailure;
+/// [c] with its span re-measured from [at] (never negative).
+DispatchCandidate<T> _measuredFrom<T>(DispatchCandidate<T> c, DateTime at) {
+  final Duration span = c.end.difference(at);
+  return DispatchCandidate(
+    job: c.job,
+    start: c.start,
+    end: c.end,
+    span: span.isNegative ? Duration.zero : span,
+    dueDate: c.dueDate,
+    releaseDate: c.releaseDate,
+    priority: c.priority,
+    jobId: c.jobId,
+    setup: c.setup,
+    remainingWork: c.remainingWork,
+    processing: c.processing,
+    arrival: c.arrival,
+  );
+}
+
+/// LWR / MWR index: nominal work the job still has to do, counting the
+/// operation being dispatched — `p_now + Σ p_later` (Baker, 1974; Pinedo,
+/// *Scheduling*, ch. 14). Nominal on purpose: the rule is about how much of
+/// the route is left, not about what the calendar does to it.
+Duration workRemaining<T>(DispatchCandidate<T> c) =>
+    c.processing + c.remainingWork;
+
+/// Orders two (operation, machine) pairings of the SAME operation: which
+/// machine should run it. Negative when [a]'s machine is preferred.
+///
+/// Earliest completion time (ECT) — setup out of the machine's current
+/// state, processing at that machine's own speed, and every interruption —
+/// then the cheaper changeover, then the lowest machine id.
+int compareMachineChoice<T>(
+  DispatchCandidate<T> a,
+  int machineA,
+  DispatchCandidate<T> b,
+  int machineB,
+) {
+  int cmp = a.end.compareTo(b.end);
+  if (cmp != 0) return cmp;
+  cmp = a.setup.compareTo(b.setup);
+  if (cmp != 0) return cmp;
+  return machineA.compareTo(machineB);
+}
+
+/// The conflict set of one round of an operation-level NON-DELAY dispatch
+/// (Flexible Flow Shop, Job Shop, Flexible Job Shop, Open Shop), with the
+/// machine of each operation already chosen.
+///
+/// [pairings] holds every (ready operation × eligible machine) priced
+/// through the preemption engine. Two separate decisions are taken:
+///
+///   1. `t*` is the earliest EFFECTIVE start over all pairings. Only the
+///      pairings that start at `t*` survive — a machine that is busy, in
+///      maintenance, or cannot fit a non-interruptible block until later is
+///      not "available" and does not compete.
+///   2. WHICH MACHINE: for each operation, among its machines available at
+///      `t*`, the one chosen by [compareMachineChoice] (ECT).
+///
+/// The caller then applies the dispatch rule to the returned list — one
+/// pairing per operation — to decide WHICH OPERATION goes next.
+///
+/// Keeping the two apart matters. They used to be one sort — start, then
+/// the job rule over every pairing — so the job rule also picked the
+/// machine: LPT sent the operation to its SLOWEST machine, minimum slack to
+/// the one finishing later, and EDD/FIFO, which cannot tell two machines of
+/// one job apart, to whichever the sort happened to leave first.
+List<P> nonDelayConflictSet<P, T>(
+  List<P> pairings, {
+  required Object Function(P) operationKey,
+  required DispatchCandidate<T> Function(P) candidate,
+  required int Function(P) machineId,
+}) {
+  if (pairings.isEmpty) return const [];
+
+  DateTime earliestStart = candidate(pairings.first).start;
+  for (final p in pairings) {
+    final DateTime start = candidate(p).start;
+    if (start.isBefore(earliestStart)) earliestStart = start;
   }
 
-  return best;
+  final Map<Object, P> bestByOperation = {};
+  for (final p in pairings) {
+    if (!candidate(p).start.isAtSameMomentAs(earliestStart)) continue;
+    final Object key = operationKey(p);
+    final P? best = bestByOperation[key];
+    if (best == null ||
+        compareMachineChoice(
+                candidate(p), machineId(p), candidate(best), machineId(best)) <
+            0) {
+      bestByOperation[key] = p;
+    }
+  }
+  return bestByOperation.values.toList();
 }
 
 /// Orders two candidates under [criterion]: negative when [a] goes first.
@@ -449,6 +628,27 @@ int compareCandidates<T>(
     case DispatchCriterion.atcs:
       if (atcs == null) throw ArgumentError.notNull('atcs');
       cmp = atcsLogIndex(b, atcs).compareTo(atcsLogIndex(a, atcs));
+      break;
+    case DispatchCriterion.lwr:
+      cmp = workRemaining(a).compareTo(workRemaining(b));
+      break;
+    case DispatchCriterion.mwr:
+      cmp = workRemaining(b).compareTo(workRemaining(a));
+      break;
+    case DispatchCriterion.sptNominal:
+      cmp = a.processing.compareTo(b.processing);
+      break;
+    case DispatchCriterion.lptNominal:
+      cmp = b.processing.compareTo(a.processing);
+      break;
+    case DispatchCriterion.wsptNominal:
+      final double wa = a.priority / _spanMinutes(a.processing);
+      final double wb = b.priority / _spanMinutes(b.processing);
+      cmp = wb.compareTo(wa);
+      break;
+    case DispatchCriterion.fifoArrival:
+      cmp = (a.arrival ?? a.releaseDate).compareTo(b.arrival ?? b.releaseDate);
+      if (cmp == 0) cmp = a.releaseDate.compareTo(b.releaseDate);
       break;
   }
   if (cmp != 0) return cmp;

@@ -31,12 +31,18 @@ class MachinesListPage extends StatelessWidget {
                       content:
                           "Aca puedes manejar los tipos de maquinas que tienes, un tipo de maquina es un tipo generico no asociado a una maquina fisica, sino a la categoria de la misma, asi como Horno, Microondas, Nevera.\n\nCada tipo de maquina tendra sus maquinas fisicas especificas con sus capacidades, asi como Hornos de hasta 200 grados, hornos que calientan en 1 minuto, mientras otros en 10 minutos"),
                   icon: const Icon(Icons.info)),
-              Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 60, vertical: 10),
+              // The button shrinks with the screen: a fixed 60 px side
+              // margin plus its label used to overflow on a phone.
+              Flexible(
+                child: Container(
+                margin: EdgeInsets.symmetric(
+                    horizontal:
+                        MediaQuery.sizeOf(context).width < 600 ? 12 : 60,
+                    vertical: 10),
                 child: TextButton.icon(
                   label: Text(
                     "Agregar estacion de trabajo",
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: onSecondaryContainer),
                   ),
                   icon: Icon(
@@ -52,7 +58,8 @@ class MachinesListPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10))),
                   ),
                 ),
-              )
+              ),
+              ),
             ],
           ),
           BlocBuilder<MachineTypesBloc, MachineTypeState>(

@@ -117,18 +117,9 @@ class FlexibleJobShopAdapter {
     final Map<int, Duration?> machineRestTimeMap = {};
     for (final machine in machines) {
       machineInactivitiesMap[machine.id!] = machine.scheduledInactivities;
-      machineContinueCapacityMap[machine.id!] = machine.continueCapacity;
-      // Calculate rest duration directly (if percentage != 100, scale it)
-      if (machine.restPercentage == 100 || machine.restPercentage <= 0) {
-        // Standard rest: 1 hour as base
-        machineRestTimeMap[machine.id!] = const Duration(hours: 1);
-      } else {
-        // Non-standard rest: scale 1 hour by machine percentage
-        final ratio = machine.restPercentage / 100.0;
-        final scaledMillis =
-            (const Duration(hours: 1).inMilliseconds * ratio).round();
-        machineRestTimeMap[machine.id!] = Duration(milliseconds: scaledMillis);
-      }
+      final restPolicy = machineRestPolicy(machine);
+      machineContinueCapacityMap[machine.id!] = restPolicy.capacityMinutes;
+      machineRestTimeMap[machine.id!] = restPolicy.rest;
     }
 
     final Map<int, Map<String, Map<String, int>>>? stateSetupMatrix =

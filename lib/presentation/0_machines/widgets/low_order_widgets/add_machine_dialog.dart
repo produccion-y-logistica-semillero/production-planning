@@ -57,6 +57,30 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
   final List<bool> _weekdaySelections =
       List<bool>.filled(Weekday.values.length, false);
 
+  /// "No aplica descanso automático". While set, both controllers hold "0",
+  /// which is how a machine without a rest policy is stored.
+  late bool _noAutomaticRest;
+
+  @override
+  void initState() {
+    super.initState();
+    final capacity = int.tryParse(widget.continueController.text.trim()) ?? 0;
+    _noAutomaticRest = capacity <= 0;
+  }
+
+  void _setNoAutomaticRest(bool value) {
+    setState(() {
+      _noAutomaticRest = value;
+      if (value) {
+        widget.continueController.text = '0';
+        widget.restTimeController.text = '0';
+      } else {
+        widget.continueController.clear();
+        widget.restTimeController.clear();
+      }
+    });
+  }
+
   @override
   void dispose() {
     _scheduledNameController.dispose();
@@ -175,21 +199,34 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Define el tiempo máximo de procesamiento continuo que la máquina '
-          'puede realizar antes de tomar un descanso y la duración en minutos '
-          'de esa pausa.',
+          'Define cuántos minutos de procesamiento continuo puede realizar '
+          'la máquina antes de tomar un descanso y la duración en minutos de '
+          'esa pausa. Si la máquina no descansa, marca "No aplica".',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 16),
+        CheckboxListTile(
+          value: _noAutomaticRest,
+          onChanged: (value) => _setNoAutomaticRest(value ?? false),
+          title: const Text('No aplica descanso automático'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+        ),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: widget.continueController,
+                enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Tiempo máximo de procesamiento continuo',
-                  hintText: 'Ej. 4',
+                  labelText: 'Procesamiento continuo (minutos)',
+                  hintText: 'Ej. 240',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -199,9 +236,14 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
             Expanded(
               child: TextField(
                 controller: widget.restTimeController,
+                enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Minutos de descanso',
+                  labelText: 'Descanso (minutos)',
                   hintText: 'Ej. 15',
                   border: OutlineInputBorder(),
                   isDense: true,

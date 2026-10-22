@@ -93,8 +93,9 @@ void main() {
       expect(picked!.jobId, 2);
     });
 
-    test('nothing released yet returns null, and earliestRelease says when',
-        () {
+    test(
+        'nothing released yet: the clock jumps to the earliest effective '
+        'start instead of returning null', () {
       final pending = [
         _Job(
           id: 1,
@@ -118,10 +119,11 @@ void main() {
         criterion: DispatchCriterion.spt,
       );
 
-      expect(picked, isNull);
-      // This is what stops the dispatch loop from spinning: the caller jumps
-      // the clock to the next release instead of asking again at the same
-      // instant forever.
+      // Non-delay on effective starts: nobody can start at t0, so t* is the
+      // earliest instant anyone can — job 2's release — and job 2 is the
+      // only one that can start then. The dispatch loop never spins.
+      expect(picked!.jobId, 2);
+      expect(picked.start, t0.add(const Duration(hours: 2)));
       expect(
         earliestRelease(pending, (j) => j.release),
         t0.add(const Duration(hours: 2)),
@@ -140,6 +142,105 @@ void main() {
         isNull,
       );
       expect(earliestRelease<_Job>(const [], (j) => j.release), isNull);
+    });
+  });
+
+  group('non-delay on effective start (interruptions)', () {
+    // Stand-in for an interruption: [held] cannot start before [heldUntil]
+    // (e.g. non-interruptible and the shift ends too soon), whatever the
+    // clock says.
+    DispatchCandidate<_Job>? Function(_Job, DateTime) heldBack(
+            int held, DateTime heldUntil) =>
+        (job, at) {
+          final DateTime start =
+              job.id == held && heldUntil.isAfter(at) ? heldUntil : at;
+          return DispatchCandidate(
+            job: job,
+            start: start,
+            end: start.add(job.span),
+            span: start.add(job.span).difference(at),
+            dueDate: job.due,
+            releaseDate: job.release,
+            priority: job.priority,
+            jobId: job.id,
+          );
+        };
+
+    test(
+        "the rule's favourite cannot start at t: the next candidate that can "
+        'takes the machine', () {
+      // EDD prefers job 1 (earlier due date), but an interruption holds it
+      // until tomorrow; job 2 can run right now.
+      final urgent = _Job(
+          id: 1,
+          release: t0,
+          due: DateTime(2026, 1, 6),
+          span: const Duration(hours: 5));
+      final other = _Job(
+          id: 2,
+          release: t0,
+          due: DateTime(2026, 1, 9),
+          span: const Duration(hours: 1));
+
+      final picked = selectNext<_Job>(
+        pending: [urgent, other],
+        decisionTime: t0,
+        releaseTime: (j) => j.release,
+        evaluate: heldBack(1, t0.add(const Duration(hours: 24))),
+        criterion: DispatchCriterion.edd,
+      );
+
+      expect(picked!.jobId, 2);
+      expect(picked.start, t0);
+    });
+
+    test('no candidate can start at t: the clock jumps to the earliest one',
+        () {
+      final a = _Job(
+          id: 1, release: t0, due: due, span: const Duration(hours: 1));
+      final b = _Job(
+          id: 2, release: t0, due: due, span: const Duration(hours: 1));
+
+      // Both held back, b less so.
+      final picked = selectNext<_Job>(
+        pending: [a, b],
+        decisionTime: t0,
+        releaseTime: (j) => j.release,
+        evaluate: (job, at) {
+          final hold =
+              job.id == 1 ? const Duration(hours: 5) : const Duration(hours: 3);
+          return heldBack(job.id, t0.add(hold))(job, at);
+        },
+        criterion: DispatchCriterion.spt,
+      );
+
+      expect(picked!.jobId, 2);
+      expect(picked.start, t0.add(const Duration(hours: 3)));
+      // Span re-measured from t*, not from the old clock.
+      expect(picked.span, const Duration(hours: 1));
+    });
+
+    test('a job released between t and t* competes at t*', () {
+      // Job 1 is released, but held back 4h; job 2 is released at +2h and
+      // can run then — earlier than job 1 could.
+      final held =
+          _Job(id: 1, release: t0, due: due, span: const Duration(minutes: 30));
+      final late = _Job(
+          id: 2,
+          release: t0.add(const Duration(hours: 2)),
+          due: due,
+          span: const Duration(hours: 3));
+
+      final picked = selectNext<_Job>(
+        pending: [held, late],
+        decisionTime: t0,
+        releaseTime: (j) => j.release,
+        evaluate: heldBack(1, t0.add(const Duration(hours: 4))),
+        criterion: DispatchCriterion.spt,
+      );
+
+      expect(picked!.jobId, 2);
+      expect(picked.start, t0.add(const Duration(hours: 2)));
     });
   });
 

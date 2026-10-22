@@ -85,10 +85,18 @@ class _FlowShopPlacement {
   /// New continuous-use streak per machine this route touched.
   final Map<int, Duration> continuousUsageAfter;
 
+  /// When the job leaves its FIRST station, and the changeover it paid
+  /// there. The processing-time rules of a permutation flow shop are read
+  /// on the first station only (see `FlowShop._firstStageTime`).
+  final DateTime firstStageEnd;
+  final Duration firstStageSetup;
+
   const _FlowShopPlacement({
     required this.job,
     required this.startTime,
     required this.endTime,
+    required this.firstStageEnd,
+    required this.firstStageSetup,
     required this.scheduling,
     required this.segmentsByMachine,
     required this.setupSegmentsByMachine,
@@ -201,6 +209,12 @@ class FlowShop {
       case "ATCS":
         atcRule();
         break;
+      case "LWR":
+        lwrRule();
+        break;
+      case "MWR":
+        mwrRule();
+        break;
       case "GENETICS":
         scheduleGeneticAlgorithm();
         break;
@@ -213,18 +227,29 @@ class FlowShop {
   /* ---------- Rules (dispatching / sequencing) ---------- */
 
   void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
+  // SPT, LPT and WSPT read the FIRST station's time — see _firstStageTime.
   void sptRule() => _schedule(
-        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+        (a, b) => _firstStageTime(a).compareTo(_firstStageTime(b)),
       );
   void lptRule() => _schedule(
-        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+        (a, b) => _firstStageTime(b).compareTo(_firstStageTime(a)),
       );
   void fifoRule() => _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
   void wsptRule() => _schedule((a, b) {
-        double wsptA = a.priority / max(1, _totalProcessingTime(a));
-        double wsptB = b.priority / max(1, _totalProcessingTime(b));
+        double wsptA = a.priority / max(1, _firstStageTime(a));
+        double wsptB = b.priority / max(1, _firstStageTime(b));
         return wsptB.compareTo(wsptA);
       });
+
+  // LWR / MWR: work remaining when the job enters the line is its whole
+  // route, and the permutation is then kept, so one sort by total nominal
+  // work is the rule.
+  void lwrRule() => _schedule(
+        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
+      );
+  void mwrRule() => _schedule(
+        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
+      );
 
   // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
   //
@@ -253,7 +278,12 @@ class FlowShop {
   void atcRule() => _runDynamic(DispatchCriterion.atcs);
 
   void _schedule(int Function(FlowShopInput, FlowShopInput) comparator) {
-    inputJobs.sort(comparator);
+    // List.sort is not stable: ties go to the lowest job id so two runs
+    // over the same order cannot disagree.
+    inputJobs.sort((a, b) {
+      final int cmp = comparator(a, b);
+      return cmp != 0 ? cmp : a.jobId.compareTo(b.jobId);
+    });
     for (var job in inputJobs) {
       _assignJobToMachines(job);
     }
@@ -274,6 +304,17 @@ class FlowShop {
         criterion == DispatchCriterion.atcs ? _atcsParameters() : null;
     final sequenced = <FlowShopInput>[];
 
+    // The processing-time rules are read on the FIRST station, like their
+    // static counterparts (see _firstStageTime): the candidate "ends" when
+    // the job leaves station 1, so its span is setup + processing + every
+    // interruption THERE, and the rest of the route — at what it would
+    // really take — is carried as remaining work. The due-date rules keep
+    // the whole route as the candidate: what matters to them is when the
+    // job is finished.
+    final bool firstStageOnly = criterion == DispatchCriterion.spt ||
+        criterion == DispatchCriterion.lpt ||
+        criterion == DispatchCriterion.wspt;
+
     while (pending.isNotEmpty) {
       final DateTime decisionTime = _entryMachineFreeAt(pending);
 
@@ -285,6 +326,23 @@ class FlowShop {
         atcs: atcs,
         evaluate: (job, at) {
           final placement = _simulateJob(job, notBefore: at);
+          if (firstStageOnly) {
+            final firstSpan = placement.firstStageEnd.difference(at);
+            return DispatchCandidate(
+              job: job,
+              start: placement.startTime,
+              end: placement.firstStageEnd,
+              span: firstSpan.isNegative ? Duration.zero : firstSpan,
+              dueDate: job.dueDate,
+              releaseDate: job.availableDate,
+              priority: job.priority,
+              jobId: job.jobId,
+              setup: placement.firstStageSetup,
+              remainingWork:
+                  placement.endTime.difference(placement.firstStageEnd),
+              processing: Duration(minutes: _firstStageTime(job)),
+            );
+          }
           final span = placement.endTime.difference(at);
           return DispatchCandidate(
             job: job,
@@ -304,18 +362,9 @@ class FlowShop {
       );
 
       if (selected == null) {
-        // Nothing released yet — jump the clock forward instead of spinning.
-        // The machines stay where they are; only this job's own start is
-        // held back, which _simulateJob handles via notBefore.
-        final DateTime next =
-            earliestRelease(pending, (job) => job.availableDate)!;
-        if (next.isAfter(decisionTime)) {
-          _pendingClock = next;
-          continue;
-        }
-        // Unreachable in practice: a release at or before the decision time
-        // means that job was a candidate. If it ever happens, schedule what
-        // is left in order rather than dropping it from the plan.
+        // Unreachable in practice: selectNext only returns null for an empty
+        // list (it throws when every job is unplaceable). If it ever
+        // happens, schedule what is left in order rather than dropping it.
         for (final job in pending) {
           _commitPlacement(_simulateJob(job, notBefore: decisionTime));
           sequenced.add(job);
@@ -324,9 +373,18 @@ class FlowShop {
         break;
       }
 
-      // Re-simulate the winner so what gets committed is what was judged.
-      // _simulateJob is pure, so this recomputes rather than re-decides.
-      _commitPlacement(_simulateJob(selected.job, notBefore: decisionTime));
+      // selectNext is non-delay on effective starts: the winner can really
+      // begin its route at t*, the earliest instant any pending job can on
+      // the entry machine, after setups and interruptions. A job an
+      // interruption would hold back does not take the line ahead of one
+      // that can start now, and if nothing can start at decisionTime the
+      // clock jumps to t*. Re-simulate from the same instant it was judged
+      // from; _simulateJob is pure, so this recomputes rather than decides.
+      _commitPlacement(_simulateJob(
+        selected.job,
+        notBefore:
+            evaluationTime(selected.job, decisionTime, (j) => j.availableDate),
+      ));
       sequenced.add(selected.job);
       pending.remove(selected.job);
     }
@@ -334,18 +392,15 @@ class FlowShop {
     inputJobs = sequenced;
   }
 
-  /// Clock floor used while waiting for the next job release.
-  DateTime? _pendingClock;
-
   /// When the next dispatch decision happens: the earliest moment the entry
   /// machine of any pending job's route becomes free.
   ///
   /// The minimum, not the maximum — waiting for the last machine would stall
-  /// the loop behind one no pending job is queued on. Floored by
-  /// [_pendingClock] so a decision point never moves backwards while the loop
-  /// is waiting on a future release.
+  /// the loop behind one no pending job is queued on. Releases and
+  /// interruptions after this instant are folded into each job's effective
+  /// start by selectNext, so no separate clock floor is needed.
   DateTime _entryMachineFreeAt(List<FlowShopInput> pending) {
-    final DateTime floor = _pendingClock ?? startDate;
+    final DateTime floor = startDate;
     DateTime? earliest;
 
     for (final job in pending) {
@@ -385,6 +440,8 @@ class FlowShop {
       jobStartTime = notBefore;
     }
     DateTime? actualStartTime;
+    DateTime? firstStageEnd;
+    Duration firstStageSetup = Duration.zero;
     Map<int, Tuple2<int, Range>> scheduling = {};
     Map<int, List<ProcessingSegment>> segmentsByMachine = {};
     Map<int, List<ProcessingSegment>> setupSegmentsByMachine = {};
@@ -411,47 +468,32 @@ class FlowShop {
         previousJobId: previousJob,
       );
 
-      // Schedule setup as its own segmented block (through the preemption
-      // engine, so it's just as sensitive to work-shift/rest/maintenance
-      // boundaries as processing is), then start processing right after.
-      List<ProcessingSegment> setupSegments = const [];
-      DateTime processStart = startTime;
-      Duration continuousUsage = _machineContinuousUsage[machineId] ?? Duration.zero;
-      if (setupDuration > Duration.zero) {
-        final setupSchedule = _engineByMachine[machineId]!.computeSegments(
-          earliestStart: startTime,
-          totalDuration: setupDuration,
-          priorContinuousUsage: continuousUsage,
-        );
-        setupSegments = setupSchedule.segments;
-        processStart = setupSchedule.completionTime;
-        continuousUsage = setupSegments.length > 1
-            ? setupSegments.last.duration
-            : continuousUsage + setupSegments.single.duration;
-      }
-
-      // Split processing into segments wherever the work-shift end, a
-      // maintenance window, or the continuous-use rest cap would otherwise
-      // fall inside this task's span on this machine.
-      final schedule = _engineByMachine[machineId]!.computeSegments(
-        earliestStart: processStart,
-        totalDuration: duration,
-        priorContinuousUsage: continuousUsage,
+      // Setup then processing, both through the preemption engine. The
+      // task's interruption flag governs the pair: interruptible → each may
+      // be split by a shift end / maintenance / rest cap; not interruptible
+      // → one contiguous block, processing starting the instant setup ends.
+      final placed = _engineByMachine[machineId]!.computeSetupAndProcessing(
+        earliestStart: startTime,
+        setupDuration: setupDuration,
+        processingDuration: duration,
+        priorContinuousUsage:
+            _machineContinuousUsage[machineId] ?? Duration.zero,
         interruptible: job.isTaskInterruptible(taskId),
       );
+      final schedule = placed.processing;
       final DateTime adjustedEnd = schedule.completionTime;
 
-      actualStartTime ??= setupSegments.isNotEmpty
-          ? setupSegments.first.start
-          : schedule.startDate;
+      actualStartTime ??= placed.start;
+      if (firstStageEnd == null) {
+        firstStageEnd = adjustedEnd;
+        firstStageSetup = segmentsDuration(placed.setupSegments);
+      }
 
       scheduling[machineId] = Tuple2(taskId, Range(schedule.startDate, adjustedEnd));
       segmentsByMachine[machineId] = schedule.segments;
-      setupSegmentsByMachine[machineId] = setupSegments;
+      setupSegmentsByMachine[machineId] = placed.setupSegments;
       availabilityAfter[machineId] = adjustedEnd;
-      continuousUsageAfter[machineId] = schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration;
+      continuousUsageAfter[machineId] = placed.continuousUsageAfter;
       jobStartTime = adjustedEnd;
     }
 
@@ -459,6 +501,8 @@ class FlowShop {
       job: job,
       startTime: actualStartTime ?? job.availableDate,
       endTime: jobStartTime,
+      firstStageEnd: firstStageEnd ?? jobStartTime,
+      firstStageSetup: firstStageSetup,
       scheduling: scheduling,
       segmentsByMachine: segmentsByMachine,
       setupSegmentsByMachine: setupSegmentsByMachine,
@@ -474,7 +518,12 @@ class FlowShop {
     placement.availabilityAfter.forEach((machineId, endTime) {
       machinesAvailability[machineId] = endTime;
       _machineLastSequence[machineId] = job.sequenceId;
-      _machineLastJob[machineId] = job.jobId;
+      // A job with no state (A-J) registered for this machine leaves the
+      // machine in the state it found it. Recording it as the last job
+      // anyway made the NEXT changeover look up a null state and cost zero.
+      if (jobStates == null || jobStates![job.jobId]?[machineId] != null) {
+        _machineLastJob[machineId] = job.jobId;
+      }
     });
     placement.continuousUsageAfter.forEach((machineId, usage) {
       _machineContinuousUsage[machineId] = usage;
@@ -529,6 +578,23 @@ class FlowShop {
 
   int _totalProcessingTime(FlowShopInput job) {
     return job.taskTimesInMachines.values.fold(0, (sum, duration) => sum + duration.inMinutes);
+  }
+
+  /// `p_j` of the processing-time rules (SPT, LPT, WSPT): the job's nominal
+  /// time on its FIRST station, in minutes.
+  ///
+  /// A permutation flow shop takes one sequencing decision — the order jobs
+  /// enter the line — and every later station serves them first come, first
+  /// served, which with one machine per station is that same order. The
+  /// queue the rule is applied to is therefore the first station's, and the
+  /// processing time that queue sees is the first station's. The sum over
+  /// the whole route, used here before, is the work-remaining index: that
+  /// is now LWR / MWR.
+  int _firstStageTime(FlowShopInput job) {
+    if (job.taskSequence.isEmpty) return 0;
+    return job.taskTimesInMachines[job.taskSequence.first.value1]
+            ?.inMinutes ??
+        0;
   }
 
   void _initializeMachineLastSequence() {

@@ -177,6 +177,12 @@ class FlexibleFlowShop {
       case "ATCS":
         atcRule();
         break;
+      case "LWR":
+        lwrRule();
+        break;
+      case "MWR":
+        mwrRule();
+        break;
       case "JOHNSON":
         _applyJohnsonRuleFlexible(inputJobs);
         break;
@@ -203,20 +209,27 @@ class FlexibleFlowShop {
     }
   }
 
-  void eddRule() => _schedule((a, b) => a.dueDate.compareTo(b.dueDate));
-  void sptRule() => _schedule(
-        (a, b) => _totalProcessingTime(a).compareTo(_totalProcessingTime(b)),
-      );
-  void lptRule() => _schedule(
-        (a, b) => _totalProcessingTime(b).compareTo(_totalProcessingTime(a)),
-      );
-  void fifoRule() =>
-      _schedule((a, b) => a.availableDate.compareTo(b.availableDate));
-  void wsptRule() => _schedule((a, b) {
-        double wsptA = a.priority / max(1, _totalProcessingTime(a));
-        double wsptB = b.priority / max(1, _totalProcessingTime(b));
-        return wsptB.compareTo(wsptA);
-      });
+  // ── Static rules ──────────────────────────────────────────────────────────
+  //
+  // A flexible flow shop has no single job order to keep: a station with
+  // several machines hands jobs on in whatever order they finish. So the
+  // rule is re-applied at EVERY station, to the jobs queued there, with the
+  // job's NOMINAL time at that station (on the machine chosen for it) as
+  // `p_j`. FIFO is first to arrive at the station.
+  //
+  // These used to sort the jobs once by the sum of the whole route and walk
+  // each job through every station in that order, which is a permutation
+  // schedule imposed on a shop that does not keep permutations.
+
+  void eddRule() => _runDynamicStagewise(DispatchCriterion.edd);
+  void sptRule() => _runDynamicStagewise(DispatchCriterion.sptNominal);
+  void lptRule() => _runDynamicStagewise(DispatchCriterion.lptNominal);
+  void fifoRule() => _runDynamicStagewise(DispatchCriterion.fifoArrival);
+  void wsptRule() => _runDynamicStagewise(DispatchCriterion.wsptNominal);
+
+  // LWR / MWR: nominal work the job still has from this station on.
+  void lwrRule() => _runDynamicStagewise(DispatchCriterion.lwr);
+  void mwrRule() => _runDynamicStagewise(DispatchCriterion.mwr);
 
   void _schedule(
       int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
@@ -274,43 +287,24 @@ class FlexibleFlowShop {
       _machineLastJob[machineId],
     );
 
-    // Schedule setup as its own segmented block (through the preemption
-    // engine, so it's just as sensitive to work-shift/rest/maintenance
-    // boundaries as processing is), then start processing right after.
-    List<ProcessingSegment> setupSegments = const [];
-    DateTime processStart = startTime;
-    Duration continuousUsage =
-        _machineContinuousUsage[machineId] ?? Duration.zero;
-    if (setupDuration > Duration.zero) {
-      final setupSchedule = _engineFor(machineId).computeSegments(
-        earliestStart: startTime,
-        totalDuration: setupDuration,
-        priorContinuousUsage: continuousUsage,
-      );
-      setupSegments = setupSchedule.segments;
-      processStart = setupSchedule.completionTime;
-      continuousUsage = setupSegments.length > 1
-          ? setupSegments.last.duration
-          : continuousUsage + setupSegments.single.duration;
-    }
-
-    // Split processing into segments wherever the work-shift end, a
-    // maintenance window, or the continuous-use rest cap would otherwise
-    // fall inside this task's span on this machine.
-    final schedule = _engineFor(machineId).computeSegments(
-      earliestStart: processStart,
-      totalDuration: processingTime,
-      priorContinuousUsage: continuousUsage,
+    // Setup then processing, both through the preemption engine. The task's
+    // interruption flag governs the pair: interruptible → each may be split
+    // by a shift end / maintenance / rest cap; not interruptible → one
+    // contiguous block, processing starting the instant setup ends.
+    final placed = _engineFor(machineId).computeSetupAndProcessing(
+      earliestStart: startTime,
+      setupDuration: setupDuration,
+      processingDuration: processingTime,
+      priorContinuousUsage:
+          _machineContinuousUsage[machineId] ?? Duration.zero,
       interruptible: interruptible,
     );
 
     return _FlexibleFlowTask(
       machineId: machineId,
-      setupSegments: setupSegments,
-      schedule: schedule,
-      continuousUsageAfter: schedule.segments.length > 1
-          ? schedule.segments.last.duration
-          : continuousUsage + schedule.segments.single.duration,
+      setupSegments: placed.setupSegments,
+      schedule: placed.processing,
+      continuousUsageAfter: placed.continuousUsageAfter,
     );
   }
 
@@ -389,7 +383,7 @@ class FlexibleFlowShop {
 
     placement.availabilityAfter.forEach((machineId, endTime) {
       machinesAvailability[machineId] = endTime;
-      _machineLastJob[machineId] = job.jobId;
+      _rememberLastJob(machineId, job.jobId);
     });
     placement.continuousUsageAfter.forEach((machineId, usage) {
       _machineContinuousUsage[machineId] = usage;
@@ -548,13 +542,23 @@ class FlexibleFlowShop {
     return Duration.zero;
   }
 
+  /// Records [jobId] as the last job on [machineId] — the job whose state
+  /// the next changeover starts from. A job with no state (A-J) registered
+  /// for this machine leaves the machine in the state it found it;
+  /// recording it anyway made the NEXT changeover look up a null state and
+  /// cost zero.
+  void _rememberLastJob(int machineId, int jobId) {
+    if (jobStates == null || jobStates![jobId]?[machineId] != null) {
+      _machineLastJob[machineId] = jobId;
+    }
+  }
+
   // ── Dynamic (*_ADAPTADO) rules ────────────────────────────────────────────
   //
-  // `_dynamicSchedule` re-sorted the pending list on every iteration, but the
-  // comparators it received read only immutable job fields — so the order
-  // never changed and these produced the same schedule as the static rules.
-  // They now compare each contender's effective route span at the decision
-  // point: see _runDynamic.
+  // Same loop as the static rules above (_runDynamicStagewise); the only
+  // difference is the index: the operation's EFFECTIVE span on its machine
+  // — setup out of the machine's current state, processing, and every
+  // interruption — instead of its nominal time.
 
   void eddaRule() => _runDynamicStagewise(DispatchCriterion.edd);
   void sptaRule() => _runDynamicStagewise(DispatchCriterion.spt);
@@ -569,8 +573,9 @@ class FlexibleFlowShop {
   void crRule() => _runDynamicStagewise(DispatchCriterion.cr);
   void atcRule() => _runDynamicStagewise(DispatchCriterion.atcs);
 
-  /// Stage-by-stage event-driven dispatch for the *_ADAPTADO rules and
-  /// MS/CR/ATCS in a (flexible) hybrid flow shop.
+  /// Stage-by-stage event-driven dispatch for every dispatching rule of a
+  /// (flexible) hybrid flow shop: the static ones, LWR/MWR, the *_ADAPTADO
+  /// ones and MS/CR/ATCS. They differ only in the index [criterion] reads.
   ///
   /// Earlier this priced and ranked whole ROUTES (see the removed
   /// `_runDynamic`): at every decision it simulated each pending job clear
@@ -662,7 +667,9 @@ class FlexibleFlowShop {
           }
 
           final DateTime end = placed.schedule.completionTime;
-          final Duration span = end.difference(earliestStart);
+          // Measured from the EFFECTIVE start (after maintenance, rest caps
+          // and non-interruptible waits), which is what the loop ranks on.
+          final Duration span = end.difference(placed.start);
           candidates.add((
             job: job,
             stationId: stationId,
@@ -680,6 +687,8 @@ class FlexibleFlowShop {
               jobId: job.jobId,
               setup: segmentsDuration(placed.setupSegments),
               remainingWork: _remainingWorkAfterStage(job, stage),
+              processing: entry.value,
+              arrival: ready,
             ),
           ));
         }
@@ -692,17 +701,29 @@ class FlexibleFlowShop {
         break;
       }
 
-      // Non-delay: the pairing that can start soonest goes first; the
-      // dispatch rule only breaks ties among pairings tied on start time,
-      // same as OpenShop._schedule.
-      candidates.sort((a, b) {
-        final cmpStart = a.earliestStart.compareTo(b.earliestStart);
-        if (cmpStart != 0) return cmpStart;
+      // Non-delay on EFFECTIVE starts — the start the preemption engine
+      // returns, after maintenance, rest caps and the wait for a window that
+      // fits a non-interruptible block — so a job the calendar would hold
+      // back never beats one that can really run now. If nothing can start
+      // at the current instant the clock effectively jumps to the earliest
+      // effective start (Giffler & Thompson 1960, non-delay).
+      //
+      // Two decisions, kept apart (see nonDelayConflictSet): each job that
+      // can start at t* first gets its machine — earliest completion among
+      // the station's machines available at t* — and only then does the
+      // dispatch rule choose among the jobs.
+      final contenders = nonDelayConflictSet(
+        candidates,
+        operationKey: (c) => c.job.jobId,
+        candidate: (c) => c.dispatch,
+        machineId: (c) => c.machineId,
+      );
+      contenders.sort((a, b) {
         final cmp = compareCandidates<FlexibleFlowInput>(
           criterion,
           a.dispatch,
           b.dispatch,
-          decisionTime: a.earliestStart,
+          decisionTime: a.placed.start,
           atcs: atcs,
         );
         if (cmp != 0) return cmp;
@@ -712,7 +733,7 @@ class FlexibleFlowShop {
         return a.machineId.compareTo(b.machineId);
       });
 
-      final selected = candidates.first;
+      final selected = contenders.first;
       final job = selected.job;
       final placed = selected.placed;
       final DateTime taskStart = placed.schedule.startDate;
@@ -725,7 +746,7 @@ class FlexibleFlowShop {
       jobSetupSegments[job.jobId]![selected.stationId] = placed.setupSegments;
 
       machinesAvailability[selected.machineId] = end;
-      _machineLastJob[selected.machineId] = job.jobId;
+      _rememberLastJob(selected.machineId, job.jobId);
       _machineContinuousUsage[selected.machineId] = placed.continuousUsageAfter;
 
       stageIndex[job.jobId] = stageIndex[job.jobId]! + 1;

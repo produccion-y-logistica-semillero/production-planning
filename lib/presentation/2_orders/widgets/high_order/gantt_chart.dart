@@ -123,7 +123,13 @@ class _GanttChartState extends State<GanttChart> {
   GanttViewMode _currentMode = GanttViewMode.byMachine;
   List<_GanttRow> _rows = [];
 
-  double _horizontalZoom = 1.8;
+  static const double _defaultHorizontalZoom = 1.8;
+
+  /// Width each day gets at the default zoom, at the least: room for its
+  /// date and its start-of-shift hour.
+  static const double _minDayWidth = 96;
+
+  double _horizontalZoom = _defaultHorizontalZoom;
   double _verticalZoom = 1.0;
 
   late DateTime _startDate;
@@ -293,6 +299,11 @@ class _GanttChartState extends State<GanttChart> {
         if (task.endDate.isAfter(latest!)) {
           latest = task.endDate;
         }
+        // A segment can outlast the task's endDate field (e.g. rows saved
+        // before segments existed); the range must cover what is drawn.
+        for (final segment in task.segments) {
+          if (segment.end.isAfter(latest!)) latest = segment.end;
+        }
       }
     }
 
@@ -315,12 +326,20 @@ class _GanttChartState extends State<GanttChart> {
     );
 
     _endDate = latest!;
-    _totalDays = _endDate.difference(_startDate).inDays + 1;
+    // Calendar days between the first and the last day touched, counted on
+    // dates (not 24 h blocks), so a program ending at 09:00 on its last day
+    // still shows that day.
+    _totalDays = DateTime.utc(_endDate.year, _endDate.month, _endDate.day)
+            .difference(
+                DateTime.utc(_startDate.year, _startDate.month, _startDate.day))
+            .inDays +
+        1;
 
-    if (_totalDays > 20) {
-      _totalDays = 20;
-      _endDate = _startDate.add(const Duration(days: 20));
-    }
+    // There used to be a 20-day cap here: the range stopped at day 20 and
+    // _calculateTaskLeft then pinned every later segment to the last day, so
+    // long programs piled up on top of each other at the right edge. The
+    // chart now covers the whole program and grows wider instead (see
+    // _minDayWidth); scrolling and the zoom slider take care of the rest.
 
     if (_totalDays < 1) {
       _totalDays = 1;
@@ -397,8 +416,18 @@ class _GanttChartState extends State<GanttChart> {
           320.0,
         ).toDouble();
 
-        final double chartTotalWidth =
-            max(chartContainerWidth * _horizontalZoom, chartContainerWidth);
+        // Width at the default zoom: what the chart always had, or enough for
+        // every day to get [_minDayWidth] — whichever is wider — so a long
+        // program spreads out (and scrolls) instead of squeezing days until
+        // their dates cannot be read. The slider scales it from there.
+        final double baseWidth = max(
+          chartContainerWidth * _defaultHorizontalZoom,
+          _totalDays * _minDayWidth,
+        );
+        final double chartTotalWidth = max(
+          baseWidth * (_horizontalZoom / _defaultHorizontalZoom),
+          chartContainerWidth,
+        );
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -783,11 +812,17 @@ class _GanttChartState extends State<GanttChart> {
 
           final double hourWidth = dayWidth / hoursPerDay;
 
+          // Hour labels are ~40 px wide: label every n-th hour so they never
+          // touch. When even every 4th would collide, only the start of the
+          // shift is labelled.
           final int labelStep = hourWidth >= 58
               ? 1
               : hourWidth >= 34
                   ? 2
-                  : 4;
+                  : hourWidth >= 17
+                      ? 4
+                      : 0;
+          final bool compactDate = dayWidth < 56;
 
           return SizedBox(
             width: dayWidth,
@@ -802,8 +837,9 @@ class _GanttChartState extends State<GanttChart> {
                   child: Center(
                     child: Text(
                       '${currentDate.day}/${currentDate.month}',
-                      style: const TextStyle(
-                        fontSize: 15,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: compactDate ? 11 : 15,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -826,8 +862,14 @@ class _GanttChartState extends State<GanttChart> {
                   final bool isDayStart = hourIndex == 0;
                   final bool isDayEnd = hourIndex == hoursPerDay;
 
-                  final bool showLabel =
-                      isDayStart || isDayEnd || hourIndex % labelStep == 0;
+                  // The day-end tick sits on the next day's start: its label
+                  // would print over that day's, so it is only shown when
+                  // there is room for every hour.
+                  final bool showLabel = labelStep == 0
+                      ? isDayStart && dayWidth >= 56
+                      : isDayStart ||
+                          (isDayEnd && labelStep == 1) ||
+                          (!isDayEnd && hourIndex % labelStep == 0);
 
                   return Positioned(
                     left: left,
@@ -982,7 +1024,24 @@ class _GanttChartState extends State<GanttChart> {
           ));
         }
       }
-      rowSegments.sort((a, b) => a.left.compareTo(b.left));
+      // Only what falls inside the displayed range is drawn: a segment
+      // entirely outside (e.g. after picking a shorter date range) is left
+      // out, one that crosses an edge is trimmed at it.
+      final visible = [
+        for (final ps in rowSegments)
+          if (ps.right > 0 && ps.left < chartWidth)
+            _PositionedSegment(
+              task: ps.task,
+              label: ps.label,
+              left: max(ps.left, 0.0),
+              right: min(ps.right, chartWidth),
+              isSetup: ps.isSetup,
+            ),
+      ];
+      rowSegments
+        ..clear()
+        ..addAll(visible)
+        ..sort((a, b) => a.left.compareTo(b.left));
 
       for (int s = 0; s < rowSegments.length; s++) {
         final ps = rowSegments[s];
@@ -1132,13 +1191,14 @@ class _GanttChartState extends State<GanttChart> {
     final int hoursPerDay = max(1, endingHour - initialHour);
     final int totalDisplayedMinutes = _totalDays * hoursPerDay * 60;
 
-    final int dayIndex = date.difference(_startDate).inDays;
-
-    final int clampedDayIndex = dayIndex < 0
-        ? 0
-        : dayIndex >= _totalDays
-            ? _totalDays - 1
-            : dayIndex;
+    // Day of [date] counted on calendar dates. NOT clamped to the displayed
+    // range: a date outside it maps outside [0, chartWidth], and the caller
+    // drops or trims that segment. Clamping it here is what used to pile
+    // every late segment onto the last displayed day.
+    final int dayIndex = DateTime.utc(date.year, date.month, date.day)
+        .difference(
+            DateTime.utc(_startDate.year, _startDate.month, _startDate.day))
+        .inDays;
 
     final int hour = date.hour;
 
@@ -1154,14 +1214,11 @@ class _GanttChartState extends State<GanttChart> {
       minutePart = 0;
     }
 
-    final int displayedMinutesSoFar = (clampedDayIndex * hoursPerDay * 60) +
+    final int displayedMinutesSoFar = (dayIndex * hoursPerDay * 60) +
         ((clampedHour - initialHour) * 60) +
         minutePart;
 
-    final double fraction =
-        (displayedMinutesSoFar / totalDisplayedMinutes).clamp(0.0, 1.0);
-
-    return (fraction * chartWidth).clamp(0.0, chartWidth);
+    return displayedMinutesSoFar / totalDisplayedMinutes * chartWidth;
   }
 
   String _baseTaskName(String displayName) {

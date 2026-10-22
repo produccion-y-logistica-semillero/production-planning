@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/metrics.dart';
-import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_stats_card.dart';
 
 class MetricsPage extends StatelessWidget {
@@ -51,15 +50,10 @@ class MetricsPage extends StatelessWidget {
               _buildMetricRow('Porcentaje trabajos retrasados',
                   '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
 
-                  _buildMetricRow('Porcentaje trabajos retrasados',
-                  '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
-
               if (metrics.tabuStats != null) ...[
                 const SizedBox(height: 12),
                 TabuStatsCard(stats: metrics.tabuStats!),
               ],
-
-              const SizedBox(height: 20),
 
               const SizedBox(height: 20),
               Align(

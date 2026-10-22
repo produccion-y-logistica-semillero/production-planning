@@ -1,51 +1,60 @@
 import 'package:production_planning/entities/machine_type_entity.dart';
-import 'package:production_planning/entities/task_dependency_entity.dart';
-import 'package:production_planning/presentation/1_sequences/request_models/new_task_model.dart';
+import 'package:production_planning/entities/route_draft.dart';
 
-abstract class SequencesState{
+/// What the process-route screen is doing.
+enum RouteEditorMode {
+  /// Browsing saved routes; the canvas is read-only.
+  view,
 
-  bool isNewOrder;
-  List<MachineTypeEntity>? machines;
-  List<TaskDependencyEntity>? dependencies;
-  bool isSuccessModalVisible;
-  bool isNoMachinesModalVisible;
-  List<NewTaskModel>? selectedMachines;
+  /// Building a new route (also a duplicate of an existing one).
+  create,
 
-
-  SequencesState(this.isNewOrder, this.machines, this.isSuccessModalVisible, this.isNoMachinesModalVisible, this.selectedMachines, this.dependencies);
-
+  /// Changing a saved route in place.
+  edit,
 }
 
-class SequencesInitialState extends SequencesState{
-  SequencesInitialState(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
+class SequencesState {
+  final RouteEditorMode mode;
 
+  /// Stations (machine types) offered in the palette; null while loading.
+  final List<MachineTypeEntity>? machines;
+  final bool machinesFailed;
 
-class SequencesRetrievingMachines extends SequencesState{
-  SequencesRetrievingMachines(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
+  /// The route loaded into the editor when entering create/edit mode.
+  final RouteDraft? draft;
 
+  /// Bumped every time a new draft is handed to the editor, so the page
+  /// knows to (re)load the canvas exactly once per draft.
+  final int draftVersion;
 
-class SequencesMachinesSuccess extends SequencesState{
-  SequencesMachinesSuccess(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
+  final bool saving;
 
+  const SequencesState({
+    this.mode = RouteEditorMode.view,
+    this.machines,
+    this.machinesFailed = false,
+    this.draft,
+    this.draftVersion = 0,
+    this.saving = false,
+  });
 
-class SequencesMachineFailure extends SequencesState{
-  SequencesMachineFailure(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
-class SequencesModeChanged extends SequencesState{
-  SequencesModeChanged(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
+  bool get isEditing => mode != RouteEditorMode.view;
 
-class SequencesMachineAdded extends SequencesState{
-  SequencesMachineAdded(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
-
-class SequencesMinimumStateChange extends SequencesState{
-  SequencesMinimumStateChange(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
-}
-
-class SequencesProcessAdded extends SequencesState{
-   SequencesProcessAdded(super.isNewOrder, super.machines, super.isSuccessModalVisible, super.isNoMachinesModalVisible, super.selectedMachines, super.dependencies);
+  SequencesState copyWith({
+    RouteEditorMode? mode,
+    List<MachineTypeEntity>? machines,
+    bool? machinesFailed,
+    RouteDraft? draft,
+    bool clearDraft = false,
+    int? draftVersion,
+    bool? saving,
+  }) =>
+      SequencesState(
+        mode: mode ?? this.mode,
+        machines: machines ?? this.machines,
+        machinesFailed: machinesFailed ?? this.machinesFailed,
+        draft: clearDraft ? null : (draft ?? this.draft),
+        draftVersion: draftVersion ?? this.draftVersion,
+        saving: saving ?? this.saving,
+      );
 }

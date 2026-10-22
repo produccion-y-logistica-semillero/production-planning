@@ -48,7 +48,8 @@ void main() {
       expect(machine.output.first.jobId, 2);
     });
 
-    test('nobody can start at t: the clock jumps to the earliest effective start',
+    test(
+        'nobody can start at t: the clock jumps to the earliest effective start',
         () {
       // Monday 21:00: one hour of shift left, and both jobs are 2h and
       // non-interruptible — neither can start before Tuesday 06:00.
@@ -93,10 +94,12 @@ void main() {
       // broke that tie in favour of job 1 and the machine idled 06:00-07:00.
       final jobs = [
         FlexibleFlowInput(1, DateTime(2026, 1, 5, 12), 1, start, [
-          Tuple2(1, {10: const Duration(hours: 3)}),
-        ], interruptibleByTask: {1: false}),
+          const Tuple2(1, {10: Duration(hours: 3)}),
+        ], interruptibleByTask: {
+          1: false
+        }),
         FlexibleFlowInput(2, DateTime(2026, 1, 20), 1, start, [
-          Tuple2(1, {10: const Duration(hours: 2)}),
+          const Tuple2(1, {10: Duration(hours: 2)}),
         ]),
       ];
 

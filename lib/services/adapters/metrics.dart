@@ -2,14 +2,11 @@ import 'package:dartz/dartz.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
-import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 
-
-Metrics  getMetricts(List<PlanningMachineEntity> machines,
+Metrics getMetricts(List<PlanningMachineEntity> machines,
     List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates,
     {TabuRunStats? tabuStats}) {
-
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
   }
@@ -25,8 +22,8 @@ Metrics  getMetricts(List<PlanningMachineEntity> machines,
       // Sum actual processing segments rather than endDate-startDate, so a
       // task paused by a work-shift/rest/maintenance interruption doesn't
       // have its paused time counted as busy machine time.
-      final taskDuration = task.segments
-          .fold(Duration.zero, (sum, seg) => sum + seg.duration);
+      final taskDuration =
+          task.segments.fold(Duration.zero, (sum, seg) => sum + seg.duration);
       // Setup/changeover time also occupies the machine, so it counts
       // toward busy time (and thus reduces idle) the same as processing —
       // but it's kept out of avarageProcessingTime, which represents pure
@@ -44,12 +41,14 @@ Metrics  getMetricts(List<PlanningMachineEntity> machines,
         completionByJob[jobId] = task.endDate;
       }
 
-      earliestTaskStart = earliestTaskStart == null || task.startDate.isBefore(earliestTaskStart)
+      earliestTaskStart = earliestTaskStart == null ||
+              task.startDate.isBefore(earliestTaskStart)
           ? task.startDate
           : earliestTaskStart;
-      latestTaskEnd = latestTaskEnd == null || task.endDate.isAfter(latestTaskEnd)
-          ? task.endDate
-          : latestTaskEnd;
+      latestTaskEnd =
+          latestTaskEnd == null || task.endDate.isAfter(latestTaskEnd)
+              ? task.endDate
+              : latestTaskEnd;
     }
   }
 

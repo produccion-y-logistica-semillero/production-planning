@@ -77,9 +77,9 @@ void main() {
         MachineInactivityEntity(
           machineId: 1,
           name: 'Mantenimiento semanal',
-          weekdays: const {Weekday.wednesday},
-          startTime: const Duration(hours: 15), // 3pm
-          duration: const Duration(hours: 1), // until 4pm
+          weekdays: {Weekday.wednesday},
+          startTime: Duration(hours: 15), // 3pm
+          duration: Duration(hours: 1), // until 4pm
         ),
       ],
     );

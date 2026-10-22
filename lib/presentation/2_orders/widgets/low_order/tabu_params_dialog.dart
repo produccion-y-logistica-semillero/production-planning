@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:production_planning/entities/tabu_objective.dart';
 import 'package:production_planning/entities/tabu_params.dart';
 
 /// Dialogo de configuracion de la busqueda tabu.
@@ -22,6 +23,7 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
   late final TextEditingController _maxDestinations;
   late final TextEditingController _timeBudgetMs;
   late bool _randomStart;
+  late TabuObjective _objective;
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
     _timeBudgetMs =
         TextEditingController(text: '${widget.initial.timeBudgetMs}');
     _randomStart = widget.initial.randomStart;
+    _objective = widget.initial.objective;
   }
 
   @override
@@ -81,6 +84,42 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
     );
   }
 
+  /// Selector de la funcion objetivo. Usa DropdownButton dentro de un
+  /// InputDecorator (no un FormField) para que "Restaurar" lo actualice con
+  /// setState y se vea igual que los campos numericos.
+  Widget _objectiveSelector() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Funcion objetivo',
+          helperText: 'Lo que minimiza la busqueda. Si dos soluciones '
+              'empatan, gana la de menor flujo total.',
+          helperMaxLines: 3,
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<TabuObjective>(
+            value: _objective,
+            isExpanded: true,
+            isDense: true,
+            items: [
+              for (final objective in TabuObjective.values)
+                DropdownMenuItem<TabuObjective>(
+                  value: objective,
+                  child: Text('${objective.label}  ·  ${objective.formula}'),
+                ),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() => _objective = v);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   void _restoreDefaults() {
     const d = TabuParams();
     _maxIterations.text = '${d.maxIterations}';
@@ -88,7 +127,10 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
     _interJobSamples.text = '${d.interJobSamples}';
     _maxDestinations.text = '${d.maxDestinations}';
     _timeBudgetMs.text = '${d.timeBudgetMs}';
-    setState(() => _randomStart = d.randomStart);
+    setState(() {
+      _randomStart = d.randomStart;
+      _objective = d.objective;
+    });
     _formKey.currentState?.validate();
   }
 
@@ -101,6 +143,7 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
       maxDestinations: int.parse(_maxDestinations.text.trim()),
       timeBudgetMs: int.parse(_timeBudgetMs.text.trim()),
       randomStart: _randomStart,
+      objective: _objective,
     ));
   }
 
@@ -116,6 +159,7 @@ class _TabuParamsDialogState extends State<TabuParamsDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _objectiveSelector(),
                 _field(
                   controller: _maxIterations,
                   label: 'Tope de iteraciones',

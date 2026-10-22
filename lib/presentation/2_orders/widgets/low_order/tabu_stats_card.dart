@@ -42,10 +42,10 @@ class TabuStatsCard extends StatelessWidget {
                 '${_seconds(stats.elapsedMs)} / ${_seconds(stats.timeBudgetMs)}'),
             _row('Tiempo por iteracion', _seconds(stats.msPerIteration)),
             _row(
-              'Flujo total',
-              '${stats.initialFlowMinutes} → ${stats.bestFlowMinutes} min '
-                  '(${_percent(stats.improvementPercent)})',
-            ),
+  stats.objective.label,
+  '${stats.initialValue} → ${stats.bestValue} ${stats.objective.unit} '
+      '(${_percent(stats.improvementPercent)})',
+),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),

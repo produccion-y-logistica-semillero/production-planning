@@ -1,6 +1,8 @@
 /// Parametros configurables de la busqueda tabu para maquinas paralelas.
 /// Vive en entities/ porque cruza todas las capas: se construye en
 /// presentation y se consume en services/algorithms.
+import 'package:production_planning/entities/tabu_objective.dart';
+
 class TabuParams {
 
   final int maxIterations;
@@ -16,6 +18,8 @@ class TabuParams {
   final int seed;
 
   final bool randomStart;
+    /// Funcion objetivo que minimiza la busqueda (empates por flujo total).
+  final TabuObjective objective;
 
   const TabuParams({
     this.maxIterations = 100,
@@ -25,6 +29,7 @@ class TabuParams {
     this.timeBudgetMs = 4000,
     this.seed = 20260806,
     this.randomStart = false,
+    this.objective = TabuObjective.totalFlow
   });
 
   TabuParams copyWith({
@@ -35,6 +40,7 @@ class TabuParams {
     int? timeBudgetMs,
     int? seed,
     bool? randomStart,
+    TabuObjective? objective
   }) {
     return TabuParams(
       maxIterations: maxIterations ?? this.maxIterations,
@@ -44,6 +50,7 @@ class TabuParams {
       timeBudgetMs: timeBudgetMs ?? this.timeBudgetMs,
       seed: seed ?? this.seed,
       randomStart: randomStart ?? this.randomStart,
+      objective: objective ?? this.objective
     );
   }
 
@@ -51,5 +58,6 @@ class TabuParams {
     String toString() =>
       'TabuParams(iter: $maxIterations, intra: $intraAttempts, '
       'inter: $interJobSamples, dest: $maxDestinations, '
+      'Objetivo: ${objective.label}'
       'budget: ${timeBudgetMs}ms, randomStart: $randomStart)';
 }

@@ -1,9 +1,9 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/functions/functions.dart';
-import 'package:intl/intl.dart';
 import 'package:production_planning/shared/duration_input.dart';
 
 class AddMachineDialog extends StatefulWidget {
@@ -329,9 +329,9 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _scheduledStart ??
+                  final picked = await pickTime(
+                    context,
+                    initial: _scheduledStart ??
                         const TimeOfDay(hour: 8, minute: 0),
                   );
                   if (picked != null) {
@@ -448,7 +448,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         readOnly: true,
         controller: widget.availabilityDateTimeController,
         decoration: InputDecoration(
-          hintText: 'Selecciona fecha y hora',
+          hintText: 'dd/mm/aaaa hh:mm',
           prefixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           isDense: true,
@@ -456,111 +456,13 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         ),
         onTap: () async {
-          final date = await showDatePicker(
-            context: context,
+          final fullDateTime = await pickDateTime(
+            context,
             firstDate: DateTime.now().subtract(const Duration(days: 1)),
-            lastDate: DateTime(2100),
-            initialDate: DateTime.now(),
           );
-          if (date == null) return;
-
-          final time = await showTimePicker(
-            context: context,
-            initialTime: TimeOfDay.now(),
-            builder: (context, child) {
-              return Theme(
-                data: Theme.of(context).copyWith(
-                  // WidgetState replaces the deprecated MaterialState API.
-                  timePickerTheme: TimePickerThemeData(
-                    backgroundColor: const Color(0xFFF9F9F9),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    hourMinuteShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    hourMinuteColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                    ),
-                    hourMinuteTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    hourMinuteTextStyle: const TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -1,
-                    ),
-                    dialBackgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.08),
-                    dialHandColor: Theme.of(context).colorScheme.primary,
-                    dialTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    dialTextStyle: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    dayPeriodShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    dayPeriodColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                    ),
-                    dayPeriodTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    entryModeIconColor:
-                        Theme.of(context).colorScheme.primary,
-                  ),
-                  textButtonTheme: TextButtonThemeData(
-                    style: TextButton.styleFrom(
-                      foregroundColor:
-                          Theme.of(context).colorScheme.primary,
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
-                    ),
-                  ),
-                ),
-                child: child!,
-              );
-            },
-          );
-          if (time == null) return;
-
-          final fullDateTime = DateTime(
-            date.year,
-            date.month,
-            date.day,
-            time.hour,
-            time.minute,
-          );
+          if (fullDateTime == null) return;
           widget.availabilityDateTimeController.text =
-              DateFormat('yyyy-MM-dd HH:mm').format(fullDateTime);
+              kDateTimeFormat.format(fullDateTime);
         },
       ),
     );

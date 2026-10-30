@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/widgets/high_order/add_job.dart
 //
 // Changes from previous version:
@@ -602,10 +603,7 @@ class AddJobState extends State<AddJobWidget> {
         Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
         TextButton(
           onPressed: () async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: hour ?? TimeOfDay.now(),
-            );
+            final picked = await pickTime(context, initial: hour);
             if (picked != null) onPicked(picked);
           },
           child: hour == null
@@ -642,12 +640,7 @@ class AddJobState extends State<AddJobWidget> {
   TextButton selectHour(TimeOfDay? hour, DateTime? date, String label) {
     return TextButton(
       onPressed: () async {
-        final timeOfDay = await showTimePicker(
-          context: context,
-          initialTime: hour ?? TimeOfDay.now(),
-          initialEntryMode: TimePickerEntryMode.input,
-          helpText: "Cambiar modo"
-        );
+        final timeOfDay = await pickTime(context, initial: hour);
         if (timeOfDay != null) {
           setState(() {
             if (label == 'Seleccione fecha de disponibilidad') {

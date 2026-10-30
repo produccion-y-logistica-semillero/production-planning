@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -276,9 +277,9 @@ class _MachineInactivitiesDialogState
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _scheduledStart ??
+                  final picked = await pickTime(
+                    context,
+                    initial: _scheduledStart ??
                         const TimeOfDay(hour: 8, minute: 0),
                   );
                   if (picked != null) {

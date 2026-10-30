@@ -1,7 +1,7 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:intl/intl.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
@@ -383,7 +383,7 @@ class _MachinesListViewState extends State<MachinesListView> {
         text: formatDurationMinutes(machine.continueCapacity ?? 0));
     final availabilityController = TextEditingController(
       text: machine.availabilityDateTime != null
-          ? DateFormat('yyyy-MM-dd HH:mm').format(machine.availabilityDateTime!)
+          ? kDateTimeFormat.format(machine.availabilityDateTime!)
           : '',
     );
     final quantityController = TextEditingController(text: '1');

@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/pages/new_order_page.dart
 
 import 'package:flutter/material.dart';
@@ -387,10 +388,7 @@ class NewOrderPage extends StatelessWidget {
         Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
         TextButton(
           onPressed: () async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: hour ?? TimeOfDay.now(),
-            );
+            final picked = await pickTime(context, initial: hour);
             if (picked != null) onPicked(picked);
           },
           child: hour == null

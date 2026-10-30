@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_side_menu/flutter_side_menu.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -253,32 +254,32 @@ class MainPage extends StatelessWidget {
 
     await showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
+      // StatefulBuilder: the chosen hours are shown as soon as they are
+      // picked, not only after reopening the dialog.
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
           title: const Text('Configuración de Horario'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 title: const Text('Hora de inicio'),
-                trailing: Text(startTime.format(context)),
+                trailing: Text(formatTimeOfDay(startTime)),
                 onTap: () async {
-                  final pickedTime = await showTimePicker(
-                      context: context, initialTime: startTime);
+                  final pickedTime = await pickTime(context, initial: startTime);
 
                   if (pickedTime != null) {
-                    startTime = pickedTime;
+                    setDialogState(() => startTime = pickedTime);
                   }
                 },
               ),
               ListTile(
                 title: const Text('Hora de fin'),
-                trailing: Text(endTime.format(context)),
+                trailing: Text(formatTimeOfDay(endTime)),
                 onTap: () async {
-                  final pickedTime = await showTimePicker(
-                      context: context, initialTime: endTime);
+                  final pickedTime = await pickTime(context, initial: endTime);
                   if (pickedTime != null) {
-                    endTime = pickedTime;
+                    setDialogState(() => endTime = pickedTime);
                   }
                 },
               ),
@@ -308,8 +309,8 @@ class MainPage extends StatelessWidget {
               child: const Text('Cancelar'),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 

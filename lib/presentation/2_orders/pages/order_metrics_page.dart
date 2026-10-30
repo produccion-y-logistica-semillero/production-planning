@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -215,7 +216,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                             ],
                           ),
                         ),
-                        TabBar(
+                        TutorialTarget(
+                          id: 'metrics.tabs',
+                          child: TabBar(
                           tabAlignment: TabAlignment.start,
                           isScrollable: true,
                           tabs: [
@@ -230,6 +233,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   icon: Icon(Icons.travel_explore),
                                   text: 'Búsqueda tabú'),
                           ],
+                        ),
                         ),
                         Expanded(
                           child: TabBarView(

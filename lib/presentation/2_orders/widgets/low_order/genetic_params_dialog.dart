@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:production_planning/entities/genetic_params.dart';
@@ -206,7 +207,8 @@ class _GeneticParamsDialogState extends State<GeneticParamsDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _objectiveSelector(),
+                TutorialTarget(
+                    id: 'ga.objective', child: _objectiveSelector()),
                 _intField(
                   controller: _populationSize,
                   label: 'Tamano de la poblacion',
@@ -243,11 +245,15 @@ class _GeneticParamsDialogState extends State<GeneticParamsDialog> {
                   helper: 'Probabilidad de combinar dos padres; si no, el '
                       'hijo es copia del primero.',
                 ),
-                _rateField(
+                TutorialTarget(
+                  id: 'ga.mutation',
+                  text: _mutationRate,
+                  child: _rateField(
                   controller: _mutationRate,
                   label: 'Probabilidad de mutacion (0-1)',
                   helper: 'Probabilidad de mover un trabajo (u operacion) a '
                       'otra posicion en el hijo.',
+                ),
                 ),
                 _intField(
                   controller: _elitism,
@@ -276,8 +282,11 @@ class _GeneticParamsDialogState extends State<GeneticParamsDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-            onPressed: _submit, child: const Text('Guardar Configuracion')),
+        TutorialTarget(
+          id: 'ga.save',
+          child: FilledButton(
+              onPressed: _submit, child: const Text('Guardar Configuracion')),
+        ),
       ],
     );
   }

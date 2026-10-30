@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -28,6 +29,9 @@ class _MachinesListViewState extends State<MachinesListView> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView.builder(
+      // Short list: build every row, so the guided tutorial can find and
+      // scroll to any of them (a lazy list only builds the visible ones).
+      cacheExtent: 100000,
       itemCount: widget.machineTypes.length,
       itemBuilder: (context, index) {
         final machineType = widget.machineTypes[index];
@@ -81,7 +85,9 @@ class _MachinesListViewState extends State<MachinesListView> {
                   children: [
                     Expanded(
                       flex: 8,
-                      child: ClipRRect(
+                      child: TutorialTarget(
+                        id: 'station:${machineType.name}',
+                        child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: ExpansionTile(
                           title: Text(
@@ -123,6 +129,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                           children: children,
                         ),
                       ),
+                      ),
                     ),
                     // The two actions take their natural width (they used to
                     // get 1/9 of the row, which on a phone is less than two
@@ -132,13 +139,16 @@ class _MachinesListViewState extends State<MachinesListView> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            onPressed: () => _addNewMachine(
-                              context,
-                              machineType.id!,
-                              machineType.name,
+                          TutorialTarget(
+                            id: 'station.addMachine:${machineType.name}',
+                            child: IconButton(
+                              onPressed: () => _addNewMachine(
+                                context,
+                                machineType.id!,
+                                machineType.name,
+                              ),
+                              icon: Icon(Icons.add, color: colorScheme.primary),
                             ),
-                            icon: Icon(Icons.add, color: colorScheme.primary),
                           ),
                           IconButton(
                             onPressed: () => _deleteMachineType(
@@ -354,6 +364,7 @@ class _MachinesListViewState extends State<MachinesListView> {
             }
 
             Navigator.of(dialogContext).pop();
+            tutorial.emit('machineAdded');
 
             await Future.delayed(const Duration(milliseconds: 300));
             if (expandedTypes.contains(machineId)) {

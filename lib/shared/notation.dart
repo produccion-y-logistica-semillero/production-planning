@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 
 /// Global switch: when true, the screens add the theoretical symbols next
 /// to their labels. Read at start-up from [notationFileName] (main.dart).
@@ -580,7 +581,9 @@ class NotationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return TutorialTarget(
+      id: 'sigma.${notationContext.name}',
+      child: IconButton(
       tooltip: 'Notación teórica de esta pantalla',
       icon: Icon(Icons.functions,
           color: color ?? Theme.of(context).colorScheme.primary),
@@ -589,6 +592,7 @@ class NotationButton extends StatelessWidget {
         title: title,
         entries: notationFor(notationContext),
       ),
+    ),
     );
   }
 }
@@ -622,9 +626,12 @@ Future<void> showNotationPanel(
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Cerrar'),
+        TutorialTarget(
+          id: 'sigma.close',
+          child: TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cerrar'),
+          ),
         ),
       ],
     ),

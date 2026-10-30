@@ -6,6 +6,7 @@
 // picked on a dial, and dates read dd/MM/yyyy HH:mm.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 
 /// How a date-time is shown and typed: 31/10/2026 14:30.
 final DateFormat kDateTimeFormat = DateFormat('dd/MM/yyyy HH:mm');
@@ -23,8 +24,8 @@ Future<TimeOfDay?> pickTime(
   BuildContext context, {
   TimeOfDay? initial,
   String helpText = 'Escriba la hora (HH:mm)',
-}) {
-  return showTimePicker(
+}) async {
+  final picked = await showTimePicker(
     context: context,
     initialTime: initial ?? TimeOfDay.now(),
     initialEntryMode: TimePickerEntryMode.input,
@@ -36,6 +37,8 @@ Future<TimeOfDay?> pickTime(
       child: child!,
     ),
   );
+  if (picked != null) tutorial.emit('timePicked');
+  return picked;
 }
 
 /// Asks for a date and then its hour (typed, see [pickTime]).

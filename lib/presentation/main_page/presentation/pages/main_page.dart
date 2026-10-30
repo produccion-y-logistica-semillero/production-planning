@@ -6,6 +6,7 @@ import 'package:production_planning/presentation/main_page/presentation/provider
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
 import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/notation.dart';
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -88,7 +89,10 @@ class MainPage extends StatelessWidget {
                       onTap: () => _showScheduleDialog(context),
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: Icon(Icons.schedule, color: onPrimaryContainer),
+                      icon: TutorialTarget(
+                          id: 'menu.horario',
+                          inflate: _menuRow,
+                          child: Icon(Icons.schedule, color: onPrimaryContainer)),
                       isSelected: false,
                     ),
                     SideMenuItemDataTile(
@@ -96,8 +100,11 @@ class MainPage extends StatelessWidget {
                       onTap: () => _showTimeFormatDialog(context),
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: Icon(Icons.timer_outlined,
-                          color: onPrimaryContainer),
+                      icon: TutorialTarget(
+                          id: 'menu.formato',
+                          inflate: _menuRow,
+                          child: Icon(Icons.timer_outlined,
+                              color: onPrimaryContainer)),
                       isSelected: false,
                     ),
                     const SideMenuItemDataDivider(
@@ -131,11 +138,14 @@ class MainPage extends StatelessWidget {
                       },
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: Icon(
-                          showNotation.value
-                              ? Icons.toggle_on
-                              : Icons.toggle_off_outlined,
-                          color: onPrimaryContainer),
+                      icon: TutorialTarget(
+                          id: 'menu.notacion',
+                          inflate: _menuRow,
+                          child: Icon(
+                              showNotation.value
+                                  ? Icons.toggle_on
+                                  : Icons.toggle_off_outlined,
+                              color: onPrimaryContainer)),
                       isSelected: false,
                     ),
                   ],
@@ -196,9 +206,16 @@ class MainPage extends StatelessWidget {
       highlightSelectedColor: primaryFixed.withOpacity(0.2),
       selectedTitleStyle: TextStyle(
           color: onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 18),
-      icon: Icon(icon, color: onPrimaryContainer),
+      icon: TutorialTarget(
+        id: 'menu$route',
+        inflate: _menuRow,
+        child: Icon(icon, color: onPrimaryContainer),
+      ),
     );
   }
+
+  /// Lights the whole menu row in the tutorial, not only its icon.
+  static const EdgeInsets _menuRow = EdgeInsets.fromLTRB(8, 8, 190, 8);
 
   Future<void> _showWorkspaceDialog(BuildContext context) async {
     final dir = await getApplicationSupportDirectory();
@@ -285,7 +302,9 @@ class MainPage extends StatelessWidget {
       builder: (BuildContext context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Configuración de Horario'),
-          content: Column(
+          content: TutorialTarget(
+            id: 'horario.content',
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
@@ -311,8 +330,11 @@ class MainPage extends StatelessWidget {
               ),
             ],
           ),
+          ),
           actions: [
-            TextButton(
+            TutorialTarget(
+              id: 'horario.save',
+              child: TextButton(
               onPressed: () async {
                 START_SCHEDULE = startTime;
                 END_SCHEDULE = endTime;
@@ -327,6 +349,7 @@ class MainPage extends StatelessWidget {
                 Navigator.of(context).pop();
               },
               child: const Text('Guardar'),
+            ),
             ),
             TextButton(
               onPressed: () {

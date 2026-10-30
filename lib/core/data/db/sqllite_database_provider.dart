@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -1798,5 +1799,14 @@ class SQLLiteDatabaseProvider {
       await _database!.close();
       _database = null;
     }
+  }
+
+  /// Deletes the database file of [workspace] (used to start the guided
+  /// tutorial from a clean workspace). Close the connection first.
+  static Future<void> deleteWorkspace(String workspace) async {
+    final docsDir = await getApplicationSupportDirectory();
+    final file = File(
+        join(docsDir.path, '${workspace.replaceAll(' ', '')}_v3.db'));
+    if (await file.exists()) await file.delete();
   }
 }

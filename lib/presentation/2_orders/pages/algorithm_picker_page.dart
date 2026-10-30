@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -183,6 +184,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     );
     if (params == null) return; // canceló
     setState(() => _geneticParams = params);
+    tutorial.emit('geneticConfigured');
   }
 
   Future<void> _editUserSequence() async {
@@ -195,6 +197,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     );
     if (sequence == null) return; // canceló
     setState(() => _userSequence = sequence);
+    tutorial.emit('userSequenceDefined');
   }
 
   bool get _canCalculate =>
@@ -377,6 +380,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
               children: [
                 Expanded(
                   child: CustomScrollView(
+                    // Build every rule so the guided tutorial can reach it.
+                    cacheExtent: 100000,
                     slivers: [
                       SliverToBoxAdapter(
                         child: Column(
@@ -443,7 +448,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                   // Icon only on a phone: with the Σ button
                                   // the labelled one no longer fits.
                                   if (MediaQuery.sizeOf(context).width < 600)
-                                    IconButton(
+                                    TutorialTarget(
+                                      id: 'picker.guide',
+                                      child: IconButton(
                                       tooltip: 'Guía de reglas',
                                       onPressed: () => _showAllRulesHelp(
                                           context, [
@@ -452,9 +459,12 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                       ]),
                                       icon:
                                           const Icon(Icons.menu_book_outlined),
+                                    ),
                                     )
                                   else
-                                    TextButton.icon(
+                                    TutorialTarget(
+                                      id: 'picker.guide',
+                                      child: TextButton.icon(
                                       onPressed: () => _showAllRulesHelp(
                                           context, [
                                         for (int i = 0; i < rules.length; i++)
@@ -464,6 +474,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                           const Icon(Icons.menu_book_outlined),
                                       label: const Text('Guía de reglas'),
                                     ),
+                                    ),
                                 ],
                               ),
                             ),
@@ -471,7 +482,10 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             // Rutas y jobs del programa
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              child: _ProgramSummary(order: _order),
+                              child: TutorialTarget(
+                                id: 'picker.summary',
+                                child: _ProgramSummary(order: _order),
+                              ),
                             ),
 
                             // Select All Checkbox
@@ -517,12 +531,15 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 16),
-                              child: _UserSequenceCard(
+                              child: TutorialTarget(
+                                id: 'picker.userSeq',
+                                child: _UserSequenceCard(
                                 order: _order,
                                 sequence: _userSequence,
                                 onEdit: _editUserSequence,
                                 onClear: () =>
                                     setState(() => _userSequence = null),
+                              ),
                               ),
                             ),
 
@@ -540,7 +557,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             final rule = rules[index];
                             final isSelected = _selectedIndexes.contains(index);
 
-                            return Container(
+                            return TutorialTarget(
+                              id: 'picker.rule:${_labelForRule(rule, index).toUpperCase()}',
+                              child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               decoration: BoxDecoration(
                                 color: isSelected
@@ -595,7 +614,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                     if (_labelForRule(rule, index)
                                             .toUpperCase() ==
                                         'GENETICS')
-                                      IconButton(
+                                      TutorialTarget(
+                                        id: 'picker.tune:GENETICS',
+                                        child: IconButton(
                                         icon: Icon(
                                           Icons.tune,
                                           color: _geneticParams == null
@@ -607,6 +628,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                             : 'Parametros personalizados activos · '
                                                 '${_geneticParams!.objective.label}',
                                         onPressed: _configureGenetic,
+                                      ),
                                       ),
                                     IconButton(
                                       tooltip: '¿Cómo funciona esta regla?',
@@ -625,6 +647,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
+                            ),
                             );
                           },
                         ),
@@ -703,7 +726,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                         child: const Text('Cancelar'),
                       ),
                       const SizedBox(width: 12),
-                      FilledButton.icon(
+                      TutorialTarget(
+                        id: 'picker.calc',
+                        child: FilledButton.icon(
                         onPressed: _canCalculate ? _onCalculate : null,
                         icon: const Icon(Icons.calculate),
                         label: const Text('Calcular'),
@@ -722,6 +747,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                      ),
                       ),
                     ];
                     if (narrow) {

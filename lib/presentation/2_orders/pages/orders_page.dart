@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -166,9 +167,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   /// One program: its jobs, date, environment and routes, and its actions.
   Widget _buildOrderCard(BuildContext context, ColorScheme colorScheme,
-      OrderEntity order, String? environment) {
+      OrderEntity order, String? environment,
+      {bool latest = false}) {
     final routes = routeNamesOf(order);
-    return Card(
+    final card = Card(
       margin: const EdgeInsets.all(8.0),
       color: colorScheme.surfaceContainer,
       shape: RoundedRectangleBorder(
@@ -227,7 +229,9 @@ class _OrdersPageState extends State<OrdersPage> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                TextButton(
+                TutorialTarget(
+                  id: latest ? 'order.programar.latest' : 'order.programar',
+                  child: TextButton(
                   onPressed: () => getMetrics(context, order.orderId!),
                   style: TextButton.styleFrom(
                     padding:
@@ -240,17 +244,36 @@ class _OrdersPageState extends State<OrdersPage> {
                   ),
                   child: const Text("programar"),
                 ),
-                IconButton(
-                  icon: Icon(Icons.edit, color: colorScheme.secondary),
-                  onPressed: () => _editOrder(context, order.orderId!),
                 ),
-                IconButton(
-                  icon: Icon(Icons.copy, color: colorScheme.primary),
-                  onPressed: () => _orderBloc.duplicateOrder(order.orderId!),
+                TutorialTarget(
+                  id: latest ? 'order.edit.latest' : 'order.edit',
+                  child: IconButton(
+                    tooltip: 'Editar programa',
+                    icon: Icon(Icons.edit, color: colorScheme.secondary),
+                    onPressed: () => _editOrder(context, order.orderId!),
+                  ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.delete, color: colorScheme.error),
-                  onPressed: () => _orderBloc.deleteOrderById(order.orderId!),
+                TutorialTarget(
+                  id: latest ? 'order.copy.latest' : 'order.copy',
+                  child: IconButton(
+                    tooltip: 'Duplicar programa',
+                    icon: Icon(Icons.copy, color: colorScheme.primary),
+                    onPressed: () {
+                      _orderBloc.duplicateOrder(order.orderId!);
+                      tutorial.emit('orderDuplicated');
+                    },
+                  ),
+                ),
+                TutorialTarget(
+                  id: latest ? 'order.delete.latest' : 'order.delete',
+                  child: IconButton(
+                    tooltip: 'Eliminar programa',
+                    icon: Icon(Icons.delete, color: colorScheme.error),
+                    onPressed: () {
+                      _orderBloc.deleteOrderById(order.orderId!);
+                      tutorial.emit('orderDeleted');
+                    },
+                  ),
                 ),
               ],
             ),
@@ -258,6 +281,9 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       ),
     );
+    return latest
+        ? TutorialTarget(id: 'order.card.latest', child: card)
+        : card;
   }
 
   @override
@@ -295,7 +321,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   child: Wrap(
                     alignment: WrapAlignment.center,
                     children: [
-                      TextButton(
+                      TutorialTarget(
+                        id: 'orders.new',
+                        child: TextButton(
                         onPressed: () async {
                           print("DEBUG: Navegando a NewOrderPage");
 
@@ -328,6 +356,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                         child: const Text("Nuevo Programa de Producción",
                             textAlign: TextAlign.center),
+                      ),
                       ),
                     ],
                   ),
@@ -367,7 +396,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     return Column(
                       children: [
-                        _buildFilterBar(
+                        TutorialTarget(
+                          id: 'orders.filters',
+                          child: _buildFilterBar(
                           colorScheme,
                           environmentOptions: environmentOptions,
                           routeOptions: routeOptions,
@@ -377,6 +408,7 @@ class _OrdersPageState extends State<OrdersPage> {
                           total: state.orders.length,
                           environmentsLoading: environments.isEmpty &&
                               state.orders.isNotEmpty,
+                        ),
                         ),
                         Expanded(
                           child: filtered.isEmpty
@@ -392,12 +424,21 @@ class _OrdersPageState extends State<OrdersPage> {
                                   ),
                                 )
                               : ListView.builder(
+                                  // Build every card so the guided tutorial
+                                  // can reach the newest one.
+                                  cacheExtent: 100000,
                                   itemCount: filtered.length,
                                   itemBuilder: (context, index) => _buildOrderCard(
                                     context,
                                     colorScheme,
                                     filtered[index],
                                     environments[filtered[index].orderId],
+                                    // The newest program is the one the
+                                    // guided tutorial just created.
+                                    latest: filtered[index].orderId ==
+                                        state.orders
+                                            .map((o) => o.orderId ?? 0)
+                                            .fold<int>(0, (a, b) => a > b ? a : b),
                                   ),
                                 ),
                         ),

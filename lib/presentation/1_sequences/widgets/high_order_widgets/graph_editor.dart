@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 // widgets/high_order_widgets/graph_editor.dart
 //
 // Editor de grafo para rutas de proceso (Flutter desktop).
@@ -173,6 +174,7 @@ class NodeEditorState extends State<NodeEditor> {
       _pos[key] = _nextFreePosition();
       _sel = _Selection.node(key);
     });
+    tutorial.emit('stationAddedToRoute');
     _ensureVisible(key);
     return true;
   }
@@ -305,6 +307,7 @@ class NodeEditorState extends State<NodeEditor> {
       _flashWarn('Esa conexión crearía un ciclo');
     } else {
       _arrows.add(RouteArrow(from, to));
+      tutorial.emit('edgeAdded');
     }
   }
 
@@ -517,9 +520,12 @@ class NodeEditorState extends State<NodeEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildToolbar(context),
+        TutorialTarget(id: 'routes.tools', child: _buildToolbar(context)),
         const SizedBox(height: 8),
-        Expanded(child: _buildCanvas(context)),
+        Expanded(
+          child: TutorialTarget(
+              id: 'routes.canvas', child: _buildCanvas(context)),
+        ),
       ],
     );
   }

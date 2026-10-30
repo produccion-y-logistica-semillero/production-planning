@@ -5,6 +5,8 @@ import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/tutorial/tutorial_layer.dart';
+import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -82,9 +84,22 @@ class MyApp extends StatelessWidget {
             dynamicSchemeVariant: DynamicSchemeVariant.content),
         // textTheme: GoogleFonts.lexendDecaTextTheme()
       ),
-      home: ChangeNotifierProvider(
-        create: (context) => SideMenuProvider(),
-        child: MainPage(),
+      // The guided tutorial is drawn above every route and dialog.
+      builder: (context, child) => TutorialLayer(child: child!),
+      // A new key per workspace session: switching to or from the tutorial
+      // workspace rebuilds every page from the new database.
+      home: ValueListenableBuilder<bool>(
+        valueListenable: appSwitching,
+        builder: (context, switching, _) => switching
+            ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+            : ValueListenableBuilder<int>(
+                valueListenable: appSession,
+                builder: (context, session, _) => ChangeNotifierProvider(
+                  key: ValueKey(session),
+                  create: (context) => SideMenuProvider(),
+                  child: MainPage(),
+                ),
+              ),
       ),
       debugShowCheckedModeBanner: false,
     );

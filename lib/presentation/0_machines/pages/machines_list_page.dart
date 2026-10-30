@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -45,7 +46,9 @@ class MachinesListPage extends StatelessWidget {
                     horizontal:
                         MediaQuery.sizeOf(context).width < 600 ? 12 : 60,
                     vertical: 10),
-                child: TextButton.icon(
+                child: TutorialTarget(
+                  id: 'machines.addStation',
+                  child: TextButton.icon(
                   label: Text(
                     "Agregar estacion de trabajo",
                     overflow: TextOverflow.ellipsis,
@@ -63,6 +66,7 @@ class MachinesListPage extends StatelessWidget {
                     shape: WidgetStatePropertyAll(RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))),
                   ),
+                ),
                 ),
               ),
               ),

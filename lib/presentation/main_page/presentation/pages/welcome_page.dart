@@ -70,14 +70,14 @@ class WelcomePage extends StatelessWidget {
                   card(
                     Icons.linear_scale,
                     'Tutorial: Flow Shop',
-                    '3 lotes, la misma ruta para todos. 8 pasos.',
+                    'Guiado paso a paso: 3 lotes, la misma ruta para todos.',
                     () => _open(context, '/manual', 4, arguments: 0),
                   ),
                   card(
                     Icons.hub_outlined,
                     'Tutorial: Flexible Job Shop',
-                    '4 piezas, rutas distintas y varias máquinas por '
-                        'estación. 7 pasos.',
+                    'Guiado paso a paso: ejes y bridas, rutas distintas y '
+                        'varias máquinas por estación.',
                     () => _open(context, '/manual', 4, arguments: 1),
                   ),
                   card(

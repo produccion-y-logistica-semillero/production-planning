@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metric_definitions.dart';
@@ -369,7 +370,9 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
           style: theme.textTheme.bodySmall?.copyWith(color: muted),
         ),
         const SizedBox(height: 8),
-        Wrap(
+        TutorialTarget(
+          id: 'dashboard.scoreChips',
+          child: Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
@@ -382,6 +385,7 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
                 }),
               ),
           ],
+        ),
         ),
         const SizedBox(height: 12),
         Table(

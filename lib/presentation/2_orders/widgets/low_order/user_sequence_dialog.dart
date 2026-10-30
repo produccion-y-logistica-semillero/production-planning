@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:production_planning/entities/job_entity.dart';
@@ -91,7 +92,9 @@ class _UserSequenceDialogState extends State<UserSequenceDialog> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ReorderableListView.builder(
+              child: TutorialTarget(
+                id: 'useq.list',
+                child: ReorderableListView.builder(
                 buildDefaultDragHandles: false,
                 itemCount: _order.length,
                 onReorder: (from, to) => setState(() {
@@ -120,6 +123,7 @@ class _UserSequenceDialogState extends State<UserSequenceDialog> {
                   );
                 },
               ),
+              ),
             ),
           ],
         ),
@@ -129,10 +133,13 @@ class _UserSequenceDialogState extends State<UserSequenceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop([for (final j in _order) j.jobId!]),
-          child: const Text('Usar esta secuencia'),
+        TutorialTarget(
+          id: 'useq.ok',
+          child: FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop([for (final j in _order) j.jobId!]),
+            child: const Text('Usar esta secuencia'),
+          ),
         ),
       ],
     );

@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/widgets/high_order/add_job.dart
@@ -294,6 +295,7 @@ class AddJobState extends State<AddJobWidget> {
       lastDate: DateTime(2101),
     );
     if (picked != null) {
+      tutorial.emit('datePicked');
       setState(() {
         if (label == 'Seleccione fecha de disponibilidad') {
           final currentHour = availableHour ?? widget.availableHour;
@@ -432,13 +434,16 @@ class AddJobState extends State<AddJobWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(
-                  onPressed: () {
-                    BlocProvider.of<NewOrderBloc>(context)
-                        .duplicateJob(widget.index);
-                  },
-                  icon: Icon(Icons.copy_all, color: colorScheme.primary),
-                  tooltip: 'Duplicar job',
+                TutorialTarget(
+                  id: 'job${widget.index}.duplicate',
+                  child: IconButton(
+                    onPressed: () {
+                      BlocProvider.of<NewOrderBloc>(context)
+                          .duplicateJob(widget.index);
+                    },
+                    icon: Icon(Icons.copy_all, color: colorScheme.primary),
+                    tooltip: 'Duplicar job',
+                  ),
                 ),
                 IconButton(
                   onPressed: () {
@@ -450,7 +455,10 @@ class AddJobState extends State<AddJobWidget> {
                 ),
               ],
             ),
-            TextFormField(
+            TutorialTarget(
+              id: 'job${widget.index}.id',
+              text: widget.idController,
+              child: TextFormField(
               controller: widget.idController,
               decoration: InputDecoration(
                 labelText: 'ID del trabajo:',
@@ -465,8 +473,12 @@ class AddJobState extends State<AddJobWidget> {
                 ),
               ),
             ),
+            ),
             const SizedBox(height: 8),
-            TextFormField(
+            TutorialTarget(
+              id: 'job${widget.index}.priority',
+              text: widget.priorityController,
+              child: TextFormField(
               controller: widget.priorityController,
               decoration: InputDecoration(
                 labelText: withSymbol('Prioridad', 'wj'),
@@ -482,6 +494,7 @@ class AddJobState extends State<AddJobWidget> {
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
             ),
             const SizedBox(height: 8),
             BlocBuilder<NewOrderBloc, NewOrderState>(
@@ -499,6 +512,7 @@ class AddJobState extends State<AddJobWidget> {
                           runSpacing: 4,
                           children: [
                             _selectAutomaticHour(
+                              'job${widget.index}.autoStart',
                               withSymbol('Hora de inicio', 'rj'),
                               automaticStartHour,
                               (picked) => setState(() {
@@ -507,6 +521,7 @@ class AddJobState extends State<AddJobWidget> {
                               }),
                             ),
                             _selectAutomaticHour(
+                              'job${widget.index}.autoDue',
                               withSymbol('Hora de entrega', 'dj'),
                               automaticDueHour,
                               (picked) => setState(() {
@@ -554,7 +569,9 @@ class AddJobState extends State<AddJobWidget> {
               },
             ),
             const SizedBox(height: 8),
-            DropdownButton<int>(
+            TutorialTarget(
+              id: 'job${widget.index}.route',
+              child: DropdownButton<int>(
               value: selectedSequenceValue,
               hint: Text('Seleccionar ruta de proceso',
                   style: TextStyle(color: colorScheme.onSurfaceVariant)),
@@ -565,6 +582,7 @@ class AddJobState extends State<AddJobWidget> {
                   widget.selectedSequence = newValue;
                 });
                 _loadSequence(newValue);
+                tutorial.emit('routeSelected');
               },
               items: widget.sequences
                   .map((sequence) => DropdownMenuItem<int>(
@@ -576,6 +594,7 @@ class AddJobState extends State<AddJobWidget> {
               isExpanded: true,
               dropdownColor: colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
+            ),
             ),
             if (_loadingStations)
               const Padding(
@@ -595,10 +614,12 @@ class AddJobState extends State<AddJobWidget> {
 
   /// Hour-only picker for "Automático" mode — the date is always computed
   /// at save time, so unlike [selectHour] there's no date to merge with.
-  Widget _selectAutomaticHour(
-      String label, TimeOfDay? hour, ValueChanged<TimeOfDay> onPicked) {
+  Widget _selectAutomaticHour(String tutorialId, String label,
+      TimeOfDay? hour, ValueChanged<TimeOfDay> onPicked) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Row(
+    return TutorialTarget(
+      id: tutorialId,
+      child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
@@ -613,14 +634,20 @@ class AddJobState extends State<AddJobWidget> {
                   "${hour.minute.toString().padLeft(2, '0')}"),
         ),
       ],
+    ),
     );
   }
 
   Widget selectDate(String label, DateTime? date, TimeOfDay? hour) {
     final colorScheme = Theme.of(context).colorScheme;
+    final which =
+        label == 'Seleccione fecha de disponibilidad' ? 'available' : 'due';
     return Row(
       children: [
-        selectHour(hour, date, label),
+        TutorialTarget(
+          id: 'job${widget.index}.${which}Hour',
+          child: selectHour(hour, date, label),
+        ),
         // Flexible: a long label ellipsizes instead of overflowing.
         Flexible(
           child: Text(
@@ -630,9 +657,12 @@ class AddJobState extends State<AddJobWidget> {
           ),
         ),
         const Spacer(),
-        IconButton(
-          icon: Icon(Icons.calendar_today, color: colorScheme.primary),
-          onPressed: () => _selectDate(context, label),
+        TutorialTarget(
+          id: 'job${widget.index}.${which}Date',
+          child: IconButton(
+            icon: Icon(Icons.calendar_today, color: colorScheme.primary),
+            onPressed: () => _selectDate(context, label),
+          ),
         ),
       ],
     );
@@ -689,6 +719,9 @@ class AddJobState extends State<AddJobWidget> {
         _machinesByType[machineTypeId] ?? const <MachineEntity>[];
     final selectedMachine = _selectedMachines[task.id];
     final defaultLabel = _stationLabel(task);
+    // Position of the station in the route, for the guided tutorial.
+    final station = _sequenceDetails?.tasks?.indexOf(task) ?? 0;
+    final tid = 'job${widget.index}.station$station';
 
     return Padding(
       padding: const EdgeInsets.only(top: 12.0),
@@ -720,12 +753,16 @@ class AddJobState extends State<AddJobWidget> {
                 ),
               ),
               const SizedBox(width: 12),
-              IconButton(
-                onPressed: machineOptions.isNotEmpty
-                    ? () => _showStationTimeDialog(task, machineTypeId)
-                    : null,
-                icon: const Icon(Icons.schedule_outlined),
-                color: Theme.of(context).colorScheme.primary,
+              TutorialTarget(
+                id: '$tid.time',
+                child: IconButton(
+                  tooltip: 'Tiempo de proceso',
+                  onPressed: machineOptions.isNotEmpty
+                      ? () => _showStationTimeDialog(task, machineTypeId)
+                      : null,
+                  icon: const Icon(Icons.schedule_outlined),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ],
           ),
@@ -745,7 +782,9 @@ class AddJobState extends State<AddJobWidget> {
                     size: 16, color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(width: 8),
-              DropdownButton<String>(
+              TutorialTarget(
+                id: '$tid.state',
+                child: DropdownButton<String>(
                 value: _machineFinalStates[machineTypeId],
                 hint: const Text("Seleccionar (A-J)"),
                 items: _letters.map((String letter) {
@@ -758,7 +797,9 @@ class AddJobState extends State<AddJobWidget> {
                   setState(() {
                     _machineFinalStates[machineTypeId] = newValue!;
                   });
+                  tutorial.emit('stateSelected');
                 },
+              ),
               ),
             ],
           ),
@@ -873,7 +914,9 @@ class AddJobState extends State<AddJobWidget> {
               children: [
                 // ── machine selector ──────────────────────────────────────
                 if (machines.isNotEmpty)
-                  DropdownButton<int>(
+                  TutorialTarget(
+                    id: 'times.machine',
+                    child: DropdownButton<int>(
                     value: selectedMachineId,
                     isExpanded: true,
                     items: machines
@@ -897,6 +940,7 @@ class AddJobState extends State<AddJobWidget> {
                       processingError = null;
                     }),
                   ),
+                  ),
                 if (machines.length > 1)
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
@@ -913,7 +957,10 @@ class AddJobState extends State<AddJobWidget> {
                     'Tiempo de Procesamiento (${timeFormatLabel(timeInputFormat.value)}):',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                TextField(
+                TutorialTarget(
+                  id: 'times.processing',
+                  text: processingController,
+                  child: TextField(
                   controller: processingController,
                   focusNode: processingFocusNode,
                   keyboardType: TextInputType.number,
@@ -928,6 +975,7 @@ class AddJobState extends State<AddJobWidget> {
                       setDialogState(() => processingError = null);
                     }
                   },
+                ),
                 ),
                 // ── info note ─────────────────────────────────────────────
                 const SizedBox(height: 12),
@@ -961,7 +1009,9 @@ class AddJobState extends State<AddJobWidget> {
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancelar'),
             ),
-            ElevatedButton(
+            TutorialTarget(
+              id: 'times.ok',
+              child: ElevatedButton(
               onPressed: () {
                 // An invalid time used to be saved silently as 0.
                 final error = validateDuration(processingController.text);
@@ -970,8 +1020,10 @@ class AddJobState extends State<AddJobWidget> {
                   return;
                 }
                 Navigator.of(dialogContext).pop(true);
+                tutorial.emit('stationTimesAccepted');
               },
               child: const Text('Aceptar'),
+            ),
             ),
           ],
         ),

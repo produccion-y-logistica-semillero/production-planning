@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/pages/new_order_page.dart
@@ -80,6 +81,7 @@ class NewOrderPage extends StatelessWidget {
         child: BlocListener<NewOrderBloc, NewOrderState>(
           listener: (context, state) {
             if (state is NewOrdersState && state.justSaved != null) {
+              if (state.justSaved!) tutorial.emit('orderSaved');
               showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -98,12 +100,15 @@ class NewOrderPage extends StatelessWidget {
                         : "Hubo un error guardando la orden",
                   ),
                   actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(subcontext).pop();
-                        Navigator.of(context).pop(state.justSaved);
-                      },
-                      child: const Text("OK"),
+                    TutorialTarget(
+                      id: 'order.savedOk',
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(subcontext).pop();
+                          Navigator.of(context).pop(state.justSaved);
+                        },
+                        child: const Text("OK"),
+                      ),
                     ),
                   ],
                 ),
@@ -179,7 +184,11 @@ class NewOrderPage extends StatelessWidget {
                       ],
                     ),
                     if (state is NewOrdersState)
-                      _buildDateModeToggle(context, bloc, state, colorScheme),
+                      TutorialTarget(
+                        id: 'order.dateMode',
+                        child: _buildDateModeToggle(
+                            context, bloc, state, colorScheme),
+                      ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(children: jobWidgets),
@@ -194,7 +203,9 @@ class NewOrderPage extends StatelessWidget {
                         spacing: 12,
                         runSpacing: 12,
                         children: [
-                        ElevatedButton(
+                        TutorialTarget(
+                          id: 'order.addJob',
+                          child: ElevatedButton(
                           onPressed: () => bloc.addJob(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: colorScheme.primary,
@@ -206,7 +217,10 @@ class NewOrderPage extends StatelessWidget {
                           ),
                           child: const Text('Agregar Job'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.matrix',
+                          child: ElevatedButton(
                           onPressed: () =>
                               _showMatrixDialog(context, state, colorScheme),
                           style: ElevatedButton.styleFrom(
@@ -218,7 +232,10 @@ class NewOrderPage extends StatelessWidget {
                           child: const Text(
                               'Definir matriz de tiempos de alistamiento'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.initialStates',
+                          child: ElevatedButton(
                           onPressed: () =>
                               _showMachineInitialStatesDialog(context, state, colorScheme),
                           style: ElevatedButton.styleFrom(
@@ -229,7 +246,10 @@ class NewOrderPage extends StatelessWidget {
                           ),
                           child: const Text('Definir estado inicial de máquinas'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.save',
+                          child: ElevatedButton(
                           onPressed: () {
                             if (!_validateForm(state)) {
                               _showValidationDialog(context, colorScheme);
@@ -252,6 +272,7 @@ class NewOrderPage extends StatelessWidget {
                           child: Text(editOrderId != null
                               ? 'Guardar Cambios'
                               : 'Crear programa de produccion'),
+                        ),
                         ),
                         ],
                       ),
@@ -673,19 +694,26 @@ class NewOrderPage extends StatelessWidget {
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text("Cerrar"),
+                TutorialTarget(
+                  id: 'matrix.close',
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text("Cerrar"),
+                  ),
                 ),
-                ElevatedButton(
+                TutorialTarget(
+                  id: 'matrix.save',
+                  child: ElevatedButton(
                   onPressed: () {
                     flushToModel();
+                    tutorial.emit('matrixSaved');
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Matriz de alistamiento guardada para $selectedMachine')),
                     );
                   },
                   child: const Text("Guardar"),
+                ),
                 ),
               ],
             );
@@ -841,12 +869,16 @@ class NewOrderPage extends StatelessWidget {
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cerrar'),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  bloc.setMachineInitialStates(current);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Guardar'),
+              TutorialTarget(
+                id: 'initial.save',
+                child: ElevatedButton(
+                  onPressed: () {
+                    bloc.setMachineInitialStates(current);
+                    Navigator.of(dialogContext).pop();
+                    tutorial.emit('initialStatesSaved');
+                  },
+                  child: const Text('Guardar'),
+                ),
               ),
             ],
           );

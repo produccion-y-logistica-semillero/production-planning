@@ -50,20 +50,11 @@ void main() {
     });
   });
 
-  testWidgets('manual shows both guided cases and advances step by step',
-      (tester) async {
+  testWidgets('manual offers both guided tours', (tester) async {
     await _pump(tester, const ManualPage());
-    expect(find.text('Caso 1 · Flow Shop'), findsOneWidget);
-    expect(find.text('Caso 2 · Flexible Job Shop'), findsOneWidget);
-    expect(find.text('Paso 1 de 8'), findsOneWidget);
-
-    await tester.tap(find.text('Listo, siguiente').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Paso 2 de 8'), findsOneWidget);
-
-    await tester.tap(find.text('Caso 2 · Flexible Job Shop'));
-    await tester.pumpAndSettle();
-    expect(find.text('Paso 1 de 7'), findsOneWidget);
+    expect(find.text('Tutorial guiado: Flow Shop'), findsOneWidget);
+    expect(find.text('Tutorial guiado: Flexible Job Shop'), findsOneWidget);
+    expect(find.text('Comenzar tutorial'), findsNWidgets(2));
   });
 
   testWidgets('glossary search finds Johnson', (tester) async {

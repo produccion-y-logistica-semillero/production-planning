@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -411,7 +412,9 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
       builder: (context, mode, _) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: SegmentedButton<MachineStartMode>(
+          child: TutorialTarget(
+            id: 'machine.startMode',
+            child: SegmentedButton<MachineStartMode>(
             segments: const [
               ButtonSegment(
                 value: MachineStartMode.now,
@@ -428,6 +431,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
             onSelectionChanged: (selection) {
               widget.startModeNotifier.value = selection.first;
             },
+          ),
           ),
         );
       },
@@ -523,7 +527,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               buildLabeledField(
                 label: 'Nombre maquina',
                 margin: const EdgeInsets.only(bottom: 20),
-                field: TextField(
+                field: TutorialTarget(
+                  id: 'machine.name',
+                  text: widget.nameController,
+                  child: TextField(
                   controller: widget.nameController,
                   decoration: InputDecoration(
                     hintText: 'Nombre',
@@ -535,6 +542,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                         vertical: 12, horizontal: 12),
                   ),
                 ),
+                ),
               ),
 
               // Machine start-date mode toggle + availability date-time picker
@@ -542,13 +550,20 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               _buildDateTimeField(),
 
               // Sections only shown when creating (not editing)
-              if (!widget.isEditing) _buildAutomaticPauseForm(),
-              if (!widget.isEditing) _buildScheduledForm(),
+              if (!widget.isEditing)
+                TutorialTarget(
+                    id: 'machine.rest', child: _buildAutomaticPauseForm()),
+              if (!widget.isEditing)
+                TutorialTarget(
+                    id: 'machine.maintenance', child: _buildScheduledForm()),
               if (!widget.isEditing)
                 buildLabeledField(
                   label: 'Cantidad de máquinas a crear',
                   margin: const EdgeInsets.only(bottom: 32),
-                  field: TextField(
+                  field: TutorialTarget(
+                    id: 'machine.quantity',
+                    text: widget.quantityController,
+                    child: TextField(
                     controller: widget.quantityController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -565,6 +580,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                           vertical: 12, horizontal: 12),
                     ),
                   ),
+                  ),
                 ),
 
               // Action buttons
@@ -579,13 +595,16 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                     child: const Text('Cancelar'),
                   ),
                   const SizedBox(width: 50),
-                  TextButton(
+                  TutorialTarget(
+                    id: 'machine.add',
+                    child: TextButton(
                     onPressed: () =>
                         widget.addMachineHandle(_scheduledInactivities),
                     style: const ButtonStyle(
                       padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
                     ),
                     child: Text(widget.isEditing ? 'Guardar' : 'Agregar'),
+                  ),
                   ),
                 ],
               ),

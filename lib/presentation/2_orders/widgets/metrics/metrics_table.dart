@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -117,17 +118,23 @@ class _MetricsTableState extends State<MetricsTable> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              IconButton(
+              TutorialTarget(
+                id: 'metrics.gantt:${widget.ruleNames[i]}',
+                child: IconButton(
                 tooltip: 'Ver diagrama de Gantt',
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.bar_chart, size: 20),
                 onPressed: () => widget.onGantt(i),
               ),
-              IconButton(
+              ),
+              TutorialTarget(
+                id: 'metrics.detail:${widget.ruleNames[i]}',
+                child: IconButton(
                 tooltip: 'Ver detalle de tareas',
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.table_chart_outlined, size: 20),
                 onPressed: () => widget.onDetail(i),
+              ),
               ),
             ],
           ),

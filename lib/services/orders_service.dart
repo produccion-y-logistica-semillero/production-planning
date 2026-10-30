@@ -143,9 +143,16 @@ class OrdersService {
     return response.fold(
       (failure) => Left(failure),
       (order) async {
-        // Create a copy of the order with a new ID (null for insert)
-        final newOrder =
-            OrderEntity(null, DateTime.now(), order.orderJobs ?? []);
+        // Create a copy of the order with a new ID (null for insert). The
+        // setup matrix and machine initial states live on the order, not on
+        // its jobs, so they must be carried over explicitly.
+        final newOrder = OrderEntity(
+          null,
+          DateTime.now(),
+          order.orderJobs ?? [],
+          setupTimeMatrix: order.setupTimeMatrix,
+          machineInitialStates: order.machineInitialStates,
+        );
         return await orderRepo.createOrder(newOrder);
       },
     );

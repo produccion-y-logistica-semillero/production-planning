@@ -9,6 +9,7 @@ class Metrics {
   final Duration avarageDelayTime; // average tardiness, always non-negative
   final Duration avarageLatenessTime; // average lateness, can be negative
   final Duration avarageEarlinessTime; // average earliness, always non-negative
+  final Duration totalEarliness; // sum of earliness Ej = max(0, dj - Cj)
   final int delayedJobs;
   final double percentageDelayedJobs;
   final Duration makespan;
@@ -43,6 +44,7 @@ class Metrics {
       required this.maxTardiness,
       required this.totalWeightedTardiness,
       required this.maxLateness,
+      this.totalEarliness = Duration.zero,
       this.tabuStats,
       this.machineUsage = const [],
       this.stationUsage = const [],

@@ -126,14 +126,13 @@ final List<MetricDef> kMetrics = [
         '${m.delayedJobs} · ${m.percentageDelayedJobs.toStringAsFixed(0)} %',
   ),
   _durationMetric(
-    'avgEarliness',
-    'Adelanto\npromedio',
-    'Adelanto promedio',
-    'Cuánto antes de su fecha de entrega terminan los trabajos, en promedio. '
-        'No se califica como mejor ni peor: terminar muy antes puede '
-        'significar inventario en espera.',
-    (m) => m.avarageEarlinessTime,
-    sense: MetricSense.neutral,
+    'totalEarliness',
+    'Anticipo\ntotal',
+    'Anticipo total',
+    'Suma de cuánto antes de su fecha de entrega terminan los trabajos '
+        '(los que llegan tarde cuentan 0). Menos es mejor: terminar muy '
+        'antes significa inventario en espera.',
+    (m) => m.totalEarliness,
   ),
   _durationMetric(
     'idle',
@@ -144,13 +143,14 @@ final List<MetricDef> kMetrics = [
   ),
 ];
 
-/// The five headline objectives (dashboard cards, default overall score).
+/// The headline objectives (dashboard cards, default overall score).
 const List<String> kHeadlineMetricIds = [
   'makespan',
   'totalFlow',
   'totalTardiness',
   'weightedTardiness',
   'delayedJobs',
+  'totalEarliness',
 ];
 
 MetricDef metricById(String id) => kMetrics.firstWhere((m) => m.id == id);

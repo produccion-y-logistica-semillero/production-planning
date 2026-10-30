@@ -142,9 +142,9 @@ const Map<String, DispatchRuleInfo> _catalog = {
     goodFor: 'Priorizar trabajos importantes considerando alistamientos.',
     kind: 'Dinámica',
   ),
-  'MINSLACK': DispatchRuleInfo(
-    code: 'MINSLACK',
-    title: 'Holgura mínima (Minimum Slack)',
+  'MS': DispatchRuleInfo(
+    code: 'MS',
+    title: 'Holgura mínima (Minimum Slack, MS)',
     summary: 'Primero el que tiene menos margen antes de su entrega.',
     howItWorks:
         'Holgura = fecha de entrega − cuándo terminaría si empieza ahora − '
@@ -235,7 +235,10 @@ const Map<String, DispatchRuleInfo> _catalog = {
         'Shop, Open Shop y Recurrente es el orden de las operaciones y, si '
         'hay varias máquinas por estación, la máquina de cada operación. Cada '
         'cromosoma se programa con alistamientos e interrupciones reales. '
-        'Usa una semilla fija: la misma orden da siempre el mismo programa.',
+        'Con el ícono de ajustes se eligen la función objetivo (makespan por '
+        'defecto, flujo total, tardanza total, trabajos retrasados o anticipo '
+        'total) y los parámetros: población, generaciones, cruce, mutación, '
+        'elitismo y semilla. La misma semilla da siempre el mismo programa.',
     goodFor:
         'Reducir el tiempo total (makespan) más allá de las reglas simples; '
         'tarda más que ellas.',
@@ -267,11 +270,28 @@ const Map<String, DispatchRuleInfo> _catalog = {
     goodFor: 'Afinar la secuencia en una máquina o máquinas paralelas.',
     kind: 'Metaheurística',
   ),
+  'SECUENCIA_USUARIO': DispatchRuleInfo(
+    code: 'SECUENCIA_USUARIO',
+    title: 'Secuencia definida por el usuario',
+    summary: 'Programa los trabajos en el orden que usted eligió.',
+    howItWorks:
+        'En una máquina y Flow Shop los trabajos se programan exactamente en '
+        'ese orden (permutación). En máquinas paralelas y Flexible Flow Shop '
+        'entran en ese orden y cada uno va a la máquina que lo termina '
+        'primero. En Job Shop, Open Shop y Recurrente el orden es una lista '
+        'de prioridad: entre las operaciones que pueden empezar primero, va '
+        'la del trabajo que está antes en su lista. Se respetan alistamientos '
+        'e interrupciones.',
+    goodFor:
+        'Comparar el plan que ya usa la planta, o una idea propia, contra '
+        'las reglas y metaheurísticas con las mismas métricas.',
+    kind: 'Manual',
+  ),
 };
 
 /// The explanation of rule [code] (case-insensitive), or null if unknown.
-/// "MS" is the same rule as "MINSLACK".
+/// "MINSLACK" is the old name of "MS" (Minimum Slack).
 DispatchRuleInfo? dispatchRuleInfo(String code) {
   final c = code.trim().toUpperCase();
-  return _catalog[c == 'MS' ? 'MINSLACK' : c];
+  return _catalog[c == 'MINSLACK' ? 'MS' : c];
 }

@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 14,
+      version: 15,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -430,8 +430,12 @@ class SQLLiteDatabaseProvider {
           });
         }
 
+        // Minimum Slack is granted as MS (21) everywhere. MINSLACK (11) is
+        // the same rule under another name; granting both made Parallel
+        // Machines list it twice.
+
         // 1: Single Machine
-        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 24, 25]) {
+        for (final r in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 21, 12, 13, 24, 25]) {
           addRule(1, r);
         }
 
@@ -442,7 +446,7 @@ class SQLLiteDatabaseProvider {
         // DISTINCT, so granting both made each of those four appear twice in
         // the rule dropdown.
         for (final r in [
-          2, 3, 1, 14, 11, 12, 5, 6, 7, 10,
+          2, 3, 1, 14, 12, 5, 6, 7, 10,
           17, 18, 21, 22, 24, 25,
         ]) {
           addRule(2, r);
@@ -450,7 +454,7 @@ class SQLLiteDatabaseProvider {
 
         // 3: Flow Shop
         for (final r in [
-          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 23, 24, 26, 27,
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 21, 12, 13, 23, 24, 26, 27,
         ]) {
           addRule(3, r);
         }
@@ -475,7 +479,7 @@ class SQLLiteDatabaseProvider {
         // 7: Open Shop, 8: Flexible Open Shop, 9: Recurrente,
         // 10: Flexible Recurrente
         for (final env in [7, 8, 9, 10]) {
-          for (final r in [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27, 28]) {
+          for (final r in [1, 2, 3, 4, 5, 21, 12, 13, 24, 26, 27, 28]) {
             addRule(env, r);
           }
         }
@@ -1643,6 +1647,22 @@ class SQLLiteDatabaseProvider {
               [environmentId, 28, environmentId, 28],
             );
           }
+        }
+
+        if (oldVersion < 15) {
+          // MINSLACK (11) and MS (21) are the same rule (Minimum Slack, MS):
+          // every environment that had MINSLACK gets MS instead, without
+          // duplicating it where both were granted (Parallel Machines).
+          await db.execute(
+            'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+            'SELECT DISTINCT t.environment_id, 21 FROM types_x_rules t '
+            'WHERE t.dispatch_rule_id = 11 AND NOT EXISTS ('
+            'SELECT 1 FROM types_x_rules u '
+            'WHERE u.environment_id = t.environment_id '
+            'AND u.dispatch_rule_id = 21)',
+          );
+          await db.execute(
+              'DELETE FROM types_x_rules WHERE dispatch_rule_id = 11');
         }
       },
     );

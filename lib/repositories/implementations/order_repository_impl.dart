@@ -166,7 +166,7 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(3, 'LPT'),
             const Tuple2(4, 'FIFO'),
             const Tuple2(5, 'WSPT'),
-            const Tuple2(11, 'MINSLACK'),
+            const Tuple2(21, 'MS'),
             const Tuple2(12, 'CR'),
             const Tuple2(13, 'ATCS'),
             const Tuple2(24, 'GENETICS'),

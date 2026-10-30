@@ -21,7 +21,12 @@ void main() {
     }
   });
 
-  test('MS is the same rule as MINSLACK', () {
-    expect(dispatchRuleInfo('ms')!.code, 'MINSLACK');
+  test('MINSLACK is the old name of MS (Minimum Slack)', () {
+    expect(dispatchRuleInfo('minslack')!.code, 'MS');
+    expect(dispatchRuleInfo('ms')!.code, 'MS');
+  });
+
+  test('the user sequence has an explanation', () {
+    expect(dispatchRuleInfo('SECUENCIA_USUARIO'), isNotNull);
   });
 }

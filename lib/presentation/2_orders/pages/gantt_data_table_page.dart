@@ -5,6 +5,7 @@ import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
+import 'package:production_planning/presentation/2_orders/widgets/metrics/schedule_breakdown_views.dart';
 
 class GanttDataTablePage extends StatelessWidget {
   final int orderId;
@@ -77,18 +78,45 @@ class GanttDataTablePage extends StatelessWidget {
                   orderId: orderId, ruleName: selectedRuleName);
             }
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HeaderInfo(
-                  orderId: orderId,
-                  ruleName: selectedRuleName,
-                  machineCount: state.planningMachines.length,
-                  taskCount: taskRows.length,
-                ),
-                const SizedBox(height: 16),
-                Expanded(child: _TaskTable(rows: taskRows)),
-              ],
+            return DefaultTabController(
+              length: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _HeaderInfo(
+                    orderId: orderId,
+                    ruleName: selectedRuleName,
+                    machineCount: state.planningMachines.length,
+                    taskCount: taskRows.length,
+                  ),
+                  const SizedBox(height: 8),
+                  const TabBar(
+                    tabAlignment: TabAlignment.start,
+                    isScrollable: true,
+                    tabs: [
+                      Tab(
+                          icon: Icon(Icons.view_list_outlined),
+                          text: 'Operaciones'),
+                      Tab(
+                          icon: Icon(Icons.precision_manufacturing_outlined),
+                          text: 'Máquinas y estaciones'),
+                      Tab(
+                          icon: Icon(Icons.event_available_outlined),
+                          text: 'Cumplimiento de jobs'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _TaskTable(rows: taskRows),
+                        MachineIdleView(metrics: state.metrics),
+                        JobComplianceView(metrics: state.metrics),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         ),

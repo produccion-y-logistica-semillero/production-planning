@@ -3,6 +3,7 @@ import 'package:flutter_side_menu/flutter_side_menu.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
+import 'package:production_planning/shared/duration_input.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -86,6 +87,15 @@ class MainPage extends StatelessWidget {
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
                       icon: Icon(Icons.schedule, color: onPrimaryContainer),
+                      isSelected: false,
+                    ),
+                    SideMenuItemDataTile(
+                      title: 'Formato de tiempos',
+                      onTap: () => _showTimeFormatDialog(context),
+                      titleStyle:
+                          TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      icon: Icon(Icons.timer_outlined,
+                          color: onPrimaryContainer),
                       isSelected: false,
                     ),
                     const SideMenuItemDataDivider(
@@ -298,6 +308,66 @@ class MainPage extends StatelessWidget {
               child: const Text('Cancelar'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// All duration fields (processing time, setup matrix, continuous use,
+  /// rest, maintenance) are typed and shown in the chosen format. Durations
+  /// are still saved in whole minutes.
+  Future<void> _showTimeFormatDialog(BuildContext context) async {
+    TimeInputFormat selected = timeInputFormat.value;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Formato de tiempos'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cómo se escriben y se muestran los tiempos de proceso, '
+                  'alistamiento, uso continuo, descanso y mantenimientos.',
+                ),
+                const SizedBox(height: 12),
+                RadioListTile<TimeInputFormat>(
+                  title: const Text('Todo en minutos'),
+                  subtitle: const Text('Ejemplo: 90'),
+                  value: TimeInputFormat.minutes,
+                  groupValue: selected,
+                  onChanged: (v) => setState(() => selected = v!),
+                ),
+                RadioListTile<TimeInputFormat>(
+                  title: const Text('Todo en hh:mm:ss'),
+                  subtitle: const Text(
+                      'Ejemplo: 01:30:00. Los segundos se redondean al minuto '
+                      'al guardar.'),
+                  value: TimeInputFormat.hms,
+                  groupValue: selected,
+                  onChanged: (v) => setState(() => selected = v!),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  timeInputFormat.value = selected;
+                  final dir = await getApplicationSupportDirectory();
+                  await File('${dir.path}/$timeFormatFileName')
+                      .writeAsString(timeFormatToStorage(selected));
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+                child: const Text('Guardar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
+            ],
+          ),
         );
       },
     );

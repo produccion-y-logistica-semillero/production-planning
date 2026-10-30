@@ -19,6 +19,7 @@ import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
 import 'package:production_planning/services/environment_detection.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
@@ -149,6 +150,8 @@ class FlexibleFlowShopAdapter {
     }
 
     // ── 7. Build PlanningMachineEntity list ────────────────────────────────
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines = [
       for (final machine in machines)
         PlanningMachineEntity(
@@ -156,6 +159,7 @@ class FlexibleFlowShopAdapter {
           machine.name,
           [],
           scheduledInactivities: machine.scheduledInactivities,
+          stationName: stations[machine.machineTypeId],
         ),
     ];
 
@@ -197,7 +201,8 @@ class FlexibleFlowShopAdapter {
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       return Tuple5(
-          out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
+          out.jobId, job.availableDate, out.endTime, out.dueDate,
+          job.priority);
     }).toList();
 
     return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));

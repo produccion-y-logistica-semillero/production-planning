@@ -106,6 +106,11 @@ class _FlowShopPlacement {
 }
 
 class FlowShop {
+  /// Seeded random generator for the metaheuristics: the same order always
+  /// yields the same schedule (it used to be unseeded, so two runs differed).
+  final Random _metaRandom = Random(20261016);
+
+
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; // like 8-17
 
@@ -926,15 +931,21 @@ class FlowShop {
     print("Mejor secuencia encontrada: ${bestIndividual.map((j) => j.jobId).toList()}");
     print("Makespan óptimo: $bestFitness minutos");
 
+    // Schedule the best chromosome in ITS order. _schedule breaks ties by
+    // job id, so a comparator that always returned 0 re-sorted the jobs
+    // by id and threw the GA's sequence away.
+    final position = {
+      for (int i = 0; i < bestIndividual.length; i++) bestIndividual[i].jobId: i,
+    };
     inputJobs = bestIndividual;
-    _schedule((a, b) => 0);
+    _schedule((a, b) => position[a.jobId]!.compareTo(position[b.jobId]!));
   }
 
   List<List<FlowShopInput>> _initializePopulation(int size) {
     List<List<FlowShopInput>> population = [];
     for (int i = 0; i < size; i++) {
       List<FlowShopInput> shuffled = List.from(inputJobs);
-      shuffled.shuffle();
+      shuffled.shuffle(_metaRandom);
       population.add(shuffled);
     }
     return population;
@@ -1004,7 +1015,7 @@ class FlowShop {
       final parent1 = _selectParent(evaluated);
       final parent2 = _selectParent(evaluated);
       List<FlowShopInput> child = _crossover(parent1, parent2);
-      if (Random().nextDouble() < mutationRate) {
+      if (_metaRandom.nextDouble() < mutationRate) {
         child = _mutate(child);
       }
       newPop.add(child);
@@ -1015,7 +1026,7 @@ class FlowShop {
 
   List<FlowShopInput> _selectParent(List<Tuple2<List<FlowShopInput>, int>> evaluated) {
     int k = min(5, evaluated.length);
-    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
+    final selected = List.generate(k, (_) => evaluated[_metaRandom.nextInt(evaluated.length)]);
     selected.sort((a, b) => a.value2.compareTo(b.value2));
     return selected.first.value1;
   }
@@ -1024,7 +1035,7 @@ class FlowShop {
     final length = p1.length;
     if (length == 0) return [];
 
-    final int point = Random().nextInt(length);
+    final int point = _metaRandom.nextInt(length);
     final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
 
     final List<FlowShopInput> child = [
@@ -1045,8 +1056,8 @@ class FlowShop {
 
   List<FlowShopInput> _mutate(List<FlowShopInput> individual) {
     if (individual.length < 2) return individual;
-    int i = Random().nextInt(individual.length);
-    int j = Random().nextInt(individual.length);
+    int i = _metaRandom.nextInt(individual.length);
+    int j = _metaRandom.nextInt(individual.length);
     final temp = individual[i];
     individual[i] = individual[j];
     individual[j] = temp;

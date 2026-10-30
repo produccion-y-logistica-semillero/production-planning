@@ -11,6 +11,7 @@ import 'package:production_planning/repositories/interfaces/order_repository.dar
 import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class JobShopAdapter {
   final OrderRepository orderRepository;
@@ -134,6 +135,8 @@ class JobShopAdapter {
     }
 
     // Transform output into PlanningMachineEntity
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines = [];
     for (final machine in machines) {
       planningMachines.add(PlanningMachineEntity(
@@ -141,6 +144,7 @@ class JobShopAdapter {
         machine.name,
         [],
         scheduledInactivities: machine.scheduledInactivities,
+        stationName: stations[machine.machineTypeId],
       ));
     }
 
@@ -184,7 +188,7 @@ class JobShopAdapter {
     for (final out in output) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
       jobsDates.add(Tuple5(
-          out.dbJobId, out.startDate, out.endTime, out.dueDate, job.priority));
+          out.dbJobId, job.availableDate, out.endTime, out.dueDate, job.priority));
     }
 
     final metrics = getMetricts(planningMachines, jobsDates);

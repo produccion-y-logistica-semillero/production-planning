@@ -141,6 +141,7 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(12, 'CR'),
             const Tuple2(13, 'ATCS'),
             const Tuple2(24, 'GENETICS'),
+            const Tuple2(28, 'PRIORIDAD_COMPUESTA'),
           ];
         } else if (upper == 'FLEXIBLE JOB SHOP') {
           finalRules = [
@@ -153,6 +154,7 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(13, 'ATCS'),
             const Tuple2(21, 'MS'),
             const Tuple2(24, 'GENETICS'),
+            const Tuple2(28, 'PRIORIDAD_COMPUESTA'),
           ];
         } else if (upper == 'OPEN SHOP' ||
             upper == 'FLEXIBLE OPEN SHOP' ||
@@ -168,6 +170,7 @@ class OrderRepositoryImpl implements OrderRepository {
             const Tuple2(12, 'CR'),
             const Tuple2(13, 'ATCS'),
             const Tuple2(24, 'GENETICS'),
+            const Tuple2(28, 'PRIORIDAD_COMPUESTA'),
             const Tuple2(26, 'LWR'),
             const Tuple2(27, 'MWR'),
           ];

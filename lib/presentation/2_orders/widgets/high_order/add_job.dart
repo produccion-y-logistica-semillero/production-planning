@@ -22,6 +22,7 @@ import 'package:production_planning/entities/task_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/new_order_state.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/utils/task_time_utils.dart';
 
 // Helper widget for numeric input with max value validation
@@ -35,26 +36,6 @@ class _MaxValueFormatter extends TextInputFormatter {
     final val = int.tryParse(newValue.text);
     if (val != null && val > max) return oldValue;
     return newValue;
-  }
-}
-
-class _HhMmSsTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (text.isEmpty) return newValue;
-
-    String result = '';
-    for (int i = 0; i < text.length && i < 6; i++) {
-      if (i == 2 || i == 4) result += ':';
-      result += text[i];
-    }
-
-    return TextEditingValue(
-      text: result,
-      selection: TextSelection.collapsed(offset: result.length),
-    );
   }
 }
 
@@ -871,16 +852,14 @@ class AddJobState extends State<AddJobWidget> {
     int? selectedMachineId = _selectedMachines[task.id]?.id ??
         (machines.isNotEmpty ? machines[0].id : null);
 
+    // Typed and shown in the "Formato de tiempos" setting (hh:mm:ss or
+    // minutes); stored in whole minutes.
     final processingController = TextEditingController(
-        text: _formatDuration(
-            Duration(minutes: draft[selectedMachineId] ?? 0)));
+        text: formatDurationMinutes(draft[selectedMachineId] ?? 0));
+    String? processingError;
 
-    // Without this, tapping into a pre-filled field (e.g. showing the
-    // stale "00:05:00" default) places the cursor instead of selecting the
-    // existing text — since _HhMmSsTextInputFormatter always keeps only the
-    // FIRST 6 digits of the resulting string, typing a new value without
-    // first clearing the field just gets truncated away and the old value
-    // silently "wins", making the field look impossible to edit.
+    // Select the whole pre-filled value on focus, so typing replaces it
+    // instead of being appended to it.
     final processingFocusNode = FocusNode();
     processingFocusNode.addListener(() {
       if (processingFocusNode.hasFocus) {
@@ -914,11 +893,14 @@ class AddJobState extends State<AddJobWidget> {
                     onChanged: (v) => setDialogState(() {
                       if (selectedMachineId != null) {
                         draft[selectedMachineId!] =
-                            _parseTimeToMinutes(processingController.text);
+                            parseDurationMinutes(processingController.text) ??
+                                draft[selectedMachineId!] ??
+                                0;
                       }
                       selectedMachineId = v;
-                      processingController.text = _formatDuration(
-                          Duration(minutes: draft[v] ?? 0));
+                      processingController.text =
+                          formatDurationMinutes(draft[v] ?? 0);
+                      processingError = null;
                     }),
                   ),
                 if (machines.length > 1)
@@ -933,16 +915,25 @@ class AddJobState extends State<AddJobWidget> {
                 const SizedBox(height: 16),
 
                 // ── processing time ───────────────────────────────────────
-                const Text('Tiempo de Procesamiento:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                    'Tiempo de Procesamiento (${timeFormatLabel(timeInputFormat.value)}):',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 TextField(
                   controller: processingController,
                   focusNode: processingFocusNode,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      hintText: 'HH:MM:SS', border: OutlineInputBorder()),
-                  inputFormatters: [_HhMmSsTextInputFormatter()],
+                  decoration: InputDecoration(
+                    hintText: durationHint(),
+                    border: const OutlineInputBorder(),
+                    errorText: processingError,
+                  ),
+                  inputFormatters: durationInputFormatters(),
+                  onChanged: (_) {
+                    if (processingError != null) {
+                      setDialogState(() => processingError = null);
+                    }
+                  },
                 ),
                 // ── info note ─────────────────────────────────────────────
                 const SizedBox(height: 12),
@@ -977,7 +968,15 @@ class AddJobState extends State<AddJobWidget> {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () {
+                // An invalid time used to be saved silently as 0.
+                final error = validateDuration(processingController.text);
+                if (error != null) {
+                  setDialogState(() => processingError = error);
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
               child: const Text('Aceptar'),
             ),
           ],
@@ -988,7 +987,7 @@ class AddJobState extends State<AddJobWidget> {
     if (result == true) {
       if (selectedMachineId != null) {
         draft[selectedMachineId!] =
-            _parseTimeToMinutes(processingController.text);
+            parseDurationMinutes(processingController.text) ?? 0;
       }
 
       setState(() {
@@ -1014,17 +1013,6 @@ class AddJobState extends State<AddJobWidget> {
   }
 
   // ── helpers (unchanged) ───────────────────────────────────────────────────
-
-  int _parseTimeToMinutes(String text) {
-    final parts = text.trim().split(':');
-    int h = 0, m = 0, s = 0;
-    if (parts.length == 3) {
-      h = int.tryParse(parts[0]) ?? 0;
-      m = int.tryParse(parts[1]) ?? 0;
-      s = int.tryParse(parts[2]) ?? 0;
-    }
-    return h * 60 + m + (s >= 30 ? 1 : 0);
-  }
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;

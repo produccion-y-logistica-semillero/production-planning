@@ -13,6 +13,7 @@ import '../../entities/job_entity.dart';
 import '../../entities/machine_entity.dart';
 import '../../shared/utils/task_time_utils.dart';
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class ParallelMachineAdapter {
   final OrderRepository orderRepository;
@@ -161,6 +162,8 @@ class ParallelMachineAdapter {
       machineTasksMap.putIfAbsent(out.machineId, () => []).add(planningTask);
     }
 
+    final stations = await stationNamesById(
+        machineRepository, machineEntities.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> machinesResult =
         machineTasksMap.entries.map((entry) {
       final machine = machineEntities.firstWhere((m) => m.id == entry.key);
@@ -169,6 +172,7 @@ class ParallelMachineAdapter {
         machine.name,
         entry.value,
         scheduledInactivities: machine.scheduledInactivities,
+        stationName: stations[machine.machineTypeId],
       );
     }).toList();
 

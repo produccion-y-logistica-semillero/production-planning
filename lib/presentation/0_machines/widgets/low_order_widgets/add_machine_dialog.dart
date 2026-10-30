@@ -4,6 +4,7 @@ import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:intl/intl.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 class AddMachineDialog extends StatefulWidget {
   final String machineTypeName;
@@ -64,7 +65,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
   @override
   void initState() {
     super.initState();
-    final capacity = int.tryParse(widget.continueController.text.trim()) ?? 0;
+    final capacity = parseDurationMinutes(widget.continueController.text) ?? 0;
     _noAutomaticRest = capacity <= 0;
   }
 
@@ -72,8 +73,8 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
     setState(() {
       _noAutomaticRest = value;
       if (value) {
-        widget.continueController.text = '0';
-        widget.restTimeController.text = '0';
+        widget.continueController.text = formatDurationMinutes(0);
+        widget.restTimeController.text = formatDurationMinutes(0);
       } else {
         widget.continueController.clear();
         widget.restTimeController.clear();
@@ -112,9 +113,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
     }
 
     final durationMinutes =
-        int.tryParse(_scheduledDurationController.text.trim());
+        parseDurationMinutes(_scheduledDurationController.text);
     if (durationMinutes == null || durationMinutes <= 0) {
-      _showSnack('Ingresa una duración válida en minutos.', isError: true);
+      _showSnack(
+          'Ingresa una duración válida (${timeFormatLabel(timeInputFormat.value)}).',
+          isError: true);
       return;
     }
 
@@ -199,9 +202,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cuántos minutos de procesamiento continuo puede realizar '
-          'la máquina antes de tomar un descanso y la duración en minutos de '
-          'esa pausa. Si la máquina no descansa, marca "No aplica".',
+          'Define cuánto tiempo de procesamiento continuo puede realizar '
+          'la máquina antes de tomar un descanso y la duración de esa pausa '
+          '(${timeFormatLabel(timeInputFormat.value)}). Si la máquina no '
+          'descansa, marca "No aplica".',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         CheckboxListTile(
@@ -220,13 +224,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 controller: widget.continueController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Procesamiento continuo (minutos)',
-                  hintText: 'Ej. 240',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Procesamiento continuo (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(240)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -238,13 +240,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 controller: widget.restTimeController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Descanso (minutos)',
-                  hintText: 'Ej. 15',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Descanso (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(15)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -352,9 +352,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               child: TextField(
                 controller: _scheduledDurationController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Duración (minutos)',
-                  hintText: 'Ej. 30',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Duración (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(30)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -383,7 +385,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                       subtitle: Text(
                         '${_formatWeekdays(inactivity.weekdays)} • '
                         '${inactivity.formattedStartTime()} • '
-                        '${inactivity.duration.inMinutes} min',
+                        '${timeInputFormat.value == TimeInputFormat.minutes ? '${inactivity.duration.inMinutes} min' : formatDurationMinutes(inactivity.duration.inMinutes)}',
                       ),
                       trailing: IconButton(
                         onPressed: () => _onDeleteScheduled(inactivity),

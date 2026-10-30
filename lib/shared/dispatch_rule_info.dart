@@ -228,13 +228,33 @@ const Map<String, DispatchRuleInfo> _catalog = {
     title: 'Algoritmo genético',
     summary: 'Busca una buena secuencia combinando y mutando soluciones.',
     howItWorks:
-        'En una máquina, máquinas paralelas y Flow Shop es un algoritmo '
-        'genético: genera secuencias, conserva las mejores y las combina. En '
-        'los demás ambientes es un puntaje que combina urgencia (CR) y '
-        'prioridad por minuto (WSPT).',
+        'Mantiene una población de soluciones (cromosomas), elige las mejores '
+        'por torneo, las cruza y las muta durante varias generaciones, y '
+        'conserva la mejor. En una máquina, máquinas paralelas, Flow Shop y '
+        'Flexible Flow Shop el cromosoma es el orden de los trabajos; en Job '
+        'Shop, Open Shop y Recurrente es el orden de las operaciones y, si '
+        'hay varias máquinas por estación, la máquina de cada operación. Cada '
+        'cromosoma se programa con alistamientos e interrupciones reales. '
+        'Usa una semilla fija: la misma orden da siempre el mismo programa.',
     goodFor:
-        'Comparar contra las reglas simples; puede tardar más que ellas.',
+        'Reducir el tiempo total (makespan) más allá de las reglas simples; '
+        'tarda más que ellas.',
     kind: 'Metaheurística',
+  ),
+  'PRIORIDAD_COMPUESTA': DispatchRuleInfo(
+    code: 'PRIORIDAD_COMPUESTA',
+    title: 'Prioridad compuesta (urgencia + prioridad por minuto)',
+    summary: 'Combina la razón crítica y la prioridad por minuto en un puntaje.',
+    howItWorks:
+        'A cada operación le da el puntaje 1/CR + w/p: crece si el trabajo '
+        'está apurado frente a su entrega (CR bajo) o si tiene alta prioridad '
+        'por minuto de proceso. Va primero la de mayor puntaje. En Flexible '
+        'Flow Shop ordena los trabajos una vez por (prioridad + 1) / tiempo '
+        'total de su ruta. Antes se mostraba con el nombre GENETICS.',
+    goodFor:
+        'Equilibrar cumplimiento de fechas y prioridad sin el costo de una '
+        'metaheurística.',
+    kind: 'Dinámica',
   ),
   'TABU': DispatchRuleInfo(
     code: 'TABU',

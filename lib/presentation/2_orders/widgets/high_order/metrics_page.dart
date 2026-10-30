@@ -49,6 +49,23 @@ class MetricsPage extends StatelessWidget {
                   'Trabajos retrasados', metrics.delayedJobs.toString()),
               _buildMetricRow('Porcentaje trabajos retrasados',
                   '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
+              // Short summary of the per-machine and per-station breakdown;
+              // the full tables are in "Detalle de programación".
+              if (metrics.machineUsage.isNotEmpty)
+                () {
+                  final m = metrics.machineUsage
+                      .reduce((a, b) => b.idle > a.idle ? b : a);
+                  return _buildMetricRow('Máquina más ociosa',
+                      '${m.machineName} (${m.stationName}): ${_formatDuration(m.idle)}');
+                }(),
+              if (metrics.stationTardiness
+                  .any((s) => s.totalTardiness > Duration.zero))
+                () {
+                  final s = metrics.stationTardiness.reduce(
+                      (a, b) => b.totalTardiness > a.totalTardiness ? b : a);
+                  return _buildMetricRow('Estación con más tardanza',
+                      '${s.stationName}: ${_formatDuration(s.totalTardiness)}');
+                }(),
 
               if (metrics.tabuStats != null) ...[
                 const SizedBox(height: 12),

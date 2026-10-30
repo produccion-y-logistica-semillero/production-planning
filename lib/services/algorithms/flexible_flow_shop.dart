@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
@@ -190,13 +191,19 @@ class FlexibleFlowShop {
       case "CDS":
         cdsAlgorithm();
         break;
-      case "GENETICS":
-        // Fallback genetics: order by combined score
+      // Composite priority score ((w + 1) / total route time). It used to be
+      // offered as "GENETICS", but it is a static order, not a genetic
+      // algorithm.
+      case "PRIORIDAD_COMPUESTA":
         _schedule((a, b) {
           final scoreA = (a.priority / max(1, _totalProcessingTime(a))) + (1 / max(1, _totalProcessingTime(a)));
           final scoreB = (b.priority / max(1, _totalProcessingTime(b))) + (1 / max(1, _totalProcessingTime(b)));
-          return scoreB.compareTo(scoreA);
+          final cmp = scoreB.compareTo(scoreA);
+          return cmp != 0 ? cmp : a.jobId.compareTo(b.jobId);
         });
+        break;
+      case "GENETICS":
+        geneticRule();
         break;
       case "MINSLACK":
         // The DB grants MINSLACK to some environments and MS to others; they
@@ -230,6 +237,70 @@ class FlexibleFlowShop {
   // LWR / MWR: nominal work the job still has from this station on.
   void lwrRule() => _runDynamicStagewise(DispatchCriterion.lwr);
   void mwrRule() => _runDynamicStagewise(DispatchCriterion.mwr);
+
+  /// Genetic algorithm with a job-permutation chromosome, the standard
+  /// encoding for the hybrid flow shop (Ruiz & Maroto, 2006): jobs enter the
+  /// line in chromosome order and, at every station, each goes to the
+  /// machine that finishes it first (ECT, with setups and interruptions).
+  /// Fitness: makespan. See docs/diagnostico_genetics.md.
+  void geneticRule({GeneticSettings settings = const GeneticSettings()}) {
+    final jobs = List<FlexibleFlowInput>.of(inputJobs);
+    if (jobs.isEmpty) return;
+    final availability0 = Map<int, DateTime>.of(machinesAvailability);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
+    final lastJob0 = Map<int, int?>.of(_machineLastJob);
+
+    void decode(List<int> permutation) {
+      machinesAvailability
+        ..clear()
+        ..addAll(availability0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      _machineLastJob
+        ..clear()
+        ..addAll(lastJob0);
+      output = [];
+      inputJobs = [for (final i in permutation) jobs[i]];
+      for (final job in inputJobs) {
+        _assignJobToMachines(job);
+      }
+    }
+
+    double fitness(List<int> permutation) {
+      try {
+        decode(permutation);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      if (output.length < jobs.length) return double.infinity;
+      final end = output
+          .map((o) => o.endTime)
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+      return end.difference(startDate).inSeconds / 60.0;
+    }
+
+    // Seeds: the order received and the composite-priority order.
+    final identity = List<int>.generate(jobs.length, (i) => i);
+    final byScore = List<int>.of(identity)
+      ..sort((a, b) {
+        double score(FlexibleFlowInput j) =>
+            (j.priority + 1) / max(1, _totalProcessingTime(j));
+        final cmp = score(jobs[b]).compareTo(score(jobs[a]));
+        return cmp != 0 ? cmp : jobs[a].jobId.compareTo(jobs[b].jobId);
+      });
+
+    final result = runGenetic<List<int>>(
+      seeds: [identity, byScore],
+      randomIndividual: (r) => List<int>.of(identity)..shuffle(r),
+      fitness: fitness,
+      crossover: orderCrossover,
+      mutate: insertionMutation,
+      key: (p) => p.join(','),
+      settings: settings,
+    );
+    decode(result.best);
+  }
 
   void _schedule(
       int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {

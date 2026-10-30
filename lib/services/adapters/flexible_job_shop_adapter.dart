@@ -14,6 +14,7 @@ import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
@@ -246,6 +247,8 @@ class FlexibleJobShopAdapter {
     }).toList();
 
     // Transformar la salida en PlanningMachineEntity
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines = [];
     for (final machine in machines) {
       planningMachines.add(PlanningMachineEntity(
@@ -253,6 +256,7 @@ class FlexibleJobShopAdapter {
         machine.name,
         [],
         scheduledInactivities: machine.scheduledInactivities,
+        stationName: stations[machine.machineTypeId],
       ));
     }
 

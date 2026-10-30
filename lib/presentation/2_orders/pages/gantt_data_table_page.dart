@@ -40,7 +40,7 @@ class GanttDataTablePage extends StatelessWidget {
             if (state is GanttPlanningError) {
               return _ErrorMessage(
                 message: state.message ??
-                    'No fue posible obtener la planificación para la orden.',
+                    'No fue posible obtener la programación para la orden.',
               );
             }
 

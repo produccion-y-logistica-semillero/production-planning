@@ -31,7 +31,7 @@ class MainPage extends StatelessWidget {
         toolbarHeight: 50,
         title: Center(
           child: Text(
-            "Planeacion de Producción",
+            "Programación de Operaciones",
             style: TextStyle(
                 fontSize: 16,
                 color: onTertiaryContainer,

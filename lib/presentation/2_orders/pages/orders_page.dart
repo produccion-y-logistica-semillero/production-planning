@@ -276,7 +276,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     context,
                     title: 'Ordenes',
                     content:
-                    'Una orden es sobre lo que se realiza la planificación de producción... \n\nUna orden puede referirse a que se requiere producir 100 panes para dentro de 5 días...',
+                    'Una orden es sobre lo que se realiza la programación de operaciones... \n\nUna orden puede referirse a que se requiere producir 100 panes para dentro de 5 días...',
 
                   ),
                   icon: const Icon(Icons.info),

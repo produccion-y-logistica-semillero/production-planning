@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/widgets/high_order/add_job.dart
 //
@@ -468,7 +469,7 @@ class AddJobState extends State<AddJobWidget> {
             TextFormField(
               controller: widget.priorityController,
               decoration: InputDecoration(
-                labelText: 'Prioridad',
+                labelText: withSymbol('Prioridad', 'wj'),
                 labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -498,7 +499,7 @@ class AddJobState extends State<AddJobWidget> {
                           runSpacing: 4,
                           children: [
                             _selectAutomaticHour(
-                              'Hora de inicio',
+                              withSymbol('Hora de inicio', 'rj'),
                               automaticStartHour,
                               (picked) => setState(() {
                                 automaticStartHour = picked;
@@ -506,7 +507,7 @@ class AddJobState extends State<AddJobWidget> {
                               }),
                             ),
                             _selectAutomaticHour(
-                              'Hora de entrega',
+                              withSymbol('Hora de entrega', 'dj'),
                               automaticDueHour,
                               (picked) => setState(() {
                                 automaticDueHour = picked;

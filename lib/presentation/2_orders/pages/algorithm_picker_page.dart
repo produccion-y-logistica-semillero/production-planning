@@ -17,6 +17,7 @@ import 'package:production_planning/presentation/1_sequences/widgets/high_order_
 import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/shared/dispatch_rule_info.dart';
+import 'package:production_planning/shared/notation.dart';
 
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
@@ -419,18 +420,50 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                             fontSize: 14,
                                           ),
                                         ),
+                                        ValueListenableBuilder<bool>(
+                                          valueListenable: showNotation,
+                                          builder: (context, on, _) => on
+                                              ? Text(
+                                                  'α | β | γ:  ${threeFieldFor(env.name)}',
+                                                  style: TextStyle(
+                                                    color: colorScheme.primary,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  TextButton.icon(
-                                    onPressed: () => _showAllRulesHelp(
-                                        context, [
-                                      for (int i = 0; i < rules.length; i++)
-                                        _labelForRule(rules[i], i)
-                                    ]),
-                                    icon: const Icon(Icons.menu_book_outlined),
-                                    label: const Text('Guía de reglas'),
+                                  const NotationButton(
+                                    notationContext: NotationContext.picker,
+                                    title: 'Notación: ambiente, reglas y '
+                                        'funciones objetivo',
                                   ),
+                                  // Icon only on a phone: with the Σ button
+                                  // the labelled one no longer fits.
+                                  if (MediaQuery.sizeOf(context).width < 600)
+                                    IconButton(
+                                      tooltip: 'Guía de reglas',
+                                      onPressed: () => _showAllRulesHelp(
+                                          context, [
+                                        for (int i = 0; i < rules.length; i++)
+                                          _labelForRule(rules[i], i)
+                                      ]),
+                                      icon:
+                                          const Icon(Icons.menu_book_outlined),
+                                    )
+                                  else
+                                    TextButton.icon(
+                                      onPressed: () => _showAllRulesHelp(
+                                          context, [
+                                        for (int i = 0; i < rules.length; i++)
+                                          _labelForRule(rules[i], i)
+                                      ]),
+                                      icon:
+                                          const Icon(Icons.menu_book_outlined),
+                                      label: const Text('Guía de reglas'),
+                                    ),
                                 ],
                               ),
                             ),
@@ -814,6 +847,20 @@ class _RuleHelpBody extends StatelessWidget {
         section('Qué hace', info.summary),
         section('Cómo decide', info.howItWorks),
         section('Útil para', info.goodFor),
+        // Formula in the literature's notation, while the global switch is on.
+        ValueListenableBuilder<bool>(
+          valueListenable: showNotation,
+          builder: (context, on, _) {
+            final n = notationForRule(info.code);
+            if (!on || n == null) return const SizedBox.shrink();
+            return section(
+              'Notación',
+              n.formula == null
+                  ? n.definition
+                  : '${n.formula}\n${n.definition}',
+            );
+          },
+        ),
       ],
     );
   }

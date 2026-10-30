@@ -48,6 +48,9 @@ class MetricDef {
 
   bool get ranked => sense != MetricSense.neutral;
 
+  /// The metric in the literature's notation (Pinedo, 2016).
+  String get symbol => kMetricSymbols[id] ?? '';
+
   /// The value as text, at the column's [precision] for durations.
   String format(Metrics m, DurationPrecision precision) {
     final d = duration;
@@ -142,6 +145,18 @@ final List<MetricDef> kMetrics = [
     (m) => m.idle,
   ),
 ];
+
+/// Theoretical symbol of each metric, shown while the notation switch is on.
+const Map<String, String> kMetricSymbols = {
+  'makespan': 'Cmax',
+  'totalFlow': 'Σ(Cj − rj)',
+  'totalTardiness': 'ΣTj',
+  'weightedTardiness': 'ΣwjTj',
+  'avgTardiness': 'ΣTj / n',
+  'delayedJobs': 'ΣUj',
+  'totalEarliness': 'ΣEj',
+  'idle': 'Σi (Cmax − ocupación de Mi)',
+};
 
 /// The headline objectives (dashboard cards, default overall score).
 const List<String> kHeadlineMetricIds = [

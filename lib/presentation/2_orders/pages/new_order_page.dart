@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/pages/new_order_page.dart
 
@@ -341,7 +342,7 @@ class NewOrderPage extends StatelessWidget {
               children: [
                 _selectOrderAutomaticHour(
                   context,
-                  'Hora de inicio',
+                  withSymbol('Hora de inicio', 'rj'),
                   state.automaticStartHour,
                   bloc.setAutomaticStartHour,
                   colorScheme,
@@ -349,7 +350,7 @@ class NewOrderPage extends StatelessWidget {
                 const SizedBox(width: 24),
                 _selectOrderAutomaticHour(
                   context,
-                  'Hora de entrega',
+                  withSymbol('Hora de entrega', 'dj'),
                   state.automaticDueHour,
                   bloc.setAutomaticDueHour,
                   colorScheme,

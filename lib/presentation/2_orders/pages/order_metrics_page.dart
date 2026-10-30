@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -67,8 +68,18 @@ class _OrderMetricsState extends State<OrderMetrics> {
         ),
         backgroundColor: colorScheme.surface,
         elevation: 0,
+        actions: const [
+          NotationButton(
+            notationContext: NotationContext.metrics,
+            title: 'Notación: indicadores y funciones objetivo',
+          ),
+        ],
       ),
-      body: SafeArea(
+      // Rebuilt when the notation switch changes, so the table headers show
+      // or hide the symbols.
+      body: ValueListenableBuilder<bool>(
+        valueListenable: showNotation,
+        builder: (context, _, __) => SafeArea(
         child: BlocBuilder<MetricsBloc, MetricsState>(
           bloc: _metricsBloc,
           builder: (context, state) {
@@ -301,6 +312,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
             }
           },
         ),
+      ),
       ),
     );
   }

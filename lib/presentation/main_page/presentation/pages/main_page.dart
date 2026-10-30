@@ -5,6 +5,7 @@ import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
 import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/notation.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -112,6 +113,31 @@ class MainPage extends StatelessWidget {
                         'Programas de produccion',
                         3,
                         Icons.schedule_send_sharp),
+                    const SideMenuItemDataDivider(
+                        divider: Divider(height: 20, color: Colors.white)),
+                    createItem(provider, context, '/manual',
+                        'Manual de usuario', 4, Icons.menu_book_outlined),
+                    createItem(provider, context, '/notacion',
+                        'Glosario de notación', 5, Icons.functions),
+                    // Global switch: adds the theoretical symbols to every
+                    // screen. The icon shows whether it is on.
+                    SideMenuItemDataTile(
+                      title: showNotation.value
+                          ? 'Notación teórica: sí'
+                          : 'Notación teórica: no',
+                      onTap: () async {
+                        await setNotation(!showNotation.value);
+                        provider.changeOption(provider.selectedOption);
+                      },
+                      titleStyle:
+                          TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      icon: Icon(
+                          showNotation.value
+                              ? Icons.toggle_on
+                              : Icons.toggle_off_outlined,
+                          color: onPrimaryContainer),
+                      isSelected: false,
+                    ),
                   ],
                   footer: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),

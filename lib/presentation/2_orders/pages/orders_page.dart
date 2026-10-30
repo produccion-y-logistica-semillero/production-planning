@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -269,6 +270,7 @@ class _OrdersPageState extends State<OrdersPage> {
         value: _orderBloc,
         child: Column(
           children: [
+            const NotationStrip(notationContext: NotationContext.orders),
             Row(
               children: [
                 IconButton(
@@ -280,6 +282,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
                   ),
                   icon: const Icon(Icons.info),
+                ),
+                const NotationButton(
+                  notationContext: NotationContext.orders,
+                  title: 'Notación: programas y trabajos',
                 ),
                 Expanded(
                   flex: 1,

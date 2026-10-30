@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 // import 'package:google_fonts/google_fonts.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -37,6 +38,11 @@ Future<void> main() async {
   }
 
   // Format of every duration field: hh:mm:ss or minutes ("Formato de tiempos").
+  final notationFile = File('${dir.path}/$notationFileName');
+  if (await notationFile.exists()) {
+    showNotation.value = (await notationFile.readAsString()).trim() == '1';
+  }
+
   final timeFormatFile = File('${dir.path}/$timeFormatFileName');
   if (await timeFormatFile.exists()) {
     timeInputFormat.value =

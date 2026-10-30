@@ -6,6 +6,8 @@ import 'package:production_planning/presentation/0_machines/pages/machines_list_
 import 'package:production_planning/presentation/1_sequences/bloc/new_process_bloc/sequences_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/orders_bloc/orders_bloc.dart';
 import 'package:production_planning/presentation/2_orders/pages/orders_page.dart';
+import 'package:production_planning/presentation/main_page/presentation/pages/manual_page.dart';
+import 'package:production_planning/presentation/main_page/presentation/pages/notation_glossary_page.dart';
 import 'package:production_planning/presentation/main_page/presentation/pages/welcome_page.dart';
 import 'package:production_planning/presentation/1_sequences/pages/sequences_page.dart';
 
@@ -39,6 +41,14 @@ class MainNavigator extends StatelessWidget {
             builder = (BuildContext _) => BlocProvider(
                 create: (context) => GetIt.instance.get<MachineTypesBloc>(),
                 child: MachinesListPage());
+            break;
+          case '/manual':
+            final initialCase =
+                settings.arguments is int ? settings.arguments as int : 0;
+            builder = (BuildContext _) => ManualPage(initialCase: initialCase);
+            break;
+          case '/notacion':
+            builder = (BuildContext _) => const NotationGlossaryPage();
             break;
           case '/welcomePage':
             builder = (BuildContext _) => const WelcomePage();

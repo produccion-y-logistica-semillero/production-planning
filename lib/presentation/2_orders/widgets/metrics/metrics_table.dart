@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metric_definitions.dart';
@@ -59,15 +60,19 @@ class _MetricsTableState extends State<MetricsTable> {
             _cell(Text('Algoritmo', style: headerStyle)),
             for (final m in kMetrics)
               Tooltip(
-                message: '${m.name}\n${m.description}'
+                message: '${m.name} (${m.symbol})\n${m.description}'
                     '${m.ranked ? '\nMenor es mejor.' : ''}',
                 child: _cell(
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Flexible(
-                        child: Text(m.header,
-                            textAlign: TextAlign.right, style: headerStyle),
+                        child: Text(
+                            showNotation.value
+                                ? '${m.header}\n${m.symbol}'
+                                : m.header,
+                            textAlign: TextAlign.right,
+                            style: headerStyle),
                       ),
                       const SizedBox(width: 2),
                       Icon(Icons.info_outline,

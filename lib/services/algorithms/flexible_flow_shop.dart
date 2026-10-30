@@ -4,6 +4,8 @@ import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -124,6 +126,12 @@ class FlexibleFlowShop {
   final Map<int, Duration> _machineContinuousUsage = {};
   final Map<int, PreemptionEngine> _engineByMachine = {};
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
   FlexibleFlowShop(
     this.startDate,
     this.workingSchedule,
@@ -136,6 +144,8 @@ class FlexibleFlowShop {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     final r = rule.toUpperCase();
     switch (r) {
@@ -203,7 +213,10 @@ class FlexibleFlowShop {
         });
         break;
       case "GENETICS":
-        geneticRule();
+        geneticRule(settings: geneticParams);
+        break;
+      case "SECUENCIA_USUARIO":
+        userSequenceRule();
         break;
       case "MINSLACK":
         // The DB grants MINSLACK to some environments and MS to others; they
@@ -242,8 +255,9 @@ class FlexibleFlowShop {
   /// encoding for the hybrid flow shop (Ruiz & Maroto, 2006): jobs enter the
   /// line in chromosome order and, at every station, each goes to the
   /// machine that finishes it first (ECT, with setups and interruptions).
-  /// Fitness: makespan. See docs/diagnostico_genetics.md.
-  void geneticRule({GeneticSettings settings = const GeneticSettings()}) {
+  /// Fitness: the objective chosen in [settings] (makespan by default). See
+  /// docs/diagnostico_genetics.md.
+  void geneticRule({GeneticParams settings = const GeneticParams()}) {
     final jobs = List<FlexibleFlowInput>.of(inputJobs);
     if (jobs.isEmpty) return;
     final availability0 = Map<int, DateTime>.of(machinesAvailability);
@@ -274,10 +288,16 @@ class FlexibleFlowShop {
         return double.infinity;
       }
       if (output.length < jobs.length) return double.infinity;
-      final end = output
-          .map((o) => o.endTime)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
-      return end.difference(startDate).inSeconds / 60.0;
+      final done = completionByJob<FlexibleFlowOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in jobs)
+            JobCompletion(j.availableDate, j.dueDate, done[j.jobId]!),
+        ],
+        startDate,
+      );
     }
 
     // Seeds: the order received and the composite-priority order.
@@ -300,6 +320,23 @@ class FlexibleFlowShop {
       settings: settings,
     );
     decode(result.best);
+  }
+
+  /// The jobs enter the line in the order the user chose; jobs left out of
+  /// [userSequence] follow in arrival order.
+  void userSequenceRule() {
+    inputJobs = orderByUserSequence(
+        inputJobs, userSequence, (j) => j.jobId, (j) => j.availableDate);
+    _scheduleInOrder();
+  }
+
+  /// Schedules [inputJobs] exactly in their current order. Johnson and CDS
+  /// used to call _schedule with a comparator that always returned 0; the
+  /// sort is not stable, so the sequence they had built could be lost.
+  void _scheduleInOrder() {
+    for (final job in inputJobs) {
+      _assignJobToMachines(job);
+    }
   }
 
   void _schedule(
@@ -994,7 +1031,7 @@ class FlexibleFlowShop {
     }
 
     inputJobs = bestSequence;
-    _schedule((a, b) => 0); // Puedes usar una regla dummy o alguna prioridad
+    _scheduleInOrder();
     print("Optimal sequence: ${bestSequence.map((job) => job.jobId).toList()}");
     print("Optimal makespan: $bestMakespan");
   }
@@ -1022,7 +1059,7 @@ class FlexibleFlowShop {
 
 
     inputJobs = [...groupI, ...groupII];
-    _schedule((a, b) => 0);
+    _scheduleInOrder();
   }
 
   Duration _averageProcessingTime(Map<int, Duration> times) {
@@ -1248,6 +1285,9 @@ List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload
     machineInactivities: machineInactivities,
     machineContinueCapacity: machineContinueCapacity,
     machineRestTime: machineRestTime,
+    geneticParams: GeneticParams.fromMap(
+        payload['geneticParams'] as Map<dynamic, dynamic>?),
+    userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
   ).output;
 
   List<Map<String, dynamic>> segmentsToPayload(

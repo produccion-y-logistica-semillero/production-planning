@@ -2,7 +2,10 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'dart:math';
 
 class SingleMachineInput {
@@ -93,6 +96,12 @@ class SingleMachine {
 
   final int machineId;
   final DateTime startDate;
+
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; // like 8-17
 
   List<SingleMachineInput> input = [];
@@ -141,6 +150,8 @@ class SingleMachine {
     this.machineInactivities = const [],
     this.continueCapacity = 0,
     this.restTime,
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     _lastJobState = initialMachineState[machineId];
     _preemptionEngine = PreemptionEngine(
@@ -166,7 +177,8 @@ class SingleMachine {
       case "MS": scheduleMinimumSlack(); break;
       case "CR": scheduleCriticalRatio(); break;
       case "ATCS": scheduleATCS(); break;
-      case "GENETICS": scheduleGeneticAlgorithm(); break;
+      case "GENETICS": scheduleGeneticAlgorithm(settings: geneticParams); break;
+      case "SECUENCIA_USUARIO": scheduleUserSequence(); break;
       case "TABU": scheduleTabuSearch(); break;
       default:
         // Without this an unknown rule silently produced an empty schedule,
@@ -281,19 +293,6 @@ class SingleMachine {
   /// Returns the updated schedule pointer (= end of this job's processing).
   DateTime _assignJob(SingleMachineInput job, DateTime scheduleTime) =>
       _commit(_trial(job, scheduleTime));
-
-  /// Pushes [dt] to the start of the next working day if it falls outside
-  /// working hours (i.e. at or after day-end).
-  DateTime _alignToWorkingHours(DateTime dt) {
-    final endH = workingSchedule.value2.hour;
-    final endM = workingSchedule.value2.minute;
-    if (dt.hour > endH || (dt.hour == endH && dt.minute >= endM)) {
-      final next = dt.add(const Duration(days: 1));
-      return DateTime(next.year, next.month, next.day,
-          workingSchedule.value1.hour, workingSchedule.value1.minute);
-    }
-    return dt;
-  }
 
   // ── Dispatching rules ─────────────────────────────────────────────────────
 
@@ -492,126 +491,71 @@ class SingleMachine {
 
   // ── Genetic algorithm ─────────────────────────────────────────────────────
 
-  void scheduleGeneticAlgorithm() {
-    print("EJECUTANDO ALGORITMO GENÉTICO EN SINGLE MACHINE");
+  /// Genetic algorithm on the job sequence, run by the shared engine. Each
+  /// sequence is decoded with [_runSequence] itself (setups, shifts, rests,
+  /// maintenance), so the GA evaluates exactly what gets scheduled. Fitness:
+  /// the objective chosen in [settings] (makespan by default). It used to be
+  /// a separate simplified simulation that minimised Σ Cj only.
+  void scheduleGeneticAlgorithm({GeneticParams settings = const GeneticParams()}) {
+    final jobs = List<SingleMachineInput>.of(input);
+    if (jobs.isEmpty) return;
 
-    const int populationSize = 50;
-    const int generations = 100;
-    const double mutationRate = 0.1;
-
-    List<List<SingleMachineInput>> population =
-        _initializePopulation(populationSize);
-    List<SingleMachineInput> bestIndividual = [];
-    Duration bestFitness = const Duration(days: 9999);
-
-    for (int generation = 0; generation < generations; generation++) {
-      final evaluated = population
-          .map((ind) => Tuple2(ind, _evaluateFitness(ind)))
-          .toList();
-      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
-
-      if (evaluated.first.value2 < bestFitness) {
-        bestFitness = evaluated.first.value2;
-        bestIndividual = evaluated.first.value1;
-      }
-
-      population =
-          _generateNewPopulation(evaluated, populationSize, mutationRate);
+    void decode(List<int> permutation) {
+      input = [for (final i in permutation) jobs[i]];
+      _runSequence();
     }
 
-    input = bestIndividual;
+    double fitness(List<int> permutation) {
+      try {
+        decode(permutation);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      final done = completionByJob<SingleMachineOutput>(
+          output, (o) => o.jobId, (o) => o.endDate);
+      if (done.length < jobs.length) return double.infinity;
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in jobs)
+            JobCompletion(j.availableDate, j.dueDate, done[j.jobId]!),
+        ],
+        startDate,
+      );
+    }
+
+    // Seeds: the order received, EDD and SPT.
+    final identity = List<int>.generate(jobs.length, (i) => i);
+    int byId(int a, int b) => jobs[a].jobId.compareTo(jobs[b].jobId);
+    final edd = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = jobs[a].dueDate.compareTo(jobs[b].dueDate);
+        return c != 0 ? c : byId(a, b);
+      });
+    final spt = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = jobs[a].machineDuration.compareTo(jobs[b].machineDuration);
+        return c != 0 ? c : byId(a, b);
+      });
+
+    final result = runGenetic<List<int>>(
+      seeds: [identity, edd, spt],
+      randomIndividual: (r) => List<int>.of(identity)..shuffle(r),
+      fitness: fitness,
+      crossover: orderCrossover,
+      mutate: insertionMutation,
+      key: (p) => p.join(','),
+      settings: settings,
+    );
+    decode(result.best);
+  }
+
+  /// The sequence the user chose; jobs left out of [userSequence] follow in
+  /// arrival order.
+  void scheduleUserSequence() {
+    input = orderByUserSequence(
+        input, userSequence, (j) => j.jobId, (j) => j.availableDate);
     _runSequence();
-  }
-
-  List<List<SingleMachineInput>> _initializePopulation(int size) {
-    return List.generate(size, (_) {
-      final shuffled = List<SingleMachineInput>.from(input);
-      shuffled.shuffle(_metaRandom);
-      return shuffled;
-    });
-  }
-
-  /// Pure fitness evaluation — does NOT mutate [output] or [_lastJobState].
-  /// Simulates [_runSequence] internally with a local state tracker so that
-  /// concurrent genetic evaluations don't interfere with each other.
-  Duration _evaluateFitness(List<SingleMachineInput> sequence) {
-    if (sequence.isEmpty) return Duration.zero;
-
-    String? localLastState;
-    DateTime current = _getStartTime(sequence.first.availableDate);
-    Duration totalTime = Duration.zero;
-
-    for (final job in sequence) {
-      // Mirror _assignJob logic without writing to output.
-      final setup = _setupDurationRaw(localLastState, job.jobState);
-
-      DateTime processStart = current;
-      if (setup > Duration.zero) {
-        processStart = _getAvailableStartTime(current, setup);
-        processStart = processStart.add(setup);
-        processStart = _alignToWorkingHours(processStart);
-      }
-
-      processStart = _getAvailableStartTime(processStart, job.machineDuration);
-      final end = processStart.add(job.machineDuration);
-      totalTime += end.difference(startDate);
-      localLastState = job.jobState;
-      current = end;
-    }
-
-    return totalTime;
-  }
-
-  /// Raw setup lookup that doesn't touch instance state — safe to call from
-  /// fitness evaluations running over different candidate sequences.
-  Duration _setupDurationRaw(String? fromState, String toState) {
-    if (stateSetupMatrix == null || fromState == null) return Duration.zero;
-    final minutes = stateSetupMatrix![machineId]?[fromState]?[toState];
-    return minutes != null ? Duration(minutes: minutes) : Duration.zero;
-  }
-
-  List<List<SingleMachineInput>> _generateNewPopulation(
-    List<Tuple2<List<SingleMachineInput>, Duration>> evaluated,
-    int size,
-    double mutationRate,
-  ) {
-    return List.generate(size, (_) {
-      final p1 = _selectParent(evaluated);
-      final p2 = _selectParent(evaluated);
-      var child = _crossover(p1, p2);
-      if (_metaRandom.nextDouble() < mutationRate) child = _mutate(child);
-      return child;
-    });
-  }
-
-  List<SingleMachineInput> _selectParent(
-      List<Tuple2<List<SingleMachineInput>, Duration>> evaluated) {
-    const k = 5;
-    final selected =
-        List.generate(k, (_) => evaluated[_metaRandom.nextInt(evaluated.length)]);
-    selected.sort((a, b) => a.value2.compareTo(b.value2));
-    return selected.first.value1;
-  }
-
-  List<SingleMachineInput> _crossover(
-      List<SingleMachineInput> p1, List<SingleMachineInput> p2) {
-    final length = p1.length;
-    final point = _metaRandom.nextInt(length);
-    final taken = p1.sublist(0, point).map((j) => j.jobId).toSet();
-    return [
-      ...p1.sublist(0, point),
-      ...p2.where((j) => !taken.contains(j.jobId)),
-    ];
-  }
-
-  List<SingleMachineInput> _mutate(List<SingleMachineInput> individual) {
-    if (individual.length < 2) return individual;
-    final i = _metaRandom.nextInt(individual.length);
-    final j = _metaRandom.nextInt(individual.length);
-    final tmp = individual[i];
-    individual[i] = individual[j];
-    individual[j] = tmp;
-    return individual;
   }
 
   Duration calcularMakespanTabuSingle(List<SingleMachineInput> jobSequence) {

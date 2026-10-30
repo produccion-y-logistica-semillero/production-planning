@@ -5,6 +5,8 @@ import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -109,6 +111,12 @@ class OpenShop {
   final Map<int, int?> _machineLastJob = {};
   List<OpenShopOutput> output = [];
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
   OpenShop(
     this.startDate,
     this.workingSchedule,
@@ -121,6 +129,8 @@ class OpenShop {
     this.stateSetupMatrix,
     this.jobStates,
     this.initialMachineState = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     _initializeMachineLastSequence();
     final r = rule.toUpperCase();
@@ -184,7 +194,23 @@ class OpenShop {
         });
         break;
       case "GENETICS":
-        scheduleOpenShopGenetic();
+        scheduleOpenShopGenetic(settings: geneticParams);
+        break;
+      // The user's job order as a priority list: among the operations that
+      // can start first, the job earlier in the list goes first.
+      case "SECUENCIA_USUARIO":
+        final rank = userSequenceRank(userSequence);
+        _schedule((a, b) {
+          final cmp = compareByUserSequence(
+            rank,
+            a.job.jobId as int,
+            b.job.jobId as int,
+            a.job.availableDate as DateTime,
+            b.job.availableDate as DateTime,
+          );
+          if (cmp != 0) return cmp;
+          return (a.taskId as int).compareTo(b.taskId as int);
+        });
         break;
       default:
         scheduleOpenShopSPT();
@@ -196,10 +222,11 @@ class OpenShop {
   /// Bierwirth, 1995) plus a machine-assignment vector for Flexible Open
   /// Shop. Each chromosome is decoded with the same non-delay loop the rules
   /// use: among the operations that can start at t*, the one earlier in the
-  /// chromosome goes first, on the machine its gene assigns. Fitness:
-  /// makespan. See docs/diagnostico_genetics.md.
+  /// chromosome goes first, on the machine its gene assigns. Fitness: the
+  /// objective chosen in [settings] (makespan by default). See
+  /// docs/diagnostico_genetics.md.
   void scheduleOpenShopGenetic({
-    GeneticSettings settings = const GeneticSettings(),
+    GeneticParams settings = const GeneticParams(),
   }) {
     final ops = <({OpenShopInput job, int taskId, List<int> machines})>[
       for (final job in inputJobs)
@@ -258,10 +285,17 @@ class OpenShop {
       }
       final done = output.fold<int>(0, (n, o) => n + o.scheduling.length);
       if (done < ops.length || output.isEmpty) return double.infinity;
-      final end = output
-          .map((o) => o.endTime)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
-      return end.difference(startDate).inSeconds / 60.0;
+      final end = completionByJob<OpenShopOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in inputJobs)
+            if (end[j.jobId] != null)
+              JobCompletion(j.availableDate, j.dueDate, end[j.jobId]!),
+        ],
+        startDate,
+      );
     }
 
     // Seed: operations in the order they were registered, each on its
@@ -1045,6 +1079,9 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
     initialMachineState: initialMachineState,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    geneticParams: GeneticParams.fromMap(
+        payload['geneticParams'] as Map<dynamic, dynamic>?),
+    userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
   ).output;
 
   return output.map((out) {

@@ -6,16 +6,29 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/services/orders_service.dart';
-import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
 
 class GanttBloc extends Cubit<GanttState> {
   final OrdersService service;
 
-  /// Parámetros de TABU con los que se entró a esta sesión del Gantt.
-  /// El desplegable del Gantt llama a selectRule(id) sin parámetros; sin esto
-  /// cada cambio de algoritmo volvía a los valores por defecto de TABU
-  /// (4 s de presupuesto), y el horario dejaba de coincidir con la tabla.
-  TabuParams? _tabuParams;
+  /// Parámetros (TABU, genético, secuencia del usuario) con los que se
+  /// entró a esta sesión del Gantt. El desplegable del Gantt llama a
+  /// selectRule(id) sin parámetros; sin esto cada cambio de algoritmo volvía
+  /// a los valores por defecto y el horario dejaba de coincidir con la tabla.
+  AlgorithmParams _params = const AlgorithmParams();
+
+  /// [env] con la secuencia del usuario como una regla más, si la definió,
+  /// para que aparezca en el desplegable del Gantt.
+  EnvironmentEntity _withUserSequence(EnvironmentEntity env) {
+    if (_params.userSequence == null ||
+        env.rules.any((r) => r.value1 == kUserSequenceRuleId)) {
+      return env;
+    }
+    return EnvironmentEntity(env.environmentId, env.name, [
+      ...env.rules,
+      const Tuple2(kUserSequenceRuleId, kUserSequenceRule),
+    ]);
+  }
 
   GanttBloc(
 
@@ -24,7 +37,11 @@ class GanttBloc extends Cubit<GanttState> {
 
 
   /// Asigna un orderId y obtiene el environment
-  void assignOrderId(int id) async {
+  ///
+  /// [params], si llega, fija los parámetros de la sesión (el selector de
+  /// algoritmos los limpia; la página de métricas pone los elegidos).
+  void assignOrderId(int id, {AlgorithmParams? params}) async {
+    if (params != null) _params = params;
     try {
       final response = await service.getOrderEnvironment(id);
       response.fold(
@@ -36,7 +53,7 @@ class GanttBloc extends Cubit<GanttState> {
           print("SUCCESS: Environment obtenido para orden $id: ${env.name}");
               print("DEBUG: Environment rules count=${env.rules.length} -> ${env.rules}");
 
-          emit(GanttOrderRetrieved(id, env, null));
+          emit(GanttOrderRetrieved(id, _withUserSequence(env), null));
         },
       );
     } catch (e) {
@@ -48,7 +65,7 @@ class GanttBloc extends Cubit<GanttState> {
   }
 
   /// Selecciona una regla por su ID
-  void selectRule(int ruleId ,{TabuParams? tabuParams}) async {
+  void selectRule(int ruleId, {AlgorithmParams? params}) async {
     if (state.orderId == null || state.enviroment == null) {
       print("ERROR: No se puede seleccionar regla sin orderId o environment");
       return;
@@ -56,8 +73,7 @@ class GanttBloc extends Cubit<GanttState> {
 
     // Si llegan parámetros se recuerdan; si no (p. ej. el desplegable del
     // Gantt) se reutilizan los de la entrada a esta sesión.
-    if (tabuParams != null) _tabuParams = tabuParams;
-    final TabuParams? effectiveTabuParams = tabuParams ?? _tabuParams;
+    if (params != null) _params = params;
 
     try {
       emit(GanttPlanningLoading(state.orderId, state.enviroment, ruleId));
@@ -79,7 +95,7 @@ class GanttBloc extends Cubit<GanttState> {
         selectedRule.value2,
         state.enviroment!.name,
       ),
-      tabuParams: effectiveTabuParams,);
+      params: _params,);
       response.fold(
             (failure) {
           print("ERROR: Fallo en la planificación para regla $ruleId");
@@ -144,9 +160,10 @@ class GanttBloc extends Cubit<GanttState> {
   }
 
   /// Asigna una orden y selecciona una regla por índice en una sola operación
-  Future<void> assignOrderAndSelectRuleByIndex(int orderId, int index,   {TabuParams? tabuParams}) async {
+  Future<void> assignOrderAndSelectRuleByIndex(int orderId, int index,
+      {AlgorithmParams params = const AlgorithmParams()}) async {
     try {
-      _tabuParams = tabuParams; // la entrada fija los parámetros de esta sesión
+      _params = params; // la entrada fija los parámetros de esta sesión
       print("INFO: Asignando orden $orderId y seleccionando regla índice $index");
 
       final response = await service.getOrderEnvironment(orderId);
@@ -155,8 +172,9 @@ class GanttBloc extends Cubit<GanttState> {
           print("ERROR: No se pudo obtener environment para orden $orderId");
           emit(GanttOrderRetrieveError(orderId, null, null));
         },
-            (env) {
+            (rawEnv) {
           print("SUCCESS: Environment obtenido, seleccionando regla índice $index");
+          final env = _withUserSequence(rawEnv);
 
           emit(GanttOrderRetrieved(orderId, env, null));
 
@@ -164,7 +182,7 @@ class GanttBloc extends Cubit<GanttState> {
           if (index >= 0 && index < env.rules.length) {
             final ruleId = env.rules[index].value1;
             print("INFO: Regla encontrada con ID $ruleId");
-            selectRule(ruleId,tabuParams: tabuParams,);
+            selectRule(ruleId, params: params);
           } else {
             print("ERROR: Índice $index fuera de rango para ${env.rules.length} reglas");
 
@@ -187,10 +205,10 @@ class GanttBloc extends Cubit<GanttState> {
     int ruleId,
     List<PlanningMachineEntity> planningMachines,
     Metrics metrics, {
-    TabuParams? tabuParams,
+    AlgorithmParams params = const AlgorithmParams(),
   }) async {
     // El desplegable del Gantt usará estos parámetros si se cambia de regla.
-    _tabuParams = tabuParams;
+    _params = params;
     try {
       // Si ya hay entorno de esta orden se reutiliza; si no, se consulta.
       EnvironmentEntity? env = state.orderId == orderId ? state.enviroment : null;
@@ -204,7 +222,8 @@ class GanttBloc extends Cubit<GanttState> {
         return;
       }
       print("INFO: Mostrando horario ya calculado de la regla $ruleId (orden $orderId)");
-      emit(GanttPlanningSuccess(orderId, env, planningMachines, metrics, ruleId));
+      emit(GanttPlanningSuccess(
+          orderId, _withUserSequence(env), planningMachines, metrics, ruleId));
     } catch (e) {
       print("EXCEPTION en showSchedule: $e");
       emit(GanttOrderRetrieveError(orderId, null, null));

@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
@@ -25,7 +27,8 @@ class ParallelMachineAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> parallelMachineAdapter(
-      int orderId, String rule, {TabuParams? tabuParams}) async  {
+      int orderId, String rule,
+      {AlgorithmParams params = const AlgorithmParams()}) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -127,8 +130,9 @@ class ParallelMachineAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
-      tabuParams: tabuParams ?? const TabuParams(),
-
+      tabuParams: params.tabu ?? const TabuParams(),
+      geneticParams: params.genetic ?? const GeneticParams(),
+      userSequence: params.userSequence,
     );final output = parallel.output;
 
 

@@ -16,33 +16,9 @@
 
 import 'dart:math';
 
-/// Fixed settings of the genetic algorithm. Documented in
-/// docs/diagnostico_genetics.md.
-class GeneticSettings {
-  final int populationSize;
-  final int maxGenerations;
+import 'package:production_planning/entities/genetic_params.dart';
 
-  /// Stop once the best fitness has not improved for this many generations.
-  final int stallGenerations;
-  final int tournamentSize;
-  final double crossoverRate;
-  final double mutationRate;
-
-  /// Best individuals copied unchanged into the next generation.
-  final int elitism;
-  final int seed;
-
-  const GeneticSettings({
-    this.populationSize = 30,
-    this.maxGenerations = 60,
-    this.stallGenerations = 15,
-    this.tournamentSize = 3,
-    this.crossoverRate = 0.8,
-    this.mutationRate = 0.1,
-    this.elitism = 2,
-    this.seed = 20261016,
-  });
-}
+export 'package:production_planning/entities/genetic_params.dart';
 
 class GeneticResult<C> {
   final C best;
@@ -63,8 +39,14 @@ GeneticResult<C> runGenetic<C>({
   required C Function(C a, C b, Random random) crossover,
   required C Function(C chromosome, Random random) mutate,
   required String Function(C chromosome) key,
-  GeneticSettings settings = const GeneticSettings(),
+  GeneticParams settings = const GeneticParams(),
 }) {
+  // Out-of-range values from the dialog must not break the loop.
+  settings = settings.copyWith(
+    populationSize: max(2, settings.populationSize),
+    tournamentSize: max(1, settings.tournamentSize),
+    elitism: settings.elitism.clamp(0, max(0, settings.populationSize - 1)),
+  );
   final random = Random(settings.seed);
   final cache = <String, double>{};
   double eval(C c) => cache.putIfAbsent(key(c), () => fitness(c));

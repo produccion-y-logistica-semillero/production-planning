@@ -1,12 +1,6 @@
-enum TabuObjective {
-  totalFlow('Flujo total', 'Σ (Cj − rj)', 'min'),
-  makespan('Makespan', 'Cmax', 'min'),
-  totalTardiness('Tardanza total', 'Σ Tj', 'min'),
-  tardyJobs('Trabajos retrasados', 'Σ Uj', 'trabajos');
+// La busqueda tabu usa la misma funcion objetivo que el algoritmo genetico.
+export 'package:production_planning/entities/schedule_objective.dart';
 
-  final String label;
-  final String formula;
-  final String unit;
+import 'package:production_planning/entities/schedule_objective.dart';
 
-  const TabuObjective(this.label, this.formula, this.unit);
-}
+typedef TabuObjective = ScheduleObjective;

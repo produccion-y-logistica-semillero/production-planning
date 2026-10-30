@@ -5,7 +5,10 @@ import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'dart:math';
 import 'package:production_planning/entities/tabu_objective.dart';
 
@@ -166,9 +169,6 @@ class _ParallelPlacement {
 }
 
 class ParallelMachine {
-  /// Seeded random generator for the metaheuristics: the same order always
-  /// yields the same schedule (it used to be unseeded, so two runs differed).
-  final Random _metaRandom = Random(20261016);
 
 
   final DateTime startDate;
@@ -207,6 +207,12 @@ class ParallelMachine {
   final Map<int, PreemptionEngine> _engineByMachine = {};
   final TabuParams tabuParams;
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
   /// Resumen de la ultima corrida de [tabuSearchRule] (iteraciones, tiempo
   /// y flujo). Null si no se corrio TABU o si habia menos de 2 jobs y no
   /// hubo busqueda. Lo lee el adapter para mostrarlo en la UI.
@@ -232,6 +238,8 @@ class ParallelMachine {
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
     this.tabuParams = const TabuParams(),
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     // Initialise cold-start tracking and a preemption engine per machine.
     for (final machineId in machines.keys) {
@@ -292,7 +300,10 @@ class ParallelMachine {
         msRule();
         break;
       case "GENETICS":
-        geneticsRule();
+        geneticsRule(settings: geneticParams);
+        break;
+      case "SECUENCIA_USUARIO":
+        userSequenceRule();
         break;
       case "TABU":        
         tabuSearchRule(params: tabuParams);
@@ -705,18 +716,6 @@ class ParallelMachine {
     return start;
   }
 
-  DateTime _adjustEndTimeForWorkingSchedule(DateTime start, Duration duration) {
-    final we = workingSchedule.value2;
-    final ws = workingSchedule.value1;
-    final endOfDay = DateTime(start.year, start.month, start.day, we.hour, we.minute);
-    final endTime = start.add(duration);
-    if (endTime.isAfter(endOfDay)) {
-      final remaining = endTime.difference(endOfDay);
-      return DateTime(start.year, start.month, start.day + 1, ws.hour, ws.minute).add(remaining);
-    }
-    return endTime;
-  }
-
   void printOutput() {
     for (final out in output) {
       print('Job ${out.jobId} → Machine ${out.machineId} | '
@@ -727,132 +726,84 @@ class ParallelMachine {
 
   // ── Genetic algorithm ─────────────────────────────────────────────────────
 
-  void geneticsRule() {
-    print("EJECUTANDO ALGORITMO GENÉTICO EN PARALLEL MACHINES");
+  /// Genetic algorithm on the job list, run by the shared engine: jobs are
+  /// placed in chromosome order, each on the machine that finishes it first
+  /// (list scheduling with setups, shifts, rests and maintenance), exactly
+  /// as the rules place them. Fitness: the objective chosen in [settings]
+  /// (makespan by default). It used to be a separate simplified simulation
+  /// with 5 individuals and 10 generations.
+  void geneticsRule({GeneticParams settings = const GeneticParams()}) {
+    final jobs = List<ParallelInput>.of(inputJobs);
+    if (jobs.isEmpty) return;
+    final lastState0 = Map<int, String?>.of(_machineLastState);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
 
-    const int populationSize = 5; // Reduced from 10
-    const int generations = 10; // Reduced from 25
-    const double mutationRate = 0.1;
-
-    List<List<ParallelInput>> population = _initializePopulation(populationSize);
-    List<ParallelInput> bestIndividual = [];
-    Duration bestFitness = const Duration(days: 9999);
-
-    for (int generation = 0; generation < generations; generation++) {
-      final evaluated = population.map((ind) => Tuple2(ind, _evaluateFitness(ind))).toList();
-      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
-
-      if (evaluated.first.value2 < bestFitness) {
-        bestFitness = evaluated.first.value2;
-        bestIndividual = evaluated.first.value1;
-      }
-
-      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+    void decode(List<int> permutation) {
+      _clearSchedule();
+      _machineLastState
+        ..clear()
+        ..addAll(lastState0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      inputJobs = [for (final i in permutation) jobs[i]];
+      _assignJobsToMachines();
     }
 
-    inputJobs = bestIndividual;
+    double fitness(List<int> permutation) {
+      try {
+        decode(permutation);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      final done = completionByJob<ParallelOutput>(
+          output, (o) => o.jobId, (o) => o.endDate);
+      if (done.length < jobs.length) return double.infinity;
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in jobs)
+            JobCompletion(j.availableDate, j.dueDate, done[j.jobId]!),
+        ],
+        startDate,
+      );
+    }
+
+    // Seeds: the order received, EDD and SPT (mean time over machines).
+    final identity = List<int>.generate(jobs.length, (i) => i);
+    int byId(int a, int b) => jobs[a].jobId.compareTo(jobs[b].jobId);
+    final edd = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = jobs[a].dueDate.compareTo(jobs[b].dueDate);
+        return c != 0 ? c : byId(a, b);
+      });
+    final spt = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = _averageProcessingTime(jobs[a])
+            .compareTo(_averageProcessingTime(jobs[b]));
+        return c != 0 ? c : byId(a, b);
+      });
+
+    final result = runGenetic<List<int>>(
+      seeds: [identity, edd, spt],
+      randomIndividual: (r) => List<int>.of(identity)..shuffle(r),
+      fitness: fitness,
+      crossover: orderCrossover,
+      mutate: insertionMutation,
+      key: (p) => p.join(','),
+      settings: settings,
+    );
+    decode(result.best);
+  }
+
+  /// The user's job order as a priority list: each job, in that order, goes
+  /// to the machine that finishes it first.
+  void userSequenceRule() {
+    inputJobs = orderByUserSequence(
+        inputJobs, userSequence, (j) => j.jobId, (j) => j.availableDate);
+    _clearSchedule();
     _assignJobsToMachines();
   }
-
-  List<List<ParallelInput>> _initializePopulation(int size) {
-    return List.generate(size, (_) {
-      final shuffled = List<ParallelInput>.from(inputJobs);
-      shuffled.shuffle(_metaRandom);
-      return shuffled;
-    });
-  }
-
-  /// Evaluates makespan for a candidate sequence, including setup times.
-  ///
-  /// Uses a local copy of last-states so that the evaluation is pure (it does
-  /// not mutate [_machineLastState]).
-  Duration _evaluateFitness(List<ParallelInput> jobSequence) {
-    final Map<int, DateTime> machineAvail = {
-      for (final id in machines.keys) id: startDate,
-    };
-    // Local tracking of last state per machine for this evaluation only.
-    final Map<int, String?> localLastState = {
-      for (final id in machines.keys) id: null,
-    };
-
-    DateTime latestEnd = startDate;
-
-    for (final job in jobSequence) {
-      DateTime bestEnd = DateTime(9999);
-      int bestMachineId = -1;
-
-      for (final entry in job.durationsInMachines.entries) {
-        final machineId = entry.key;
-        final processing = entry.value;
-
-        DateTime candidateStart = job.availableDate.isAfter(machineAvail[machineId]!)
-            ? job.availableDate
-            : machineAvail[machineId]!;
-        candidateStart = _adjustForWorkingSchedule(candidateStart);
-
-        final toState = job.stateOnMachine(machineId);
-        final setup = _setupDuration(machineId, localLastState[machineId], toState);
-        final DateTime processStart = setup > Duration.zero
-            ? _adjustForWorkingSchedule(candidateStart.add(setup))
-            : candidateStart;
-
-        final DateTime end = _adjustEndTimeForWorkingSchedule(processStart, processing);
-
-        if (end.isBefore(bestEnd)) {
-          bestEnd = end;
-          bestMachineId = machineId;
-        }
-      }
-
-      if (bestMachineId != -1) {
-        machineAvail[bestMachineId] = bestEnd;
-        localLastState[bestMachineId] = job.stateOnMachine(bestMachineId);
-        if (bestEnd.isAfter(latestEnd)) latestEnd = bestEnd;
-      }
-    }
-
-    return latestEnd.difference(startDate);
-  }
-
-  List<List<ParallelInput>> _generateNewPopulation(
-    List<Tuple2<List<ParallelInput>, Duration>> evaluated,
-    int size,
-    double mutationRate,
-  ) {
-    return List.generate(size, (_) {
-      final p1 = _selectParent(evaluated);
-      final p2 = _selectParent(evaluated);
-      var child = _crossover(p1, p2);
-      if (_metaRandom.nextDouble() < mutationRate) child = _mutate(child);
-      return child;
-    });
-  }
-
-  List<ParallelInput> _selectParent(List<Tuple2<List<ParallelInput>, Duration>> evaluated) {
-    const k = 5;
-    final selected = List.generate(k, (_) => evaluated[_metaRandom.nextInt(evaluated.length)]);
-    selected.sort((a, b) => a.value2.compareTo(b.value2));
-    return selected.first.value1;
-  }
-
-  List<ParallelInput> _crossover(List<ParallelInput> p1, List<ParallelInput> p2) {
-    final length = p1.length;
-    final point = _metaRandom.nextInt(length);
-    final taken = p1.sublist(0, point).map((j) => j.jobId).toSet();
-    return [...p1.sublist(0, point), ...p2.where((j) => !taken.contains(j.jobId))];
-  }
-
-  List<ParallelInput> _mutate(List<ParallelInput> ind) {
-    if (ind.length < 2) return ind;
-    final i = _metaRandom.nextInt(ind.length);
-    final j = _metaRandom.nextInt(ind.length);
-    final tmp = ind[i];
-    ind[i] = ind[j];
-    ind[j] = tmp;
-    return ind;
-  }
-
-
 
    //[maquina donde procesa el trabajo]-[inico]-[final teorico]
   DateTime _adjustEndTimeWithInactivities(int machineId, DateTime start, DateTime naiveEnd) {
@@ -1107,6 +1058,7 @@ Duration _totalFlow(Map<int, List<ParallelInput>> assignment) {
 _TabuCost _machineCost(int machineId, List<ParallelInput> sequence) {
   Duration flow = Duration.zero;
   Duration tardiness = Duration.zero;
+  Duration earliness = Duration.zero;
   int tardyJobs = 0;
   DateTime lastEnd = startDate;
   for (final placement in _simulateMachine(machineId, sequence)) {
@@ -1114,6 +1066,8 @@ _TabuCost _machineCost(int machineId, List<ParallelInput> sequence) {
     tardiness += placement.delay; // max(0, C_j − d_j)
     if (placement.delay > Duration.zero) tardyJobs++; // U_j
     if (placement.end.isAfter(lastEnd)) lastEnd = placement.end; // C_max
+    final early = placement.job.dueDate.difference(placement.end);
+    if (early > Duration.zero) earliness += early; // max(0, d_j − C_j)
   }
   final int flowMinutes = flow.inMinutes;
   final int value = switch (_objective) {
@@ -1121,6 +1075,7 @@ _TabuCost _machineCost(int machineId, List<ParallelInput> sequence) {
     TabuObjective.makespan => lastEnd.difference(startDate).inMinutes,
     TabuObjective.totalTardiness => tardiness.inMinutes,
     TabuObjective.tardyJobs => tardyJobs,
+    TabuObjective.totalEarliness => earliness.inMinutes,
   };
   return _TabuCost(value, flowMinutes);
 }

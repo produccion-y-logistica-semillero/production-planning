@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 // lib/services/adapters/flow_shop_Adapter.dart
 //
 // buildMachineStateSetupMatrix / buildJobMachineStates (imported from
@@ -32,8 +34,9 @@ class FlowShopAdapter {
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flowShopAdapter(
     int orderId,
-    String rule,
-  ) async {
+    String rule, {
+    AlgorithmParams params = const AlgorithmParams(),
+  }) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -133,6 +136,8 @@ class FlowShopAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
+      geneticParams: params.genetic ?? const GeneticParams(),
+      userSequence: params.userSequence,
     ).output;
 
     // ── 7. Build PlanningMachineEntity list ────────────────────────────────

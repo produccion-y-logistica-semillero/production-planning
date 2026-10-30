@@ -13,7 +13,7 @@ import 'package:production_planning/presentation/2_orders/pages/algorithm_picker
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/presentation/2_orders/order_filter.dart';
 import 'package:dartz/dartz.dart' as dartz;
-import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
 
 
 
@@ -436,13 +436,16 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> getMetrics(BuildContext context, int id) async {
     final result =
-        await Navigator.of(context).push<dartz.Tuple2<List<int>, TabuParams?>>(
+        await Navigator.of(context).push<dartz.Tuple2<List<int>, AlgorithmParams>>(
       MaterialPageRoute(
         builder: (_) => AlgorithmPickerPage(orderId: id),
       ),
     );
 
-    if (result == null || result.value1.isEmpty) return;
+    if (result == null ||
+        (result.value1.isEmpty && result.value2.userSequence == null)) {
+      return;
+    }
     if (!context.mounted) return;
 
     Navigator.of(context).push(
@@ -450,7 +453,7 @@ class _OrdersPageState extends State<OrdersPage> {
         builder: (_) => OrderMetrics(
           orderId: id,
           selectedRuleIndexes: result.value1,
-          tabuParams: result.value2,
+          params: result.value2,
         ),
       ),
     );

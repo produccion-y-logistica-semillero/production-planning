@@ -7,8 +7,12 @@ import 'package:dartz/dartz.dart' as dartz;
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/route_draft.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/genetic_params_dialog.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_params_dialog.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/user_sequence_dialog.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
@@ -29,6 +33,10 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   late final GanttBloc _ganttBloc;
   final List<int> _selectedIndexes = [];
   TabuParams? _tabuParams;
+  GeneticParams? _geneticParams;
+
+  /// Orden de trabajos (jobId) que definió el usuario; null si no definió.
+  List<int>? _userSequence;
   bool _selectAll = false;
   bool _isLoading = true;
 
@@ -39,7 +47,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   void initState() {
     super.initState();
     _ganttBloc = GetIt.instance<GanttBloc>();
-    _ganttBloc.assignOrderId(widget.orderId);
+    // Sin parámetros de una sesión anterior: la lista no debe traer la
+    // secuencia de usuario de otra orden.
+    _ganttBloc.assignOrderId(widget.orderId, params: const AlgorithmParams());
     GetIt.instance<OrdersService>().getFullOrder(widget.orderId).then((r) {
       if (!mounted) return;
       r.fold((_) {}, (order) => setState(() => _order = order));
@@ -162,8 +172,35 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     setState(() => _tabuParams = params);
   }
 
+  Future<void> _configureGenetic() async {
+    final params = await showDialog<GeneticParams>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => GeneticParamsDialog(
+        initial: _geneticParams ?? const GeneticParams(),
+      ),
+    );
+    if (params == null) return; // canceló
+    setState(() => _geneticParams = params);
+  }
+
+  Future<void> _editUserSequence() async {
+    final jobs = _order?.orderJobs;
+    if (jobs == null || jobs.isEmpty) return;
+    final sequence = await showDialog<List<int>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => UserSequenceDialog(jobs: jobs, initial: _userSequence),
+    );
+    if (sequence == null) return; // canceló
+    setState(() => _userSequence = sequence);
+  }
+
+  bool get _canCalculate =>
+      _selectedIndexes.isNotEmpty || _userSequence != null;
+
   void _onCalculate() {
-    if (_selectedIndexes.isEmpty) {
+    if (!_canCalculate) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
@@ -182,12 +219,17 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
       return;
     }
 
-    // Retornar los índices seleccionados
+    // Retornar los índices seleccionados (en el orden de la lista) y los
+    // parámetros configurados.
     Navigator.pop(
       context,
-      dartz.Tuple2<List<int>, TabuParams?>(
-        List<int>.from(_selectedIndexes),
-        _tabuParams,
+      dartz.Tuple2<List<int>, AlgorithmParams>(
+        [..._selectedIndexes]..sort(),
+        AlgorithmParams(
+          tabu: _tabuParams,
+          genetic: _geneticParams,
+          userSequence: _userSequence,
+        ),
       ),
     );
   }
@@ -435,6 +477,22 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                               ),
                             ),
 
+                            const SizedBox(height: 8),
+
+                            // Secuencia definida por el usuario, como
+                            // alternativa a las reglas.
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: _UserSequenceCard(
+                                order: _order,
+                                sequence: _userSequence,
+                                onEdit: _editUserSequence,
+                                onClear: () =>
+                                    setState(() => _userSequence = null),
+                              ),
+                            ),
+
                             const SizedBox(height: 16),
                           ],
                         ),
@@ -500,6 +558,22 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                             ? 'Configurar parametros (usando valores por defecto)'
                                             : 'Parametros personalizados activos',
                                         onPressed: _configureTabu,
+                                      ),
+                                    if (_labelForRule(rule, index)
+                                            .toUpperCase() ==
+                                        'GENETICS')
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.tune,
+                                          color: _geneticParams == null
+                                              ? colorScheme.onSurfaceVariant
+                                              : colorScheme.primary,
+                                        ),
+                                        tooltip: _geneticParams == null
+                                            ? 'Configurar parametros (usando valores por defecto)'
+                                            : 'Parametros personalizados activos · '
+                                                '${_geneticParams!.objective.label}',
+                                        onPressed: _configureGenetic,
                                       ),
                                     IconButton(
                                       tooltip: '¿Cómo funciona esta regla?',
@@ -597,8 +671,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                       ),
                       const SizedBox(width: 12),
                       FilledButton.icon(
-                        onPressed:
-                            _selectedIndexes.isEmpty ? null : _onCalculate,
+                        onPressed: _canCalculate ? _onCalculate : null,
                         icon: const Icon(Icons.calculate),
                         label: const Text('Calcular'),
                         style: FilledButton.styleFrom(
@@ -606,12 +679,12 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             horizontal: 20,
                             vertical: 12,
                           ),
-                          backgroundColor: _selectedIndexes.isEmpty
-                              ? colorScheme.surfaceContainerHighest
-                              : colorScheme.primary,
-                          foregroundColor: _selectedIndexes.isEmpty
-                              ? colorScheme.onSurfaceVariant
-                              : colorScheme.onPrimary,
+                          backgroundColor: _canCalculate
+                              ? colorScheme.primary
+                              : colorScheme.surfaceContainerHighest,
+                          foregroundColor: _canCalculate
+                              ? colorScheme.onPrimary
+                              : colorScheme.onSurfaceVariant,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -642,6 +715,69 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Card to define (or clear) the user's own job sequence.
+class _UserSequenceCard extends StatelessWidget {
+  final OrderEntity? order;
+  final List<int>? sequence;
+  final VoidCallback onEdit;
+  final VoidCallback onClear;
+
+  const _UserSequenceCard({
+    required this.order,
+    required this.sequence,
+    required this.onEdit,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final jobs = order?.orderJobs ?? const [];
+    final names = {for (final j in jobs) j.jobId: j.jobName ?? 'Trabajo ${j.jobId}'};
+    final active = sequence != null;
+    return Container(
+      decoration: BoxDecoration(
+        color: active
+            ? colorScheme.secondaryContainer.withOpacity(0.4)
+            : colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: active ? colorScheme.secondary : colorScheme.outlineVariant,
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(Icons.low_priority, color: colorScheme.secondary),
+        title: const Text('Secuencia del usuario',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          active
+              ? sequence!.map((id) => names[id] ?? '#$id').join(' → ')
+              : 'Opcional: ordene usted los trabajos y compárelo con las '
+                  'reglas en el dashboard y el Gantt.',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Wrap(
+          spacing: 4,
+          children: [
+            if (active)
+              IconButton(
+                tooltip: 'Quitar secuencia',
+                icon: const Icon(Icons.close),
+                onPressed: onClear,
+              ),
+            FilledButton.tonalIcon(
+              onPressed: jobs.isEmpty ? null : onEdit,
+              icon: Icon(active ? Icons.edit : Icons.add),
+              label: Text(active ? 'Editar' : 'Definir'),
+            ),
+          ],
         ),
       ),
     );

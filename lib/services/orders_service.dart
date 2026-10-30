@@ -19,7 +19,7 @@ import 'package:production_planning/services/adapters/single_machine_adapter.dar
 import 'package:production_planning/services/adapters/open_shop_adapter.dart';
 import 'package:production_planning/services/environment_detection.dart';
 
-import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 
 class OrdersService {
@@ -311,7 +311,8 @@ class OrdersService {
   // ------------------------------------------------------------------------
 
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
-      scheduleOrder(Tuple3<int, String, String> sch,{TabuParams? tabuParams,}) async {
+      scheduleOrder(Tuple3<int, String, String> sch,
+          {AlgorithmParams params = const AlgorithmParams()}) async {
 
     // The preemption engine refuses to search forever when a machine's
     // calendar admits no schedule (see SchedulingHorizonException). Turn
@@ -319,7 +320,7 @@ class OrdersService {
     // fix instead of watching a spinner — or, in the five environments that
     // run on the UI isolate, a frozen app.
     try {
-      return await _dispatchSchedule(sch, tabuParams: tabuParams);
+      return await _dispatchSchedule(sch, params: params);
     } on SchedulingHorizonException catch (e) {
       print('scheduleOrder: orden imposible de planificar → $e');
       return Left(UnschedulableOrderFailure(e.reason));
@@ -327,35 +328,35 @@ class OrdersService {
   }
   Future<Either<Failure, Tuple2<List<PlanningMachineEntity>, Metrics>?>>
       _dispatchSchedule(Tuple3<int, String, String> sch, {
-    TabuParams? tabuParams,
-  })async {
+    AlgorithmParams params = const AlgorithmParams(),
+  }) async {
 
     return switch (sch.value3) {
       'SINGLE MACHINE' => Right(await SingleMachineAdapter(
               orderRepository: orderRepo, machineRepository: machineRepo)
-          .singleMachineAdapter(sch.value1, sch.value2)),
+          .singleMachineAdapter(sch.value1, sch.value2, params: params)),
       'PARALLEL MACHINES' => Right(await ParallelMachineAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .parallelMachineAdapter(sch.value1, sch.value2, tabuParams: tabuParams)),
+          .parallelMachineAdapter(sch.value1, sch.value2, params: params)),
       'FLOW SHOP' => Right(await FlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flowShopAdapter(sch.value1, sch.value2)),
+          .flowShopAdapter(sch.value1, sch.value2, params: params)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleFlowShopAdapter(sch.value1, sch.value2)),
+          .flexibleFlowShopAdapter(sch.value1, sch.value2, params: params)),
       'FLEXIBLE JOB SHOP' || 'FLEXIBLE RECURRENTE' => await FlexibleJobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleJobShopAdapter(sch.value1, sch.value2)
+          .flexibleJobShopAdapter(sch.value1, sch.value2, params: params)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       'JOB SHOP' || 'RECURRENTE' => await JobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .jobShopAdapter(sch.value1, sch.value2)
+          .jobShopAdapter(sch.value1, sch.value2, params: params)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .openShopAdapter(sch.value1, sch.value2)
+          .openShopAdapter(sch.value1, sch.value2, params: params)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       String() => Left(EnviromentNotCorrectFailure()),

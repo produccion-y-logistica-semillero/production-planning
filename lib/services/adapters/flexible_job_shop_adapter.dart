@@ -15,6 +15,9 @@ import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/services/algorithms/flexible_job_shop.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/entities/tabu_objective.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 
 class FlexibleJobShopAdapter {
   final OrderRepository orderRepository;
@@ -32,8 +35,7 @@ class FlexibleJobShopAdapter {
     return 0;
   }
 
-  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleJobShopAdapter(
-      int orderId, String rule) async {
+  Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleJobShopAdapter(int orderId, String rule,{TabuParams? tabuParams}) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
@@ -129,6 +131,8 @@ class FlexibleJobShopAdapter {
     final Map<int, String> initialMachineState =
         resolveMachineInitialStates(machines, order.machineInitialStates);
 
+    final TabuParams effectiveTabuParams = tabuParams ?? const TabuParams();
+
     // Ejecutar el algoritmo Flexible Job Shop en un isolate
     final payload = <String, dynamic>{
       'startDate': order.regDate.millisecondsSinceEpoch,
@@ -184,11 +188,39 @@ class FlexibleJobShopAdapter {
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
       'initialMachineState': initialMachineState,
+      // TabuParams en primitivos, como el resto del payload del isolate.
+      'tabuParams': {
+        'maxIterations': effectiveTabuParams.maxIterations,
+        'intraAttempts': effectiveTabuParams.intraAttempts,
+        'interJobSamples': effectiveTabuParams.interJobSamples,
+        'maxDestinations': effectiveTabuParams.maxDestinations,
+        'timeBudgetMs': effectiveTabuParams.timeBudgetMs,
+        'seed': effectiveTabuParams.seed,
+        'randomStart': effectiveTabuParams.randomStart,
+        'objective': effectiveTabuParams.objective.name,
+      },
     };
 
     List<Map<String, dynamic>> rawOutput;
+    TabuRunStats? tabuStats;
     try {
-      rawOutput = await compute(flexibleJobShopSchedule, payload);
+      final Map<String, dynamic> rawResult =
+          await compute(flexibleJobShopSchedule, payload);
+      rawOutput = (rawResult['output'] as List).cast<Map<String, dynamic>>();
+      final rawStats = rawResult['tabuStats'] as Map<dynamic, dynamic>?;
+      tabuStats = rawStats == null
+          ? null
+          : TabuRunStats(
+              iterations: rawStats['iterations'] as int,
+              maxIterations: rawStats['maxIterations'] as int,
+              elapsedMs: rawStats['elapsedMs'] as int,
+              timeBudgetMs: rawStats['timeBudgetMs'] as int,
+              objective:
+                  TabuObjective.values.byName(rawStats['objective'] as String),
+              initialValue: rawStats['initialValue'] as int,
+              bestValue: rawStats['bestValue'] as int,
+              stoppedByTime: rawStats['stoppedByTime'] as bool,
+            );
     } catch (error, stack) {
       print(
           'FlexibleJobShopAdapter.flexibleJobShopAdapter compute error: ${error.toString()}');
@@ -303,6 +335,7 @@ class FlexibleJobShopAdapter {
     final metrics = getMetricts(
       planningMachines,
       jobsDates,
+      tabuStats: tabuStats,
     );
 
     return Tuple2(planningMachines, metrics);

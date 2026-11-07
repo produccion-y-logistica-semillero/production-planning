@@ -34,7 +34,7 @@ class SQLLiteDatabaseProvider {
 
     _database = await openDatabase(
       path,
-      version: 13,
+      version: 16,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -308,7 +308,8 @@ class SQLLiteDatabaseProvider {
           'environment_id': 2,
           'name': 'PARALLEL MACHINES',
         });
-        batch.insert('environments', {'environment_id': 3, 'name': 'FLOW SHOP'});
+        batch
+            .insert('environments', {'environment_id': 3, 'name': 'FLOW SHOP'});
         batch.insert('environments', {
           'environment_id': 4,
           'name': 'FLEXIBLE FLOW SHOP',
@@ -318,14 +319,16 @@ class SQLLiteDatabaseProvider {
           'environment_id': 6,
           'name': 'FLEXIBLE JOB SHOP',
         });
-        batch.insert('environments', {'environment_id': 7, 'name': 'OPEN SHOP'});
+        batch
+            .insert('environments', {'environment_id': 7, 'name': 'OPEN SHOP'});
         batch.insert('environments', {
           'environment_id': 8,
           'name': 'FLEXIBLE OPEN SHOP',
         });
         // Precedence graphs (A and B enable C, branching): one machine per
         // station / some station with several machines.
-        batch.insert('environments', {'environment_id': 9, 'name': 'RECURRENTE'});
+        batch.insert(
+            'environments', {'environment_id': 9, 'name': 'RECURRENTE'});
         batch.insert('environments', {
           'environment_id': 10,
           'name': 'FLEXIBLE RECURRENTE',
@@ -363,7 +366,8 @@ class SQLLiteDatabaseProvider {
           'name': 'MINSLACK',
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 12, 'name': 'CR'});
-        batch.insert('dispatch_rules', {'dispatch_rule_id': 13, 'name': 'ATCS'});
+        batch
+            .insert('dispatch_rules', {'dispatch_rule_id': 13, 'name': 'ATCS'});
 
         // Parallel (IDs 14-22)
         batch.insert('dispatch_rules', {
@@ -392,7 +396,8 @@ class SQLLiteDatabaseProvider {
         });
         batch.insert('dispatch_rules', {'dispatch_rule_id': 20, 'name': 'CR'});
         batch.insert('dispatch_rules', {'dispatch_rule_id': 21, 'name': 'MS'});
-        batch.insert('dispatch_rules', {'dispatch_rule_id': 22, 'name': 'ATCS'});
+        batch
+            .insert('dispatch_rules', {'dispatch_rule_id': 22, 'name': 'ATCS'});
 
         // Flow Shop (ID 23)
         batch.insert('dispatch_rules', {
@@ -434,22 +439,69 @@ class SQLLiteDatabaseProvider {
         // DISTINCT, so granting both made each of those four appear twice in
         // the rule dropdown.
         for (final r in [
-          2, 3, 1, 14, 11, 12, 5, 6, 7, 10,
-          17, 18, 21, 22, 24, 25,
+          2,
+          3,
+          1,
+          14,
+          11,
+          12,
+          5,
+          6,
+          7,
+          10,
+          17,
+          18,
+          21,
+          22,
+          24,
+          25,
         ]) {
           addRule(2, r);
         }
 
         // 3: Flow Shop
         for (final r in [
-          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 23, 24, 26, 27,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          23,
+          24,
+          26,
+          27,
         ]) {
           addRule(3, r);
         }
 
         // 4: Flexible Flow Shop
         for (final r in [
-          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 21, 23, 24, 26, 27,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          12,
+          13,
+          21,
+          23,
+          24,
+          26,
+          25,
+          27,
         ]) {
           addRule(4, r);
         }
@@ -460,7 +512,7 @@ class SQLLiteDatabaseProvider {
         }
 
         // 6: Flexible Job Shop
-        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24, 26, 27]) {
+        for (final r in [1, 2, 3, 4, 5, 12, 13, 21, 24, 26, 25, 27]) {
           addRule(6, r);
         }
 
@@ -471,6 +523,8 @@ class SQLLiteDatabaseProvider {
             addRule(env, r);
           }
         }
+        addRule(7, 25);
+        addRule(8, 25);
 
         // ─── Orders & Jobs (base) ──────────────────────────────────────────────
         batch.insert('orders', {'order_id': 1, 'reg_date': '2024-09-08'});
@@ -1606,7 +1660,19 @@ class SQLLiteDatabaseProvider {
             "VALUES (10, 'FLEXIBLE RECURRENTE')",
           );
           for (final environmentId in const [7, 8, 9, 10]) {
-            for (final ruleId in const [1, 2, 3, 4, 5, 11, 12, 13, 24, 26, 27]) {
+            for (final ruleId in const [
+              1,
+              2,
+              3,
+              4,
+              5,
+              11,
+              12,
+              13,
+              24,
+              26,
+              27
+            ]) {
               await db.execute(
                 'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
                 'SELECT ?, ? WHERE NOT EXISTS ('
@@ -1615,6 +1681,62 @@ class SQLLiteDatabaseProvider {
                 [environmentId, ruleId, environmentId, ruleId],
               );
             }
+          }
+        }
+        if (oldVersion < 14) {
+          // TABU (25) granted to Flexible Flow Shop (4). Phase 1 of the FFS
+          // tabu search: the rule runs the dispatching seeds and keeps the
+          // best one (0 iterations) until the neighbourhood is implemented.
+          //
+          // The rule row is re-asserted on its own: v10 inserted it inside a
+          // multi-statement execute, and the grant below joins against it.
+          // dispatch_rule_id is the PRIMARY KEY, so OR IGNORE is enough here.
+          await db.execute(
+            'INSERT OR IGNORE INTO dispatch_rules (dispatch_rule_id, name) '
+            'VALUES (?, ?)',
+            [25, 'TABU'],
+          );
+          // Same guard as v12/v13: types_x_rules has no UNIQUE constraint,
+          // so INSERT OR IGNORE would not stop a second grant.
+          await db.execute(
+            'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+            'SELECT ?, ? WHERE NOT EXISTS ('
+            'SELECT 1 FROM types_x_rules '
+            'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+            [4, 25, 4, 25],
+          );
+        }
+        if (oldVersion < 15) {
+          // TABU (25) granted to Flexible Job Shop (6), matching the onCreate
+          // seed. Its own version because v14 had already run on existing
+          // databases when this grant was added.
+          //
+          // Same guard as v12-v14: types_x_rules has no UNIQUE constraint,
+          // so INSERT OR IGNORE would not stop a second grant.
+          await db.execute(
+            'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+            'SELECT ?, ? WHERE NOT EXISTS ('
+            'SELECT 1 FROM types_x_rules '
+            'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+            [6, 25, 6, 25],
+          );
+        }
+        if (oldVersion < 16) {
+          // TABU (25) granted to Open Shop (7) and Flexible Open Shop (8),
+          // matching the onCreate seed. Both run through the same OpenShop
+          // class; in Open Shop every operation has a single machine, so only
+          // the sequence/route branch of the search can move anything.
+          //
+          // Same guard as v12-v15: types_x_rules has no UNIQUE constraint,
+          // so INSERT OR IGNORE would not stop a second grant.
+          for (final environmentId in const [7, 8]) {
+            await db.execute(
+              'INSERT INTO types_x_rules (environment_id, dispatch_rule_id) '
+              'SELECT ?, ? WHERE NOT EXISTS ('
+              'SELECT 1 FROM types_x_rules '
+              'WHERE environment_id = ? AND dispatch_rule_id = ?)',
+              [environmentId, 25, environmentId, 25],
+            );
           }
         }
       },

@@ -13,6 +13,8 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
@@ -37,7 +39,7 @@ class FlexibleFlowShopAdapter {
   }
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule, {TabuParams? tabuParams}) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
@@ -128,8 +130,9 @@ class FlexibleFlowShopAdapter {
     }
 
     List<FlexibleFlowOutput> output;
+    TabuRunStats? tabuStats;
     try {
-      output = FlexibleFlowShop(
+      final FlexibleFlowShop flexible = FlexibleFlowShop(
         order.regDate,
         Tuple2(START_SCHEDULE, END_SCHEDULE),
         inputJobs,
@@ -141,7 +144,10 @@ class FlexibleFlowShopAdapter {
         machineInactivities: machineInactivitiesMap,
         machineContinueCapacity: machineContinueCapacityMap,
         machineRestTime: machineRestTimeMap,
-      ).output;
+        tabuParams: tabuParams ?? const TabuParams(),
+      );
+      output = flexible.output;
+      tabuStats = flexible.tabuStats;
     } catch (error, stack) {
       print('FlexibleFlowShopAdapter error: $error');
       print(stack.toString());
@@ -200,6 +206,7 @@ class FlexibleFlowShopAdapter {
           out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
     }).toList();
 
-    return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
+    return Tuple2(planningMachines,
+        getMetricts(planningMachines, jobsDates, tabuStats: tabuStats));
   }
 }

@@ -487,8 +487,12 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                     if (_labelForRule(rule, index)
                                                 .toUpperCase() ==
                                             'TABU' &&
-                                        env.name.toUpperCase() ==
-                                            'PARALLEL MACHINES')
+                                        const {
+                                          'PARALLEL MACHINES',
+                                          'FLEXIBLE FLOW SHOP',
+                                          'FLEXIBLE JOB SHOP',
+                                          'FLEXIBLE OPEN SHOP'
+                                        }.contains(env.name.toUpperCase()))
                                       IconButton(
                                         icon: Icon(
                                           Icons.tune,

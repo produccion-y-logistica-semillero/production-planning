@@ -3,6 +3,7 @@ enum TabuObjective {
   makespan('Makespan', 'Cmax', 'min'),
   totalTardiness('Tardanza total', 'Σ Tj', 'min'),
   tardyJobs('Trabajos retrasados', 'Σ Uj', 'trabajos');
+  //hola('Holaaaa', 'Ser feliz', 'Max') ;
 
   final String label;
   final String formula;

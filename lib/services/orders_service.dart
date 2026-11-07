@@ -22,6 +22,8 @@ import 'package:production_planning/services/environment_detection.dart';
 import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 
+
+
 class OrdersService {
   final OrderRepository orderRepo;
   final MachineRepository machineRepo;
@@ -335,10 +337,10 @@ class OrdersService {
           .flowShopAdapter(sch.value1, sch.value2)),
       'FLEXIBLE FLOW SHOP' => Right(await FlexibleFlowShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleFlowShopAdapter(sch.value1, sch.value2)),
+          .flexibleFlowShopAdapter(sch.value1, sch.value2,tabuParams: tabuParams)),
       'FLEXIBLE JOB SHOP' || 'FLEXIBLE RECURRENTE' => await FlexibleJobShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .flexibleJobShopAdapter(sch.value1, sch.value2)
+          .flexibleJobShopAdapter(sch.value1, sch.value2, tabuParams: tabuParams)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       'JOB SHOP' || 'RECURRENTE' => await JobShopAdapter(
@@ -348,7 +350,7 @@ class OrdersService {
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       'OPEN SHOP' || 'FLEXIBLE OPEN SHOP' => await OpenShopAdapter(
               machineRepository: machineRepo, orderRepository: orderRepo)
-          .openShopAdapter(sch.value1, sch.value2)
+          .openShopAdapter(sch.value1, sch.value2, tabuParams : tabuParams)
           .then((result) =>
               result == null ? Left(LocalStorageFailure()) : Right(result)),
       String() => Left(EnviromentNotCorrectFailure()),

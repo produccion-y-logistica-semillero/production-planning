@@ -1,8 +1,12 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 // import 'package:google_fonts/google_fonts.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
+import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/tutorial/tutorial_layer.dart';
+import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -35,6 +39,18 @@ Future<void> main() async {
     await scheduleFile.writeAsString('08:00\n16:00');
   }
 
+  // Format of every duration field: hh:mm:ss or minutes ("Formato de tiempos").
+  final notationFile = File('${dir.path}/$notationFileName');
+  if (await notationFile.exists()) {
+    showNotation.value = (await notationFile.readAsString()).trim() == '1';
+  }
+
+  final timeFormatFile = File('${dir.path}/$timeFormatFileName');
+  if (await timeFormatFile.exists()) {
+    timeInputFormat.value =
+        timeFormatFromStorage(await timeFormatFile.readAsString());
+  }
+
   await initDependencies(workspace);
   runApp(const MyApp());
 }
@@ -59,7 +75,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Planificación de la Producción',
+      title: 'Programación de Operaciones',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -68,9 +84,22 @@ class MyApp extends StatelessWidget {
             dynamicSchemeVariant: DynamicSchemeVariant.content),
         // textTheme: GoogleFonts.lexendDecaTextTheme()
       ),
-      home: ChangeNotifierProvider(
-        create: (context) => SideMenuProvider(),
-        child: MainPage(),
+      // The guided tutorial is drawn above every route and dialog.
+      builder: (context, child) => TutorialLayer(child: child!),
+      // A new key per workspace session: switching to or from the tutorial
+      // workspace rebuilds every page from the new database.
+      home: ValueListenableBuilder<bool>(
+        valueListenable: appSwitching,
+        builder: (context, switching, _) => switching
+            ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+            : ValueListenableBuilder<int>(
+                valueListenable: appSession,
+                builder: (context, session, _) => ChangeNotifierProvider(
+                  key: ValueKey(session),
+                  create: (context) => SideMenuProvider(),
+                  child: MainPage(),
+                ),
+              ),
       ),
       debugShowCheckedModeBanner: false,
     );

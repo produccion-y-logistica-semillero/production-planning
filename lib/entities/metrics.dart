@@ -1,3 +1,4 @@
+import 'package:production_planning/entities/metrics_breakdown.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 
 class Metrics {
@@ -8,6 +9,7 @@ class Metrics {
   final Duration avarageDelayTime; // average tardiness, always non-negative
   final Duration avarageLatenessTime; // average lateness, can be negative
   final Duration avarageEarlinessTime; // average earliness, always non-negative
+  final Duration totalEarliness; // sum of earliness Ej = max(0, dj - Cj)
   final int delayedJobs;
   final double percentageDelayedJobs;
   final Duration makespan;
@@ -17,6 +19,13 @@ class Metrics {
   final Duration totalWeightedTardiness;
   final Duration maxLateness;
   final TabuRunStats? tabuStats;
+
+  /// Breakdowns: how each machine and station spent the horizon, and
+  /// whether each job (and the jobs ending at each station) met its due date.
+  final List<MachineUsage> machineUsage;
+  final List<StationUsage> stationUsage;
+  final List<JobDelivery> jobDeliveries;
+  final List<StationTardiness> stationTardiness;
 
   Duration get totalWeightedDelay => totalWeightedTardiness;
 
@@ -35,7 +44,12 @@ class Metrics {
       required this.maxTardiness,
       required this.totalWeightedTardiness,
       required this.maxLateness,
-      this.tabuStats})
+      this.totalEarliness = Duration.zero,
+      this.tabuStats,
+      this.machineUsage = const [],
+      this.stationUsage = const [],
+      this.jobDeliveries = const [],
+      this.stationTardiness = const []})
       : percentageDelayedJobs =
             totalJobs == 0 ? 0.0 : (delayedJobs / totalJobs) * 100;
 }

@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 // lib/services/adapters/flexible_flow_shop_adapter.dart
 //
 // buildMachineStateSetupMatrix / buildJobMachineStates (imported from
@@ -19,6 +21,7 @@ import 'package:production_planning/services/adapters/metrics.dart';
 import 'package:production_planning/services/algorithms/flexible_flow_shop.dart';
 import 'package:production_planning/services/environment_detection.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class FlexibleFlowShopAdapter {
   final OrderRepository orderRepository;
@@ -37,7 +40,8 @@ class FlexibleFlowShopAdapter {
   }
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flexibleFlowShopAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule,
+      {AlgorithmParams params = const AlgorithmParams()}) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
@@ -141,6 +145,8 @@ class FlexibleFlowShopAdapter {
         machineInactivities: machineInactivitiesMap,
         machineContinueCapacity: machineContinueCapacityMap,
         machineRestTime: machineRestTimeMap,
+        geneticParams: params.genetic ?? const GeneticParams(),
+        userSequence: params.userSequence,
       ).output;
     } catch (error, stack) {
       print('FlexibleFlowShopAdapter error: $error');
@@ -149,6 +155,8 @@ class FlexibleFlowShopAdapter {
     }
 
     // ── 7. Build PlanningMachineEntity list ────────────────────────────────
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines = [
       for (final machine in machines)
         PlanningMachineEntity(
@@ -156,6 +164,7 @@ class FlexibleFlowShopAdapter {
           machine.name,
           [],
           scheduledInactivities: machine.scheduledInactivities,
+          stationName: stations[machine.machineTypeId],
         ),
     ];
 
@@ -197,7 +206,8 @@ class FlexibleFlowShopAdapter {
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
       return Tuple5(
-          out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
+          out.jobId, job.availableDate, out.endTime, out.dueDate,
+          job.priority);
     }).toList();
 
     return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));

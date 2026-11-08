@@ -1,3 +1,5 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -13,7 +15,7 @@ import 'package:production_planning/presentation/2_orders/pages/algorithm_picker
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/presentation/2_orders/order_filter.dart';
 import 'package:dartz/dartz.dart' as dartz;
-import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
 
 
 
@@ -165,9 +167,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   /// One program: its jobs, date, environment and routes, and its actions.
   Widget _buildOrderCard(BuildContext context, ColorScheme colorScheme,
-      OrderEntity order, String? environment) {
+      OrderEntity order, String? environment,
+      {bool latest = false}) {
     final routes = routeNamesOf(order);
-    return Card(
+    final card = Card(
       margin: const EdgeInsets.all(8.0),
       color: colorScheme.surfaceContainer,
       shape: RoundedRectangleBorder(
@@ -226,7 +229,9 @@ class _OrdersPageState extends State<OrdersPage> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                TextButton(
+                TutorialTarget(
+                  id: latest ? 'order.programar.latest' : 'order.programar',
+                  child: TextButton(
                   onPressed: () => getMetrics(context, order.orderId!),
                   style: TextButton.styleFrom(
                     padding:
@@ -239,17 +244,36 @@ class _OrdersPageState extends State<OrdersPage> {
                   ),
                   child: const Text("programar"),
                 ),
-                IconButton(
-                  icon: Icon(Icons.edit, color: colorScheme.secondary),
-                  onPressed: () => _editOrder(context, order.orderId!),
                 ),
-                IconButton(
-                  icon: Icon(Icons.copy, color: colorScheme.primary),
-                  onPressed: () => _orderBloc.duplicateOrder(order.orderId!),
+                TutorialTarget(
+                  id: latest ? 'order.edit.latest' : 'order.edit',
+                  child: IconButton(
+                    tooltip: 'Editar programa',
+                    icon: Icon(Icons.edit, color: colorScheme.secondary),
+                    onPressed: () => _editOrder(context, order.orderId!),
+                  ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.delete, color: colorScheme.error),
-                  onPressed: () => _orderBloc.deleteOrderById(order.orderId!),
+                TutorialTarget(
+                  id: latest ? 'order.copy.latest' : 'order.copy',
+                  child: IconButton(
+                    tooltip: 'Duplicar programa',
+                    icon: Icon(Icons.copy, color: colorScheme.primary),
+                    onPressed: () {
+                      _orderBloc.duplicateOrder(order.orderId!);
+                      tutorial.emit('orderDuplicated');
+                    },
+                  ),
+                ),
+                TutorialTarget(
+                  id: latest ? 'order.delete.latest' : 'order.delete',
+                  child: IconButton(
+                    tooltip: 'Eliminar programa',
+                    icon: Icon(Icons.delete, color: colorScheme.error),
+                    onPressed: () {
+                      _orderBloc.deleteOrderById(order.orderId!);
+                      tutorial.emit('orderDeleted');
+                    },
+                  ),
                 ),
               ],
             ),
@@ -257,6 +281,9 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       ),
     );
+    return latest
+        ? TutorialTarget(id: 'order.card.latest', child: card)
+        : card;
   }
 
   @override
@@ -269,6 +296,7 @@ class _OrdersPageState extends State<OrdersPage> {
         value: _orderBloc,
         child: Column(
           children: [
+            const NotationStrip(notationContext: NotationContext.orders),
             Row(
               children: [
                 IconButton(
@@ -276,10 +304,14 @@ class _OrdersPageState extends State<OrdersPage> {
                     context,
                     title: 'Ordenes',
                     content:
-                    'Una orden es sobre lo que se realiza la planificación de producción... \n\nUna orden puede referirse a que se requiere producir 100 panes para dentro de 5 días...',
+                    'Una orden es sobre lo que se realiza la programación de operaciones... \n\nUna orden puede referirse a que se requiere producir 100 panes para dentro de 5 días...',
 
                   ),
                   icon: const Icon(Icons.info),
+                ),
+                const NotationButton(
+                  notationContext: NotationContext.orders,
+                  title: 'Notación: programas y trabajos',
                 ),
                 Expanded(
                   flex: 1,
@@ -289,7 +321,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   child: Wrap(
                     alignment: WrapAlignment.center,
                     children: [
-                      TextButton(
+                      TutorialTarget(
+                        id: 'orders.new',
+                        child: TextButton(
                         onPressed: () async {
                           print("DEBUG: Navegando a NewOrderPage");
 
@@ -322,6 +356,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                         child: const Text("Nuevo Programa de Producción",
                             textAlign: TextAlign.center),
+                      ),
                       ),
                     ],
                   ),
@@ -361,7 +396,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
                     return Column(
                       children: [
-                        _buildFilterBar(
+                        TutorialTarget(
+                          id: 'orders.filters',
+                          child: _buildFilterBar(
                           colorScheme,
                           environmentOptions: environmentOptions,
                           routeOptions: routeOptions,
@@ -371,6 +408,7 @@ class _OrdersPageState extends State<OrdersPage> {
                           total: state.orders.length,
                           environmentsLoading: environments.isEmpty &&
                               state.orders.isNotEmpty,
+                        ),
                         ),
                         Expanded(
                           child: filtered.isEmpty
@@ -386,12 +424,21 @@ class _OrdersPageState extends State<OrdersPage> {
                                   ),
                                 )
                               : ListView.builder(
+                                  // Build every card so the guided tutorial
+                                  // can reach the newest one.
+                                  cacheExtent: 100000,
                                   itemCount: filtered.length,
                                   itemBuilder: (context, index) => _buildOrderCard(
                                     context,
                                     colorScheme,
                                     filtered[index],
                                     environments[filtered[index].orderId],
+                                    // The newest program is the one the
+                                    // guided tutorial just created.
+                                    latest: filtered[index].orderId ==
+                                        state.orders
+                                            .map((o) => o.orderId ?? 0)
+                                            .fold<int>(0, (a, b) => a > b ? a : b),
                                   ),
                                 ),
                         ),
@@ -436,13 +483,16 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> getMetrics(BuildContext context, int id) async {
     final result =
-        await Navigator.of(context).push<dartz.Tuple2<List<int>, TabuParams?>>(
+        await Navigator.of(context).push<dartz.Tuple2<List<int>, AlgorithmParams>>(
       MaterialPageRoute(
         builder: (_) => AlgorithmPickerPage(orderId: id),
       ),
     );
 
-    if (result == null || result.value1.isEmpty) return;
+    if (result == null ||
+        (result.value1.isEmpty && !result.value2.hasUserSequence)) {
+      return;
+    }
     if (!context.mounted) return;
 
     Navigator.of(context).push(
@@ -450,7 +500,7 @@ class _OrdersPageState extends State<OrdersPage> {
         builder: (_) => OrderMetrics(
           orderId: id,
           selectedRuleIndexes: result.value1,
-          tabuParams: result.value2,
+          params: result.value2,
         ),
       ),
     );

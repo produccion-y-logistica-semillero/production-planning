@@ -142,9 +142,9 @@ const Map<String, DispatchRuleInfo> _catalog = {
     goodFor: 'Priorizar trabajos importantes considerando alistamientos.',
     kind: 'Dinámica',
   ),
-  'MINSLACK': DispatchRuleInfo(
-    code: 'MINSLACK',
-    title: 'Holgura mínima (Minimum Slack)',
+  'MS': DispatchRuleInfo(
+    code: 'MS',
+    title: 'Holgura mínima (Minimum Slack, MS)',
     summary: 'Primero el que tiene menos margen antes de su entrega.',
     howItWorks:
         'Holgura = fecha de entrega − cuándo terminaría si empieza ahora − '
@@ -228,13 +228,36 @@ const Map<String, DispatchRuleInfo> _catalog = {
     title: 'Algoritmo genético',
     summary: 'Busca una buena secuencia combinando y mutando soluciones.',
     howItWorks:
-        'En una máquina, máquinas paralelas y Flow Shop es un algoritmo '
-        'genético: genera secuencias, conserva las mejores y las combina. En '
-        'los demás ambientes es un puntaje que combina urgencia (CR) y '
-        'prioridad por minuto (WSPT).',
+        'Mantiene una población de soluciones (cromosomas), elige las mejores '
+        'por torneo, las cruza y las muta durante varias generaciones, y '
+        'conserva la mejor. En una máquina, máquinas paralelas, Flow Shop y '
+        'Flexible Flow Shop el cromosoma es el orden de los trabajos; en Job '
+        'Shop, Open Shop y Recurrente es el orden de las operaciones y, si '
+        'hay varias máquinas por estación, la máquina de cada operación. Cada '
+        'cromosoma se programa con alistamientos e interrupciones reales. '
+        'Con el ícono de ajustes se eligen la función objetivo (makespan por '
+        'defecto, flujo total, tardanza total, trabajos retrasados o anticipo '
+        'total) y los parámetros: población, generaciones, cruce, mutación, '
+        'elitismo y semilla. La misma semilla da siempre el mismo programa.',
     goodFor:
-        'Comparar contra las reglas simples; puede tardar más que ellas.',
+        'Reducir el tiempo total (makespan) más allá de las reglas simples; '
+        'tarda más que ellas.',
     kind: 'Metaheurística',
+  ),
+  'PRIORIDAD_COMPUESTA': DispatchRuleInfo(
+    code: 'PRIORIDAD_COMPUESTA',
+    title: 'Prioridad compuesta (urgencia + prioridad por minuto)',
+    summary: 'Combina la razón crítica y la prioridad por minuto en un puntaje.',
+    howItWorks:
+        'A cada operación le da el puntaje 1/CR + w/p: crece si el trabajo '
+        'está apurado frente a su entrega (CR bajo) o si tiene alta prioridad '
+        'por minuto de proceso. Va primero la de mayor puntaje. En Flexible '
+        'Flow Shop ordena los trabajos una vez por (prioridad + 1) / tiempo '
+        'total de su ruta. Antes se mostraba con el nombre GENETICS.',
+    goodFor:
+        'Equilibrar cumplimiento de fechas y prioridad sin el costo de una '
+        'metaheurística.',
+    kind: 'Dinámica',
   ),
   'TABU': DispatchRuleInfo(
     code: 'TABU',
@@ -247,11 +270,37 @@ const Map<String, DispatchRuleInfo> _catalog = {
     goodFor: 'Afinar la secuencia en una máquina o máquinas paralelas.',
     kind: 'Metaheurística',
   ),
+  'SECUENCIA_USUARIO': DispatchRuleInfo(
+    code: 'SECUENCIA_USUARIO',
+    title: 'Secuencia definida por el usuario',
+    summary: 'Programa los trabajos en el orden que usted eligió.',
+    howItWorks:
+        'En una máquina y Flow Shop los trabajos se programan exactamente en '
+        'ese orden (permutación). En máquinas paralelas y Flexible Flow Shop '
+        'entran en ese orden y cada uno va a la máquina que lo termina '
+        'primero. En Job Shop, Open Shop y Recurrente el orden es una lista '
+        'de prioridad: entre las operaciones que pueden empezar primero, va '
+        'la del trabajo que está antes en su lista. Se respetan alistamientos '
+        'e interrupciones.\n\n'
+        'En Job Shop, Open Shop y Recurrente (y sus variantes flexibles) '
+        'también puede definir la secuencia POR MÁQUINA: cada máquina '
+        'procesa sus trabajos exactamente en el orden que escribió, aunque '
+        'tenga que esperar, y un trabajo aparece una vez por cada operación '
+        'que tiene en esa máquina (puede repetirla). En Open Shop además '
+        'decide la ruta de cada trabajo, es decir, qué máquina visita en '
+        'cada operación. Si las secuencias se esperan unas a otras en ciclo '
+        '(interbloqueo), el plan se rechaza y se indica qué operaciones '
+        'chocan.',
+    goodFor:
+        'Comparar el plan que ya usa la planta, o una idea propia, contra '
+        'las reglas y metaheurísticas con las mismas métricas.',
+    kind: 'Manual',
+  ),
 };
 
 /// The explanation of rule [code] (case-insensitive), or null if unknown.
-/// "MS" is the same rule as "MINSLACK".
+/// "MINSLACK" is the old name of "MS" (Minimum Slack).
 DispatchRuleInfo? dispatchRuleInfo(String code) {
   final c = code.trim().toUpperCase();
-  return _catalog[c == 'MS' ? 'MINSLACK' : c];
+  return _catalog[c == 'MINSLACK' ? 'MS' : c];
 }

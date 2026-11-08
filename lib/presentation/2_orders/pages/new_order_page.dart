@@ -1,3 +1,6 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/notation.dart';
+import 'package:production_planning/shared/date_time_pickers.dart';
 // lib/presentation/2_orders/pages/new_order_page.dart
 
 import 'package:flutter/material.dart';
@@ -8,6 +11,7 @@ import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/ne
 import 'package:production_planning/presentation/2_orders/widgets/high_order/add_job.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/utils/task_time_utils.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 /// One station (machine type) of the order, with ALL its machines.
 class _OrderStation {
@@ -77,6 +81,7 @@ class NewOrderPage extends StatelessWidget {
         child: BlocListener<NewOrderBloc, NewOrderState>(
           listener: (context, state) {
             if (state is NewOrdersState && state.justSaved != null) {
+              if (state.justSaved!) tutorial.emit('orderSaved');
               showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -95,12 +100,15 @@ class NewOrderPage extends StatelessWidget {
                         : "Hubo un error guardando la orden",
                   ),
                   actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(subcontext).pop();
-                        Navigator.of(context).pop(state.justSaved);
-                      },
-                      child: const Text("OK"),
+                    TutorialTarget(
+                      id: 'order.savedOk',
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(subcontext).pop();
+                          Navigator.of(context).pop(state.justSaved);
+                        },
+                        child: const Text("OK"),
+                      ),
                     ),
                   ],
                 ),
@@ -176,7 +184,11 @@ class NewOrderPage extends StatelessWidget {
                       ],
                     ),
                     if (state is NewOrdersState)
-                      _buildDateModeToggle(context, bloc, state, colorScheme),
+                      TutorialTarget(
+                        id: 'order.dateMode',
+                        child: _buildDateModeToggle(
+                            context, bloc, state, colorScheme),
+                      ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(children: jobWidgets),
@@ -191,7 +203,9 @@ class NewOrderPage extends StatelessWidget {
                         spacing: 12,
                         runSpacing: 12,
                         children: [
-                        ElevatedButton(
+                        TutorialTarget(
+                          id: 'order.addJob',
+                          child: ElevatedButton(
                           onPressed: () => bloc.addJob(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: colorScheme.primary,
@@ -203,7 +217,10 @@ class NewOrderPage extends StatelessWidget {
                           ),
                           child: const Text('Agregar Job'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.matrix',
+                          child: ElevatedButton(
                           onPressed: () =>
                               _showMatrixDialog(context, state, colorScheme),
                           style: ElevatedButton.styleFrom(
@@ -215,7 +232,10 @@ class NewOrderPage extends StatelessWidget {
                           child: const Text(
                               'Definir matriz de tiempos de alistamiento'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.initialStates',
+                          child: ElevatedButton(
                           onPressed: () =>
                               _showMachineInitialStatesDialog(context, state, colorScheme),
                           style: ElevatedButton.styleFrom(
@@ -226,7 +246,10 @@ class NewOrderPage extends StatelessWidget {
                           ),
                           child: const Text('Definir estado inicial de máquinas'),
                         ),
-                        ElevatedButton(
+                        ),
+                        TutorialTarget(
+                          id: 'order.save',
+                          child: ElevatedButton(
                           onPressed: () {
                             if (!_validateForm(state)) {
                               _showValidationDialog(context, colorScheme);
@@ -249,6 +272,7 @@ class NewOrderPage extends StatelessWidget {
                           child: Text(editOrderId != null
                               ? 'Guardar Cambios'
                               : 'Crear programa de produccion'),
+                        ),
                         ),
                         ],
                       ),
@@ -339,7 +363,7 @@ class NewOrderPage extends StatelessWidget {
               children: [
                 _selectOrderAutomaticHour(
                   context,
-                  'Hora de inicio',
+                  withSymbol('Hora de inicio', 'rj'),
                   state.automaticStartHour,
                   bloc.setAutomaticStartHour,
                   colorScheme,
@@ -347,7 +371,7 @@ class NewOrderPage extends StatelessWidget {
                 const SizedBox(width: 24),
                 _selectOrderAutomaticHour(
                   context,
-                  'Hora de entrega',
+                  withSymbol('Hora de entrega', 'dj'),
                   state.automaticDueHour,
                   bloc.setAutomaticDueHour,
                   colorScheme,
@@ -386,10 +410,7 @@ class NewOrderPage extends StatelessWidget {
         Text('$label: ', style: TextStyle(color: colorScheme.onSurface)),
         TextButton(
           onPressed: () async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: hour ?? TimeOfDay.now(),
-            );
+            final picked = await pickTime(context, initial: hour);
             if (picked != null) onPicked(picked);
           },
           child: hour == null
@@ -473,7 +494,8 @@ class NewOrderPage extends StatelessWidget {
         controllers[r] = {};
         for (final c in jobStates) {
           final val = matrix[r]?[c] ?? 0;
-          controllers[r]![c] = TextEditingController(text: val == 0 ? '' : val.toString());
+          controllers[r]![c] = TextEditingController(
+              text: val == 0 ? '' : formatDurationMinutes(val));
         }
       }
     }
@@ -490,7 +512,8 @@ class NewOrderPage extends StatelessWidget {
                 newMatrix[r] = {};
                 for (final c in jobStates) {
                   final text = controllers[r]![c]!.text;
-                  newMatrix[r]![c] = int.tryParse(text) ?? 0;
+                  // Typed in the "Formato de tiempos" setting; minutes here.
+                  newMatrix[r]![c] = parseDurationMinutes(text) ?? 0;
                 }
               }
               existingMatrices[selectedMachine] = newMatrix;
@@ -510,7 +533,8 @@ class NewOrderPage extends StatelessWidget {
                 for (final r in jobStates) {
                   for (final c in jobStates) {
                     final val = matrix[r]?[c] ?? 0;
-                    controllers[r]![c]!.text = val == 0 ? '' : val.toString();
+                    controllers[r]![c]!.text =
+                        val == 0 ? '' : formatDurationMinutes(val);
                   }
                 }
               });
@@ -614,7 +638,7 @@ class NewOrderPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tiempo en minutos para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
+                      'Tiempo (${timeFormatLabel(timeInputFormat.value)}) para cambiar del estado (Fila) al estado (Columna). La diagonal (mismo estado fila/columna) también puede tener un valor propio.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 16),
@@ -639,6 +663,24 @@ class NewOrderPage extends StatelessWidget {
                                       controller: controllers[r]![c],
                                       keyboardType: TextInputType.number,
                                       textAlign: TextAlign.center,
+                                      inputFormatters: durationInputFormatters(),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        hintText: durationHint(),
+                                        // An invalid cell used to be saved
+                                        // silently as 0.
+                                        errorText: controllers[r]![c]!
+                                                    .text
+                                                    .trim()
+                                                    .isNotEmpty &&
+                                                parseDurationMinutes(
+                                                        controllers[r]![c]!
+                                                            .text) ==
+                                                    null
+                                            ? '!'
+                                            : null,
+                                      ),
+                                      onChanged: (_) => setState(() {}),
                                     ),
                                   );
                                 }),
@@ -652,19 +694,26 @@ class NewOrderPage extends StatelessWidget {
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text("Cerrar"),
+                TutorialTarget(
+                  id: 'matrix.close',
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text("Cerrar"),
+                  ),
                 ),
-                ElevatedButton(
+                TutorialTarget(
+                  id: 'matrix.save',
+                  child: ElevatedButton(
                   onPressed: () {
                     flushToModel();
+                    tutorial.emit('matrixSaved');
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Matriz de alistamiento guardada para $selectedMachine')),
                     );
                   },
                   child: const Text("Guardar"),
+                ),
                 ),
               ],
             );
@@ -820,12 +869,16 @@ class NewOrderPage extends StatelessWidget {
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cerrar'),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  bloc.setMachineInitialStates(current);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Guardar'),
+              TutorialTarget(
+                id: 'initial.save',
+                child: ElevatedButton(
+                  onPressed: () {
+                    bloc.setMachineInitialStates(current);
+                    Navigator.of(dialogContext).pop();
+                    tutorial.emit('initialStatesSaved');
+                  },
+                  child: const Text('Guardar'),
+                ),
               ),
             ],
           );

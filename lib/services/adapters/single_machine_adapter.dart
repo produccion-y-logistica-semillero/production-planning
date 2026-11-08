@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/metrics.dart';
@@ -21,7 +23,8 @@ class SingleMachineAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> singleMachineAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule,
+      {AlgorithmParams params = const AlgorithmParams()}) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -111,6 +114,8 @@ class SingleMachineAdapter {
       machineInactivities: machineEntity.scheduledInactivities,
       continueCapacity: restPolicy.capacityMinutes,
       restTime: restPolicy.rest,
+      geneticParams: params.genetic ?? const GeneticParams(),
+      userSequence: params.userSequence,
     ).output;
 
     // ── 7. Transform output into PlanningMachineEntity ────────────────────
@@ -143,6 +148,7 @@ class SingleMachineAdapter {
         machineTypeName,
         tasks,
         scheduledInactivities: machineEntity.scheduledInactivities,
+        stationName: machineTypeName,
       ),
     ];
 
@@ -152,7 +158,7 @@ class SingleMachineAdapter {
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
         return Tuple5(
-            out.jobId, out.startDate, out.endDate, out.dueDate, job.priority);
+            out.jobId, job.availableDate, out.endDate, out.dueDate, job.priority);
       }).toList(),
     );
 

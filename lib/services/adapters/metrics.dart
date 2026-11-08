@@ -1,12 +1,16 @@
 import 'package:dartz/dartz.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/metrics_breakdown.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
+import 'package:flutter/material.dart';
+import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/services/adapters/metrics_breakdown.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 
 Metrics getMetricts(List<PlanningMachineEntity> machines,
     List<Tuple5<int, DateTime, DateTime, DateTime, int>> jobsDates,
-    {TabuRunStats? tabuStats}) {
+    {TabuRunStats? tabuStats, Tuple2<TimeOfDay, TimeOfDay>? workingSchedule}) {
   for (var machine in machines) {
     machine.tasks.orderByStartDate();
   }
@@ -62,6 +66,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
       avarageDelayTime: Duration.zero,
       avarageLatenessTime: Duration.zero,
       avarageEarlinessTime: Duration.zero,
+      totalEarliness: Duration.zero,
       delayedJobs: 0,
       makespan: Duration.zero,
       totalFlow: Duration.zero,
@@ -88,7 +93,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   Duration totalLateness = Duration.zero;
   Duration totalEarliness = Duration.zero;
   Duration maxTardiness = Duration.zero;
-  Duration maxLateness = Duration.zero;
+  Duration? maxLatenessOrNull;
   int delayedJobs = 0;
   int totalWeightedTardinessMicros = 0;
 
@@ -116,8 +121,8 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     if (tardiness > maxTardiness) {
       maxTardiness = tardiness;
     }
-    if (lateness > maxLateness) {
-      maxLateness = lateness;
+    if (maxLatenessOrNull == null || lateness > maxLatenessOrNull) {
+      maxLatenessOrNull = lateness;
     }
     if (!tardiness.isNegative && tardiness > Duration.zero) {
       delayedJobs += 1;
@@ -139,7 +144,23 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     microseconds: totalEarliness.inMicroseconds ~/ jobCount,
   );
 
+  // Breakdown per machine / station / job. The shift is the plant's global
+  // one unless the caller passes another.
+  final usage = (earliestTaskStart != null && latestTaskEnd != null)
+      ? machineUsage(
+          machines,
+          from: earliestTaskStart,
+          to: latestTaskEnd,
+          shift: workingSchedule ?? Tuple2(START_SCHEDULE, END_SCHEDULE),
+        )
+      : const <MachineUsage>[];
+  final deliveries = jobDeliveries(machines, jobsDates);
+
   return Metrics(
+    machineUsage: usage,
+    stationUsage: stationUsage(usage),
+    jobDeliveries: deliveries,
+    stationTardiness: stationTardiness(deliveries),
     idle: idle.isNegative ? Duration.zero : idle,
     totalJobs: jobCount,
     maxDelay: maxTardiness,
@@ -147,6 +168,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     avarageDelayTime: averageTardiness,
     avarageLatenessTime: averageLateness,
     avarageEarlinessTime: averageEarliness,
+    totalEarliness: totalEarliness,
     delayedJobs: delayedJobs,
     makespan: makespan,
     totalFlow: totalFlowTime,
@@ -155,7 +177,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     tabuStats: tabuStats,
     totalWeightedTardiness:
         Duration(microseconds: totalWeightedTardinessMicros),
-    maxLateness: maxLateness,
+    maxLateness: maxLatenessOrNull ?? Duration.zero,
   );
 }
 

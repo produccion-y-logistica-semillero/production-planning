@@ -1,7 +1,8 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:intl/intl.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
@@ -9,6 +10,7 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/machines_state.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 // Changed to StatefulWidget to manage list expanded state
 class MachinesListView extends StatefulWidget {
@@ -27,6 +29,9 @@ class _MachinesListViewState extends State<MachinesListView> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView.builder(
+      // Short list: build every row, so the guided tutorial can find and
+      // scroll to any of them (a lazy list only builds the visible ones).
+      cacheExtent: 100000,
       itemCount: widget.machineTypes.length,
       itemBuilder: (context, index) {
         final machineType = widget.machineTypes[index];
@@ -80,7 +85,9 @@ class _MachinesListViewState extends State<MachinesListView> {
                   children: [
                     Expanded(
                       flex: 8,
-                      child: ClipRRect(
+                      child: TutorialTarget(
+                        id: 'station:${machineType.name}',
+                        child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: ExpansionTile(
                           title: Text(
@@ -122,6 +129,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                           children: children,
                         ),
                       ),
+                      ),
                     ),
                     // The two actions take their natural width (they used to
                     // get 1/9 of the row, which on a phone is less than two
@@ -131,13 +139,16 @@ class _MachinesListViewState extends State<MachinesListView> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            onPressed: () => _addNewMachine(
-                              context,
-                              machineType.id!,
-                              machineType.name,
+                          TutorialTarget(
+                            id: 'station.addMachine:${machineType.name}',
+                            child: IconButton(
+                              onPressed: () => _addNewMachine(
+                                context,
+                                machineType.id!,
+                                machineType.name,
+                              ),
+                              icon: Icon(Icons.add, color: colorScheme.primary),
                             ),
-                            icon: Icon(Icons.add, color: colorScheme.primary),
                           ),
                           IconButton(
                             onPressed: () => _deleteMachineType(
@@ -269,12 +280,12 @@ class _MachinesListViewState extends State<MachinesListView> {
             final preparationPercent =
                 parsePercentage(controllerPreparation.text);
             // Convert minutes → percentage: (minutes * 100) / 60
-            final restMinutes =
-                int.tryParse(controllerRestTime.text.trim());
+            // Typed in the "Formato de tiempos" setting; minutes here.
+            final restMinutes = parseDurationMinutes(controllerRestTime.text);
             final restPercent =
                 restMinutes != null ? (restMinutes * 100) / 60 : null;
             final continueCapacity =
-                int.tryParse(controllerContinue.text.trim());
+                parseDurationMinutes(controllerContinue.text);
             final startMode = startModeNotifier.value;
 
             // The rest policy is either off (both 0, the "No aplica"
@@ -353,6 +364,7 @@ class _MachinesListViewState extends State<MachinesListView> {
             }
 
             Navigator.of(dialogContext).pop();
+            tutorial.emit('machineAdded');
 
             await Future.delayed(const Duration(milliseconds: 300));
             if (expandedTypes.contains(machineId)) {
@@ -377,12 +389,12 @@ class _MachinesListViewState extends State<MachinesListView> {
     // Convert stored percentage back to minutes for display.
     final restMinutes = (60 * machine.restPercentage / 100).round();
     final restController =
-        TextEditingController(text: restMinutes.toString());
+        TextEditingController(text: formatDurationMinutes(restMinutes));
     final continueController = TextEditingController(
-        text: machine.continueCapacity.toString());
+        text: formatDurationMinutes(machine.continueCapacity ?? 0));
     final availabilityController = TextEditingController(
       text: machine.availabilityDateTime != null
-          ? DateFormat('yyyy-MM-dd HH:mm').format(machine.availabilityDateTime!)
+          ? kDateTimeFormat.format(machine.availabilityDateTime!)
           : '',
     );
     final quantityController = TextEditingController(text: '1');
@@ -411,8 +423,8 @@ class _MachinesListViewState extends State<MachinesListView> {
               double.tryParse(capacityController.text) ?? 100.0,
               double.tryParse(preparationController.text) ?? 100.0,
               // Convert minutes → percentage before sending to BLoC.
-              ((int.tryParse(restController.text) ?? 60) * 100) / 60,
-              int.tryParse(continueController.text) ?? 1,
+              ((parseDurationMinutes(restController.text) ?? 60) * 100) / 60,
+              parseDurationMinutes(continueController.text) ?? 1,
               nameController.text.trim(),
               availabilityController.text.trim(),
               startMode: startModeNotifier.value,

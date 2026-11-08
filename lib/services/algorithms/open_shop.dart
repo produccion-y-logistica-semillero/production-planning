@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -108,6 +112,20 @@ class OpenShop {
   final Map<int, int?> _machineLastJob = {};
   List<OpenShopOutput> output = [];
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
+  /// machineId -> job ids in the order that machine processes them (rule
+  /// SECUENCIA_USUARIO, strict). When set it replaces [userSequence].
+  final Map<int, List<int>>? machineSequences;
+
+  /// jobId -> machine ids the job visits, in order (one per operation): the
+  /// route is part of the user's solution in an open shop.
+  final Map<int, List<int>>? userRoutes;
+
   OpenShop(
     this.startDate,
     this.workingSchedule,
@@ -120,6 +138,10 @@ class OpenShop {
     this.stateSetupMatrix,
     this.jobStates,
     this.initialMachineState = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
+    this.machineSequences,
+    this.userRoutes,
   }) {
     _initializeMachineLastSequence();
     final r = rule.toUpperCase();
@@ -160,8 +182,9 @@ class OpenShop {
       case "ATCS":
         scheduleOpenShopATCS();
         break;
-      case "GENETICS":
-        // Simple genetics-like ordering based on CR and WSPT
+      // Composite priority score (1/CR + w/p). It used to be offered as
+      // "GENETICS", but it is a dispatching index, not a genetic algorithm.
+      case "PRIORIDAD_COMPUESTA":
         _schedule((a, b) {
           final crA = _calculateCR(a.job as OpenShopInput,
               a.duration as Duration, a.earliestStart as DateTime);
@@ -173,13 +196,221 @@ class OpenShop {
           final wsptB = b.job.priority / max(1, durationMinutesB);
           final scoreA = (1 / max(crA, 0.0001)) + wsptA;
           final scoreB = (1 / max(crB, 0.0001)) + wsptB;
-          return scoreB.compareTo(scoreA);
+          final cmp = scoreB.compareTo(scoreA);
+          if (cmp != 0) return cmp;
+          // List.sort is not stable: settle ties so runs agree.
+          final byJob = (a.job.jobId as int).compareTo(b.job.jobId as int);
+          if (byJob != 0) return byJob;
+          return (a.taskId as int).compareTo(b.taskId as int);
+        });
+        break;
+      case "GENETICS":
+        scheduleOpenShopGenetic(settings: geneticParams);
+        break;
+      // The user's job order as a priority list: among the operations that
+      // can start first, the job earlier in the list goes first.
+      case "SECUENCIA_USUARIO":
+        if (machineSequences != null) {
+          scheduleOpenShopMachineSequence();
+          break;
+        }
+        final rank = userSequenceRank(userSequence);
+        _schedule((a, b) {
+          final cmp = compareByUserSequence(
+            rank,
+            a.job.jobId as int,
+            b.job.jobId as int,
+            a.job.availableDate as DateTime,
+            b.job.availableDate as DateTime,
+          );
+          if (cmp != 0) return cmp;
+          return (a.taskId as int).compareTo(b.taskId as int);
         });
         break;
       default:
         scheduleOpenShopSPT();
     }
     print('OpenShop: constructor finished (scheduling started/completed)');
+  }
+
+  /// Strict per-machine sequences (and, optionally, the route of each job).
+  ///
+  /// Each machine processes its jobs exactly in the order the user typed and
+  /// each operation runs on the machine whose list it is in. A job with a
+  /// user route visits its operations in that order (the route becomes a
+  /// chain of precedences); a job without one keeps the freedom of an open
+  /// shop job, so its order comes out of the machine sequences. A plan that
+  /// cannot run (wrong counts, deadlock) throws a [MachineSequenceException].
+  void scheduleOpenShopMachineSequence() {
+    final plan = buildMachineSequencePlan(
+      ops: [
+        for (final job in inputJobs)
+          for (int i = 0; i < job.operations.length; i++)
+            SeqOperation(
+              jobId: job.jobId,
+              taskId: job.operations[i].value1,
+              index: i,
+              machines: job.operations[i].value2.keys.toSet(),
+              predecessors: {
+                for (final d in job.dependencies)
+                  if (d.successor_id == job.operations[i].value1)
+                    d.predecessor_id,
+              },
+            ),
+      ],
+      machineSequences: machineSequences!,
+      userRoutes: userRoutes,
+    );
+
+    // The user's route is an order the job must follow: add it as arrows.
+    if (plan.visitOrder.isNotEmpty) {
+      inputJobs = [
+        for (final job in inputJobs)
+          if (plan.visitOrder[job.jobId] case final order?)
+            OpenShopInput(
+              job.jobId,
+              job.dbJobId,
+              job.sequenceId,
+              job.dueDate,
+              job.priority,
+              job.availableDate,
+              job.operations,
+              dependencies: [
+                ...job.dependencies,
+                for (int k = 0; k + 1 < order.length; k++)
+                  TaskDependencyEntity(
+                    predecessor_id: order[k],
+                    successor_id: order[k + 1],
+                    sequenceId: job.sequenceId,
+                  ),
+              ],
+              interruptibleByTask: job.interruptibleByTask,
+            )
+          else
+            job,
+      ];
+    }
+
+    _schedule(
+      (a, b) {
+        final cmp = (a.job.jobId as int).compareTo(b.job.jobId as int);
+        return cmp != 0 ? cmp : (a.taskId as int).compareTo(b.taskId as int);
+      },
+      forcedMachine: plan.machineOf,
+      machineQueues: plan.queues,
+    );
+  }
+
+  /// Genetic algorithm with an operation-based chromosome (Prins, 2000;
+  /// Bierwirth, 1995) plus a machine-assignment vector for Flexible Open
+  /// Shop. Each chromosome is decoded with the same non-delay loop the rules
+  /// use: among the operations that can start at t*, the one earlier in the
+  /// chromosome goes first, on the machine its gene assigns. Fitness: the
+  /// objective chosen in [settings] (makespan by default). See
+  /// docs/diagnostico_genetics.md.
+  void scheduleOpenShopGenetic({
+    GeneticParams settings = const GeneticParams(),
+  }) {
+    final ops = <({OpenShopInput job, int taskId, List<int> machines})>[
+      for (final job in inputJobs)
+        for (final op in job.operations)
+          (
+            job: job,
+            taskId: op.value1,
+            machines: op.value2.keys.toList()..sort(),
+          ),
+    ];
+    if (ops.isEmpty) return;
+    final jobOf = [for (final op in ops) op.job.jobId];
+    final machineCount = [for (final op in ops) op.machines.length];
+
+    final availability0 = Map<int, DateTime>.of(machinesAvailability);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
+    final lastJob0 = Map<int, int?>.of(_machineLastJob);
+    final lastSequence0 = Map<int, int?>.of(_machineLastSequence);
+
+    void decode(OperationChromosome c, {bool quiet = true}) {
+      machinesAvailability
+        ..clear()
+        ..addAll(availability0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      _machineLastJob
+        ..clear()
+        ..addAll(lastJob0);
+      _machineLastSequence
+        ..clear()
+        ..addAll(lastSequence0);
+      output = [];
+      final position = <(int, int), int>{};
+      for (int i = 0; i < c.order.length; i++) {
+        final op = ops[c.order[i]];
+        position[(op.job.jobId, op.taskId)] = i;
+      }
+      final forced = <(int, int), int>{
+        for (int i = 0; i < ops.length; i++)
+          (ops[i].job.jobId, ops[i].taskId): ops[i].machines[c.machineChoice[i]],
+      };
+      _schedule(
+        (a, b) => position[(a.job.jobId as int, a.taskId as int)]!
+            .compareTo(position[(b.job.jobId as int, b.taskId as int)]!),
+        forcedMachine: forced,
+        quiet: quiet,
+      );
+    }
+
+    double fitness(OperationChromosome c) {
+      try {
+        decode(c);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      final done = output.fold<int>(0, (n, o) => n + o.scheduling.length);
+      if (done < ops.length || output.isEmpty) return double.infinity;
+      final end = completionByJob<OpenShopOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in inputJobs)
+            if (end[j.jobId] != null)
+              JobCompletion(j.availableDate, j.dueDate, end[j.jobId]!),
+        ],
+        startDate,
+      );
+    }
+
+    // Seed: operations in the order they were registered, each on its
+    // fastest machine.
+    final seed = OperationChromosome(
+      List<int>.generate(ops.length, (i) => i),
+      [
+        for (final op in ops)
+          () {
+            final durations =
+                op.job.operations.firstWhere((o) => o.value1 == op.taskId).value2;
+            int best = 0;
+            for (int k = 1; k < op.machines.length; k++) {
+              if (durations[op.machines[k]]! < durations[op.machines[best]]!) {
+                best = k;
+              }
+            }
+            return best;
+          }(),
+      ],
+    );
+
+    final result = runGenetic<OperationChromosome>(
+      seeds: [seed],
+      randomIndividual: (r) => randomOperationChromosome(machineCount, r),
+      fitness: fitness,
+      crossover: (a, b, r) => poxCrossover(a, b, jobOf, r),
+      mutate: (c, r) => operationMutation(c, machineCount, r),
+      key: (c) => c.key,
+      settings: settings,
+    );
+    decode(result.best, quiet: false);
   }
 
   void _initializeMachineLastSequence() {
@@ -255,7 +486,7 @@ class OpenShop {
 
   void scheduleOpenShopATCS() => _scheduleBy(DispatchCriterion.atcs);
 
-  /// Critical ratio used only by the GENETICS score, at [now] — the
+  /// Critical ratio used only by the PRIORIDAD_COMPUESTA score, at [now] — the
   /// schedule's clock, never the wall clock.
   double _calculateCR(OpenShopInput job, Duration duration, DateTime now) {
     final cr =
@@ -528,11 +759,30 @@ class OpenShop {
   ///
   /// A job WITHOUT precedences is a true open-shop job: its operations can be
   /// done in any order, but the job is on one machine at a time. A job WITH
-  /// precedences (an order that mixes both kinds) follows its graph, and
-  /// operations with no arrow between them may overlap, as in Job Shop.
-  void _schedule(int Function(dynamic, dynamic) comparator) {
-    print(
-        'OpenShop._schedule: entering main loop for ${inputJobs.length} jobs');
+  /// precedences (an order that mixes both kinds) follows its graph, and is
+  /// also on one machine at a time: a job is one physical piece.
+  ///
+  /// [forcedMachine] (job id, task id) → machine restricts each operation to
+  /// one machine (the genetic algorithm's assignment gene); [quiet] silences
+  /// the progress logs during the GA's many decodings.
+  ///
+  /// [machineQueues] machine -> operations in the order the machine must
+  /// process them (strict user sequence): an operation is a candidate only
+  /// when it is the head of its machine's queue.
+  void _schedule(
+    int Function(dynamic, dynamic) comparator, {
+    Map<(int, int), int>? forcedMachine,
+    Map<int, List<(int, int)>>? machineQueues,
+    bool quiet = false,
+  }) {
+    if (!quiet) {
+      print(
+          'OpenShop._schedule: entering main loop for ${inputJobs.length} jobs');
+    }
+    // Private copy: heads are consumed as operations are committed.
+    final Map<int, List<(int, int)>>? queues = machineQueues == null
+        ? null
+        : {for (final e in machineQueues.entries) e.key: [...e.value]};
     // Rastrear qué operaciones ya se completaron por job
     Map<int, Set<int>> completedOperations = {
       for (var job in inputJobs) job.jobId: <int>{},
@@ -580,7 +830,10 @@ class OpenShop {
         // One machine at a time: free once its last operation ends.
         return jobAvailability[job.jobId] ?? job.availableDate;
       } else {
-        DateTime readyTime = job.availableDate;
+        // Its arrows, AND one machine at a time: a job is one physical
+        // piece, so operations with no arrow between them still cannot
+        // overlap.
+        DateTime readyTime = jobAvailability[job.jobId] ?? job.availableDate;
         for (final dep in job.dependencies) {
           if (dep.successor_id == taskId) {
             final predEndTime = compTimes[dep.predecessor_id];
@@ -602,7 +855,7 @@ class OpenShop {
       return entry.value.length < job.operations.length;
     })) {
       iter++;
-      if (iter % 10000 == 0) {
+      if (!quiet && iter % 10000 == 0) {
         print('OpenShop._schedule: iter=$iter');
       }
       if (iter > maxIter) {
@@ -639,8 +892,18 @@ class OpenShop {
           final jobReadyTime = getJobReadyTime(job, taskId, compTimes);
 
           // Verificar cada máquina posible para esta operación
+          final int? onlyMachine = forcedMachine?[(job.jobId, taskId)];
           for (var entry in operation.value2.entries) {
             final machineId = entry.key;
+            if (onlyMachine != null && machineId != onlyMachine) continue;
+            if (queues != null) {
+              final queue = queues[machineId];
+              if (queue == null ||
+                  queue.isEmpty ||
+                  queue.first != (job.jobId, taskId)) {
+                continue;
+              }
+            }
             final duration = entry.value;
             final machineAvailable =
                 machinesAvailability[machineId] ?? startDate;
@@ -723,6 +986,7 @@ class OpenShop {
       jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
       // Actualizar disponibilidades
+      queues?[selected.machineId]?.removeAt(0);
       machinesAvailability[selected.machineId] = adjustedEnd;
       jobAvailability[selected.job.jobId] = adjustedEnd;
       completedOperations[selected.job.jobId]!.add(selected.taskId);
@@ -916,6 +1180,15 @@ List<Map<String, dynamic>> openShopSchedule(Map<String, dynamic> payload) {
     initialMachineState: initialMachineState,
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
+    geneticParams: GeneticParams.fromMap(
+        payload['geneticParams'] as Map<dynamic, dynamic>?),
+    userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
+    machineSequences: (payload['machineSequences'] as Map<dynamic, dynamic>?)
+        ?.map((machine, jobs) => MapEntry(
+            machine as int, (jobs as List<dynamic>).cast<int>())),
+    userRoutes: (payload['userRoutes'] as Map<dynamic, dynamic>?)?.map(
+        (job, machines) => MapEntry(
+            job as int, (machines as List<dynamic>).cast<int>())),
   ).output;
 
   return output.map((out) {

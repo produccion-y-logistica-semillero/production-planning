@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 // lib/services/adapters/flow_shop_Adapter.dart
 //
 // buildMachineStateSetupMatrix / buildJobMachineStates (imported from
@@ -19,6 +21,7 @@ import 'package:production_planning/services/algorithms/flow_shop.dart';
 import '../../entities/machine_entity.dart';
 import 'package:production_planning/services/environment_detection.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class FlowShopAdapter {
   final OrderRepository orderRepository;
@@ -31,8 +34,9 @@ class FlowShopAdapter {
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> flowShopAdapter(
     int orderId,
-    String rule,
-  ) async {
+    String rule, {
+    AlgorithmParams params = const AlgorithmParams(),
+  }) async {
     // ── 1. Load order ───────────────────────────────────────────────────────
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (or) => or);
@@ -132,9 +136,13 @@ class FlowShopAdapter {
       machineInactivities: machineInactivitiesMap,
       machineContinueCapacity: machineContinueCapacityMap,
       machineRestTime: machineRestTimeMap,
+      geneticParams: params.genetic ?? const GeneticParams(),
+      userSequence: params.userSequence,
     ).output;
 
     // ── 7. Build PlanningMachineEntity list ────────────────────────────────
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines = [
       for (final m in machines)
         if (m.id != null)
@@ -143,6 +151,7 @@ class FlowShopAdapter {
             m.name,
             [],
             scheduledInactivities: m.scheduledInactivities,
+            stationName: stations[m.machineTypeId],
           ),
     ];
 
@@ -180,7 +189,7 @@ class FlowShopAdapter {
     // ── 8. Metrics ────────────────────────────────────────────────────────
     final jobsDates = output.map((out) {
       final job = order.orderJobs!.firstWhere((j) => j.jobId == out.jobId);
-      return Tuple5(out.jobId, out.startDate, out.endTime, out.dueDate,
+      return Tuple5(out.jobId, job.availableDate, out.endTime, out.dueDate,
           job.priority);
     }).toList();
 

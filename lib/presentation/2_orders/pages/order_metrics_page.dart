@@ -1,3 +1,5 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -9,7 +11,7 @@ import 'package:production_planning/presentation/2_orders/pages/gantt_data_table
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
 import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
-import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_stats_card.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_dashboard.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metrics_table.dart';
@@ -18,13 +20,13 @@ import 'package:production_planning/presentation/2_orders/widgets/metrics/tabu_a
 class OrderMetrics extends StatefulWidget {
   final int orderId;
   final List<int>? selectedRuleIndexes;
-  final TabuParams? tabuParams;
+  final AlgorithmParams params;
 
   const OrderMetrics({
     super.key,
     required this.orderId,
     this.selectedRuleIndexes,
-    this.tabuParams,
+    this.params = const AlgorithmParams(),
   });
 
   @override
@@ -48,9 +50,10 @@ class _OrderMetricsState extends State<OrderMetrics> {
     _ganttBloc = GetIt.instance<GanttBloc>();
 
     // Cargar métricas
-    _metricsBloc.getTable(widget.orderId, tabuParams: widget.tabuParams);
+    _metricsBloc.getTable(widget.orderId,
+        ruleIndexes: widget.selectedRuleIndexes, params: widget.params);
     // Cargar environment para obtener nombres de reglas
-    _ganttBloc.assignOrderId(widget.orderId);
+    _ganttBloc.assignOrderId(widget.orderId, params: widget.params);
   }
 
   @override
@@ -66,8 +69,18 @@ class _OrderMetricsState extends State<OrderMetrics> {
         ),
         backgroundColor: colorScheme.surface,
         elevation: 0,
+        actions: const [
+          NotationButton(
+            notationContext: NotationContext.metrics,
+            title: 'Notación: indicadores y funciones objetivo',
+          ),
+        ],
       ),
-      body: SafeArea(
+      // Rebuilt when the notation switch changes, so the table headers show
+      // or hide the symbols.
+      body: ValueListenableBuilder<bool>(
+        valueListenable: showNotation,
+        builder: (context, _, __) => SafeArea(
         child: BlocBuilder<MetricsBloc, MetricsState>(
           bloc: _metricsBloc,
           builder: (context, state) {
@@ -101,7 +114,8 @@ class _OrderMetricsState extends State<OrderMetrics> {
                     FilledButton.icon(
                       onPressed: () => _metricsBloc.getTable(
                         widget.orderId,
-                        tabuParams: widget.tabuParams,
+                        ruleIndexes: widget.selectedRuleIndexes,
+                        params: widget.params,
                       ),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Reintentar'),
@@ -120,43 +134,12 @@ class _OrderMetricsState extends State<OrderMetrics> {
                 builder: (context, ganttState) {
                   final env = ganttState.enviroment;
 
-                  final allRuleNames = env != null
-                      ? env.rules.map((r) => r.value2.toString()).toList()
-                      : List.generate(
-                          allMetrics.length,
-                          (index) => 'Algoritmo ${index + 1}',
-                        );
-
-                  // Filtrado de métricas según selección
-                  final filteredMetrics = <Metrics>[];
-                  final filteredRuleNames = <String>[];
-                  final filteredIndexes = <int>[];
-
-                  final selectedIndexes = widget.selectedRuleIndexes;
-
-                  if (selectedIndexes != null && selectedIndexes.isNotEmpty) {
-                    for (final index in selectedIndexes) {
-                      if (index < 0 || index >= allMetrics.length) continue;
-
-                      filteredIndexes.add(index);
-                      filteredMetrics.add(allMetrics[index]);
-                      filteredRuleNames.add(
-                        index < allRuleNames.length
-                            ? allRuleNames[index]
-                            : 'Algoritmo ${index + 1}',
-                      );
-                    }
-                  } else {
-                    for (var index = 0; index < allMetrics.length; index++) {
-                      filteredIndexes.add(index);
-                      filteredMetrics.add(allMetrics[index]);
-                      filteredRuleNames.add(
-                        index < allRuleNames.length
-                            ? allRuleNames[index]
-                            : 'Algoritmo ${index + 1}',
-                      );
-                    }
-                  }
+                  // El bloc ya programó solo las reglas elegidas y guarda el
+                  // nombre de cada una junto a sus métricas.
+                  final filteredMetrics = allMetrics;
+                  final filteredRuleNames = state.ruleNames;
+                  final filteredIndexes =
+                      List<int>.generate(allMetrics.length, (i) => i);
 
                   if (filteredMetrics.isEmpty) {
                     return Center(
@@ -233,7 +216,9 @@ class _OrderMetricsState extends State<OrderMetrics> {
                             ],
                           ),
                         ),
-                        TabBar(
+                        TutorialTarget(
+                          id: 'metrics.tabs',
+                          child: TabBar(
                           tabAlignment: TabAlignment.start,
                           isScrollable: true,
                           tabs: [
@@ -248,6 +233,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                   icon: Icon(Icons.travel_explore),
                                   text: 'Búsqueda tabú'),
                           ],
+                        ),
                         ),
                         Expanded(
                           child: TabBarView(
@@ -297,7 +283,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
                                 TabuAnalysis(
                                   ruleNames: filteredRuleNames,
                                   metrics: filteredMetrics,
-                                  params: widget.tabuParams,
+                                  params: widget.params.tabu,
                                 ),
                             ],
                           ),
@@ -331,6 +317,7 @@ class _OrderMetricsState extends State<OrderMetrics> {
           },
         ),
       ),
+      ),
     );
   }
 
@@ -349,13 +336,13 @@ class _OrderMetricsState extends State<OrderMetrics> {
         _loadedRuleIds[originalIndex],
         _loadedSchedules[originalIndex],
         _loadedMetrics[originalIndex],
-        tabuParams: widget.tabuParams,
+        params: widget.params,
       );
     } else {
       _ganttBloc.assignOrderAndSelectRuleByIndex(
         widget.orderId,
         originalIndex,
-        tabuParams: widget.tabuParams,
+        params: widget.params,
       );
     }
   }

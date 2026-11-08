@@ -4,7 +4,8 @@
 //     any order, but never two at once.
 //   * In an order that mixes free jobs with routed ones, the routed jobs keep
 //     their route.
-//   * A recurrent job (A and B enable C) runs A and B in parallel and C only
+//   * A recurrent job (A and B enable C) runs A and B one after the other —
+//     a job is one physical piece, at one station at a time — and C only
 //     after both.
 //   * Every operation goes to the machine that finishes it first, and LWR /
 //     MWR rank by the work actually left.
@@ -199,7 +200,7 @@ void main() {
         );
 
     for (final rule in ['SPT', 'FIFO', 'EDD', 'MS', 'LWR', 'MWR']) {
-      test('$rule: A and B run in parallel, C waits for both', () {
+      test('$rule: A and B never overlap, C waits for both', () {
         final s = FlexibleJobShop(
           start,
           workingSchedule,
@@ -208,11 +209,40 @@ void main() {
           rule,
         ).output.single.scheduling;
 
-        expect(s[1]!.value2.start, start);
-        expect(s[2]!.value2.start, start);
-        expect(s[3]!.value2.start, start.add(const Duration(hours: 3)));
+        expect(overlap(s[1]!.value2, s[2]!.value2), isFalse,
+            reason: 'the job cannot be at two stations at once');
+        final firstBranch = s[1]!.value2.start.isBefore(s[2]!.value2.start)
+            ? s[1]!.value2
+            : s[2]!.value2;
+        expect(firstBranch.start, start);
+        // 2 h + 3 h back to back, then C.
+        expect(s[3]!.value2.start, start.add(const Duration(hours: 5)));
       });
     }
+
+    test('Open Shop with a routed job: branches without an arrow do not overlap',
+        () {
+      final out = OpenShop(
+        start,
+        workingSchedule,
+        [
+          openJob(
+            1,
+            [
+              const Tuple2(1, {1: Duration(hours: 2)}),
+              const Tuple2(2, {2: Duration(hours: 3)}),
+              const Tuple2(3, {3: Duration(hours: 1)}),
+            ],
+            dependencies: [arrow(1, 3), arrow(2, 3)],
+          ),
+        ],
+        {1: start, 2: start, 3: start},
+        'SPT',
+      ).output.single.scheduling;
+
+      expect(overlap(out[1]!.value2, out[2]!.value2), isFalse);
+      expect(out[3]!.value2.start, start.add(const Duration(hours: 5)));
+    });
 
     test('Flexible Recurrente: C goes to the machine that finishes it first',
         () {

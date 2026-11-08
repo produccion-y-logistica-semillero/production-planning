@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -7,12 +8,21 @@ import 'package:dartz/dartz.dart' as dartz;
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/route_draft.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/genetic_params_dialog.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_params_dialog.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/user_sequence_dialog.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/machine_sequence_dialog.dart';
+import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/repositories/interfaces/machine_repository.dart';
+import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
 import 'package:production_planning/shared/dispatch_rule_info.dart';
+import 'package:production_planning/shared/notation.dart';
 
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
@@ -29,20 +39,79 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   late final GanttBloc _ganttBloc;
   final List<int> _selectedIndexes = [];
   TabuParams? _tabuParams;
+  GeneticParams? _geneticParams;
+
+  /// Orden de trabajos (jobId) que definió el usuario; null si no definió.
+  List<int>? _userSequence;
   bool _selectAll = false;
   bool _isLoading = true;
 
   /// The program being scheduled, to show its routes and jobs.
   OrderEntity? _order;
 
+  /// Secuencia por máquina (y ruta) que definió el usuario; null si no.
+  MachinePlan? _machinePlan;
+
+  /// Environment of the program, and the machines and stations it uses:
+  /// needed by the per-machine sequence dialog.
+  String? _environmentName;
+  Map<int, List<MachineEntity>> _machinesByType = const {};
+  Map<int, String> _stationNames = const {};
+
+  /// Environments where the sequence changes per machine (and, in the open
+  /// shop family, the route is part of the solution).
+  static const _machineSequenceEnvironments = {
+    'JOB SHOP',
+    'FLEXIBLE JOB SHOP',
+    'RECURRENTE',
+    'FLEXIBLE RECURRENTE',
+    'OPEN SHOP',
+    'FLEXIBLE OPEN SHOP',
+  };
+
+  bool get _supportsMachinePlan =>
+      _machineSequenceEnvironments.contains(_environmentName);
+
   @override
   void initState() {
     super.initState();
     _ganttBloc = GetIt.instance<GanttBloc>();
-    _ganttBloc.assignOrderId(widget.orderId);
-    GetIt.instance<OrdersService>().getFullOrder(widget.orderId).then((r) {
+    // Sin parámetros de una sesión anterior: la lista no debe traer la
+    // secuencia de usuario de otra orden.
+    _ganttBloc.assignOrderId(widget.orderId, params: const AlgorithmParams());
+    final service = GetIt.instance<OrdersService>();
+    service.getFullOrder(widget.orderId).then((r) {
       if (!mounted) return;
-      r.fold((_) {}, (order) => setState(() => _order = order));
+      r.fold((_) {}, (order) {
+        setState(() => _order = order);
+        _loadMachines(service.machineRepo, order);
+      });
+    });
+    service.getOrderEnvironment(widget.orderId).then((r) {
+      if (!mounted) return;
+      r.fold((_) {}, (env) => setState(() => _environmentName = env.name));
+    });
+  }
+
+  /// Machines and station names of every station the program uses.
+  Future<void> _loadMachines(MachineRepository repo, OrderEntity order) async {
+    final typeIds = {
+      for (final job in order.orderJobs ?? const [])
+        for (final task in job.sequence?.tasks ?? const [])
+          if (task.machineTypeId != null) task.machineTypeId as int,
+    };
+    final machines = <int, List<MachineEntity>>{};
+    final names = <int, String>{};
+    for (final id in typeIds) {
+      final list = (await repo.getAllMachinesFromType(id)).fold((_) => null, (m) => m);
+      if (list != null) machines[id] = list;
+      final name = (await repo.getMachineTypeName(id)).fold((_) => null, (n) => n);
+      if (name != null) names[id] = name;
+    }
+    if (!mounted) return;
+    setState(() {
+      _machinesByType = machines;
+      _stationNames = names;
     });
   }
 
@@ -162,8 +231,59 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     setState(() => _tabuParams = params);
   }
 
+  Future<void> _configureGenetic() async {
+    final params = await showDialog<GeneticParams>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => GeneticParamsDialog(
+        initial: _geneticParams ?? const GeneticParams(),
+      ),
+    );
+    if (params == null) return; // canceló
+    setState(() => _geneticParams = params);
+    tutorial.emit('geneticConfigured');
+  }
+
+  Future<void> _editUserSequence() async {
+    final jobs = _order?.orderJobs;
+    if (jobs == null || jobs.isEmpty) return;
+    final sequence = await showDialog<List<int>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => UserSequenceDialog(jobs: jobs, initial: _userSequence),
+    );
+    if (sequence == null) return; // canceló
+    setState(() => _userSequence = sequence);
+    tutorial.emit('userSequenceDefined');
+  }
+
+  Future<void> _editMachinePlan() async {
+    final jobs = _order?.orderJobs;
+    if (jobs == null || jobs.isEmpty || _machinesByType.isEmpty) return;
+    final env = _environmentName ?? '';
+    final plan = await showDialog<MachinePlan>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MachineSequenceDialog(
+        jobs: jobs,
+        machinesByType: _machinesByType,
+        stationNames: _stationNames,
+        freeRoute: env.contains('OPEN'),
+        initial: _machinePlan,
+      ),
+    );
+    if (plan == null) return; // canceló
+    setState(() => _machinePlan = plan);
+    tutorial.emit('userSequenceDefined');
+  }
+
+  bool get _canCalculate =>
+      _selectedIndexes.isNotEmpty ||
+      _userSequence != null ||
+      _machinePlan != null;
+
   void _onCalculate() {
-    if (_selectedIndexes.isEmpty) {
+    if (!_canCalculate) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
@@ -182,12 +302,19 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
       return;
     }
 
-    // Retornar los índices seleccionados
+    // Retornar los índices seleccionados (en el orden de la lista) y los
+    // parámetros configurados.
     Navigator.pop(
       context,
-      dartz.Tuple2<List<int>, TabuParams?>(
-        List<int>.from(_selectedIndexes),
-        _tabuParams,
+      dartz.Tuple2<List<int>, AlgorithmParams>(
+        [..._selectedIndexes]..sort(),
+        AlgorithmParams(
+          tabu: _tabuParams,
+          genetic: _geneticParams,
+          userSequence: _userSequence,
+          machineSequences: _machinePlan?.machineSequences,
+          userRoutes: _machinePlan?.routes,
+        ),
       ),
     );
   }
@@ -334,6 +461,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
               children: [
                 Expanded(
                   child: CustomScrollView(
+                    // Build every rule so the guided tutorial can reach it.
+                    cacheExtent: 100000,
                     slivers: [
                       SliverToBoxAdapter(
                         child: Column(
@@ -377,18 +506,56 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                             fontSize: 14,
                                           ),
                                         ),
+                                        ValueListenableBuilder<bool>(
+                                          valueListenable: showNotation,
+                                          builder: (context, on, _) => on
+                                              ? Text(
+                                                  'α | β | γ:  ${threeFieldFor(env.name)}',
+                                                  style: TextStyle(
+                                                    color: colorScheme.primary,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  TextButton.icon(
-                                    onPressed: () => _showAllRulesHelp(
-                                        context, [
-                                      for (int i = 0; i < rules.length; i++)
-                                        _labelForRule(rules[i], i)
-                                    ]),
-                                    icon: const Icon(Icons.menu_book_outlined),
-                                    label: const Text('Guía de reglas'),
+                                  const NotationButton(
+                                    notationContext: NotationContext.picker,
+                                    title: 'Notación: ambiente, reglas y '
+                                        'funciones objetivo',
                                   ),
+                                  // Icon only on a phone: with the Σ button
+                                  // the labelled one no longer fits.
+                                  if (MediaQuery.sizeOf(context).width < 600)
+                                    TutorialTarget(
+                                      id: 'picker.guide',
+                                      child: IconButton(
+                                      tooltip: 'Guía de reglas',
+                                      onPressed: () => _showAllRulesHelp(
+                                          context, [
+                                        for (int i = 0; i < rules.length; i++)
+                                          _labelForRule(rules[i], i)
+                                      ]),
+                                      icon:
+                                          const Icon(Icons.menu_book_outlined),
+                                    ),
+                                    )
+                                  else
+                                    TutorialTarget(
+                                      id: 'picker.guide',
+                                      child: TextButton.icon(
+                                      onPressed: () => _showAllRulesHelp(
+                                          context, [
+                                        for (int i = 0; i < rules.length; i++)
+                                          _labelForRule(rules[i], i)
+                                      ]),
+                                      icon:
+                                          const Icon(Icons.menu_book_outlined),
+                                      label: const Text('Guía de reglas'),
+                                    ),
+                                    ),
                                 ],
                               ),
                             ),
@@ -396,7 +563,10 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             // Rutas y jobs del programa
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              child: _ProgramSummary(order: _order),
+                              child: TutorialTarget(
+                                id: 'picker.summary',
+                                child: _ProgramSummary(order: _order),
+                              ),
                             ),
 
                             // Select All Checkbox
@@ -435,6 +605,36 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                               ),
                             ),
 
+                            const SizedBox(height: 8),
+
+                            // Secuencia definida por el usuario, como
+                            // alternativa a las reglas.
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: TutorialTarget(
+                                id: 'picker.userSeq',
+                                child: _UserSequenceCard(
+                                order: _order,
+                                sequence: _userSequence,
+                                onEdit: _editUserSequence,
+                                onClear: () =>
+                                    setState(() => _userSequence = null),
+                                machinePlan: _machinePlan,
+                                machineNames: {
+                                  for (final list in _machinesByType.values)
+                                    for (final m in list) m.id!: m.name,
+                                },
+                                onEditMachinePlan: _supportsMachinePlan &&
+                                        _machinesByType.isNotEmpty
+                                    ? _editMachinePlan
+                                    : null,
+                                onClearMachinePlan: () =>
+                                    setState(() => _machinePlan = null),
+                              ),
+                              ),
+                            ),
+
                             const SizedBox(height: 16),
                           ],
                         ),
@@ -449,7 +649,9 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             final rule = rules[index];
                             final isSelected = _selectedIndexes.contains(index);
 
-                            return Container(
+                            return TutorialTarget(
+                              id: 'picker.rule:${_labelForRule(rule, index).toUpperCase()}',
+                              child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               decoration: BoxDecoration(
                                 color: isSelected
@@ -501,6 +703,25 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                             : 'Parametros personalizados activos',
                                         onPressed: _configureTabu,
                                       ),
+                                    if (_labelForRule(rule, index)
+                                            .toUpperCase() ==
+                                        'GENETICS')
+                                      TutorialTarget(
+                                        id: 'picker.tune:GENETICS',
+                                        child: IconButton(
+                                        icon: Icon(
+                                          Icons.tune,
+                                          color: _geneticParams == null
+                                              ? colorScheme.onSurfaceVariant
+                                              : colorScheme.primary,
+                                        ),
+                                        tooltip: _geneticParams == null
+                                            ? 'Configurar parametros (usando valores por defecto)'
+                                            : 'Parametros personalizados activos · '
+                                                '${_geneticParams!.objective.label}',
+                                        onPressed: _configureGenetic,
+                                      ),
+                                      ),
                                     IconButton(
                                       tooltip: '¿Cómo funciona esta regla?',
                                       icon: Icon(Icons.help_outline,
@@ -518,6 +739,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
+                            ),
                             );
                           },
                         ),
@@ -596,9 +818,10 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                         child: const Text('Cancelar'),
                       ),
                       const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed:
-                            _selectedIndexes.isEmpty ? null : _onCalculate,
+                      TutorialTarget(
+                        id: 'picker.calc',
+                        child: FilledButton.icon(
+                        onPressed: _canCalculate ? _onCalculate : null,
                         icon: const Icon(Icons.calculate),
                         label: const Text('Calcular'),
                         style: FilledButton.styleFrom(
@@ -606,16 +829,17 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                             horizontal: 20,
                             vertical: 12,
                           ),
-                          backgroundColor: _selectedIndexes.isEmpty
-                              ? colorScheme.surfaceContainerHighest
-                              : colorScheme.primary,
-                          foregroundColor: _selectedIndexes.isEmpty
-                              ? colorScheme.onSurfaceVariant
-                              : colorScheme.onPrimary,
+                          backgroundColor: _canCalculate
+                              ? colorScheme.primary
+                              : colorScheme.surfaceContainerHighest,
+                          foregroundColor: _canCalculate
+                              ? colorScheme.onPrimary
+                              : colorScheme.onSurfaceVariant,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                      ),
                       ),
                     ];
                     if (narrow) {
@@ -643,6 +867,129 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Card to define (or clear) the user's own job sequence.
+class _UserSequenceCard extends StatelessWidget {
+  final OrderEntity? order;
+  final List<int>? sequence;
+  final VoidCallback onEdit;
+  final VoidCallback onClear;
+
+  /// Secuencia por máquina (y ruta): solo en ambientes donde aplica
+  /// ([onEditMachinePlan] es null en los demás).
+  final MachinePlan? machinePlan;
+  final Map<int, String> machineNames;
+  final VoidCallback? onEditMachinePlan;
+  final VoidCallback onClearMachinePlan;
+
+  const _UserSequenceCard({
+    required this.order,
+    required this.sequence,
+    required this.onEdit,
+    required this.onClear,
+    required this.machinePlan,
+    required this.machineNames,
+    required this.onEditMachinePlan,
+    required this.onClearMachinePlan,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final jobs = order?.orderJobs ?? const [];
+    final names = {for (final j in jobs) j.jobId: j.jobName ?? 'Trabajo ${j.jobId}'};
+    final active = sequence != null;
+    final plan = machinePlan;
+    final planActive = plan != null;
+    final anyActive = active || planActive;
+
+    // One line per machine: "Torno 1: J1 → J2 → J3".
+    String planSummary() => plan!.machineSequences.entries
+        .map((e) =>
+            '${machineNames[e.key] ?? 'M${e.key}'}: '
+            '${e.value.map((id) => names[id] ?? '#$id').join(' → ')}')
+        .join('   ·   ');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: anyActive
+            ? colorScheme.secondaryContainer.withOpacity(0.4)
+            : colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color:
+              anyActive ? colorScheme.secondary : colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(Icons.low_priority, color: colorScheme.secondary),
+            title: const Text('Secuencia del usuario',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(
+              active
+                  ? sequence!.map((id) => names[id] ?? '#$id').join(' → ')
+                  : 'Opcional: ordene usted los trabajos y compárelo con las '
+                      'reglas en el dashboard y el Gantt.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Wrap(
+              spacing: 4,
+              children: [
+                if (active)
+                  IconButton(
+                    tooltip: 'Quitar secuencia',
+                    icon: const Icon(Icons.close),
+                    onPressed: onClear,
+                  ),
+                FilledButton.tonalIcon(
+                  onPressed: jobs.isEmpty ? null : onEdit,
+                  icon: Icon(active ? Icons.edit : Icons.add),
+                  label: Text(active ? 'Editar' : 'Definir'),
+                ),
+              ],
+            ),
+          ),
+          // Environments where the sequence changes per machine (and, in the
+          // open shop family, the route is part of the solution).
+          if (onEditMachinePlan != null)
+            ListTile(
+              leading: Icon(Icons.table_rows_outlined,
+                  color: colorScheme.secondary),
+              title: const Text('Secuencia por máquina y ruta',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                planActive
+                    ? planSummary()
+                    : 'Opcional: indique el orden de cada máquina (y, en Open '
+                        'Shop, la ruta de cada job). Se respeta exactamente.',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  if (planActive)
+                    IconButton(
+                      tooltip: 'Quitar secuencia por máquina',
+                      icon: const Icon(Icons.close),
+                      onPressed: onClearMachinePlan,
+                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: jobs.isEmpty ? null : onEditMachinePlan,
+                    icon: Icon(planActive ? Icons.edit : Icons.add),
+                    label: Text(planActive ? 'Editar' : 'Definir'),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -678,6 +1025,20 @@ class _RuleHelpBody extends StatelessWidget {
         section('Qué hace', info.summary),
         section('Cómo decide', info.howItWorks),
         section('Útil para', info.goodFor),
+        // Formula in the literature's notation, while the global switch is on.
+        ValueListenableBuilder<bool>(
+          valueListenable: showNotation,
+          builder: (context, on, _) {
+            final n = notationForRule(info.code);
+            if (!on || n == null) return const SizedBox.shrink();
+            return section(
+              'Notación',
+              n.formula == null
+                  ? n.definition
+                  : '${n.formula}\n${n.definition}',
+            );
+          },
+        ),
       ],
     );
   }

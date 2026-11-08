@@ -34,7 +34,10 @@ class MetricsPage extends StatelessWidget {
               _buildMetricRow('Total trabajos', metrics.totalJobs.toString()),
 
               _buildMetricRow(
-                  'Tardanza máxima', _formatDuration(metrics.maxTardiness)),
+                  'Tardanza máxima (Tmax)',
+                  _formatDuration(metrics.maxTardiness)),
+              _buildMetricRow('Retraso máximo (Lmax)',
+                  _formatDuration(metrics.maxLateness)),
               _buildMetricRow('Flujo promedio',
                   _formatDuration(metrics.avarageProcessingTime)),
               _buildMetricRow('Tardanza promedio',
@@ -49,6 +52,23 @@ class MetricsPage extends StatelessWidget {
                   'Trabajos retrasados', metrics.delayedJobs.toString()),
               _buildMetricRow('Porcentaje trabajos retrasados',
                   '${metrics.percentageDelayedJobs.toStringAsFixed(2)}%'),
+              // Short summary of the per-machine and per-station breakdown;
+              // the full tables are in "Detalle de programación".
+              if (metrics.machineUsage.isNotEmpty)
+                () {
+                  final m = metrics.machineUsage
+                      .reduce((a, b) => b.idle > a.idle ? b : a);
+                  return _buildMetricRow('Máquina más ociosa',
+                      '${m.machineName} (${m.stationName}): ${_formatDuration(m.idle)}');
+                }(),
+              if (metrics.stationTardiness
+                  .any((s) => s.totalTardiness > Duration.zero))
+                () {
+                  final s = metrics.stationTardiness.reduce(
+                      (a, b) => b.totalTardiness > a.totalTardiness ? b : a);
+                  return _buildMetricRow('Estación con más tardanza',
+                      '${s.stationName}: ${_formatDuration(s.totalTardiness)}');
+                }(),
 
               if (metrics.tabuStats != null) ...[
                 const SizedBox(height: 12),
@@ -87,8 +107,10 @@ class MetricsPage extends StatelessWidget {
   }
 
   String _formatDuration(Duration duration) {
-    final d = duration.isNegative ? duration.abs() : duration;
-    return '${d.inHours}h ${d.inMinutes.remainder(60)}m ${d.inSeconds.remainder(60)}s';
+    // Keep the sign: Lmax is negative when every job finishes early.
+    final d = duration.abs();
+    final sign = duration.isNegative ? '-' : '';
+    return '$sign${d.inHours}h ${d.inMinutes.remainder(60)}m ${d.inSeconds.remainder(60)}s';
   }
   }
 

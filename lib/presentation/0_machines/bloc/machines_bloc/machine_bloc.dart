@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
@@ -36,7 +37,7 @@ class MachineBloc extends Cubit<MachinesState> {
     if (state is MachinesRetrievingSuccess) machines = state.machines ?? [];
     final availabilityDateTime = startMode == MachineStartMode.now
         ? DateTime.now()
-        : DateTime.parse(availabilityDateTimeStr);
+        : parseDateTimeInput(availabilityDateTimeStr);
 
     final response = await service.addMachine(
       typeId,
@@ -101,7 +102,7 @@ class MachineBloc extends Cubit<MachinesState> {
     List<MachineEntity> machines = state.machines ?? [];
     final availabilityDateTime = startMode == MachineStartMode.now
         ? DateTime.now()
-        : DateTime.parse(availabilityDateTimeStr);
+        : parseDateTimeInput(availabilityDateTimeStr);
 
     final response = await service.editMachine(
       machineId,

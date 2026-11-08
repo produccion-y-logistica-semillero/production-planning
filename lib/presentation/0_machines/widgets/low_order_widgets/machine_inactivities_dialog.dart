@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,6 +6,7 @@ import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_cubit.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_inactivities_cubit/machine_inactivities_state.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 class MachineInactivitiesDialog extends StatefulWidget {
   final MachineEntity machine;
@@ -140,9 +142,10 @@ class _MachineInactivitiesDialogState
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cuántos minutos de procesamiento continuo puede realizar '
-          'la máquina antes de tomar un descanso y la duración en minutos de '
-          'esa pausa. Si la máquina no descansa, marca "No aplica".',
+          'Define cuánto tiempo de procesamiento continuo puede realizar '
+          'la máquina antes de tomar un descanso y la duración de esa pausa '
+          '(${timeFormatLabel(timeInputFormat.value)}). Si la máquina no '
+          'descansa, marca "No aplica".',
           style: theme.textTheme.bodySmall,
         ),
         CheckboxListTile(
@@ -162,13 +165,11 @@ class _MachineInactivitiesDialogState
                 controller: _continueCapacityController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Procesamiento continuo (minutos)',
-                  hintText: 'Ej. 240',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Procesamiento continuo (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(240)}',
                 ),
               ),
             ),
@@ -178,13 +179,11 @@ class _MachineInactivitiesDialogState
                 controller: _restMinutesController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Descanso (minutos)',
-                  hintText: 'Ej. 15',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Descanso (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(15)}',
                 ),
               ),
             ),
@@ -278,9 +277,9 @@ class _MachineInactivitiesDialogState
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _scheduledStart ??
+                  final picked = await pickTime(
+                    context,
+                    initial: _scheduledStart ??
                         const TimeOfDay(hour: 8, minute: 0),
                   );
                   if (picked != null) {
@@ -301,9 +300,11 @@ class _MachineInactivitiesDialogState
               child: TextField(
                 controller: _scheduledDurationController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Duración (minutos)',
-                  hintText: 'Ej. 30',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Duración (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(30)}',
                 ),
               ),
             ),
@@ -350,7 +351,7 @@ class _MachineInactivitiesDialogState
                 subtitle: Text(
                   '${_formatWeekdays(inactivity.weekdays)} • '
                   '${inactivity.formattedStartTime()} • '
-                  '${inactivity.duration.inMinutes} min',
+                  '${timeInputFormat.value == TimeInputFormat.minutes ? '${inactivity.duration.inMinutes} min' : formatDurationMinutes(inactivity.duration.inMinutes)}',
                 ),
                 trailing: IconButton(
                   onPressed: () => _onDeleteScheduled(inactivity),
@@ -376,7 +377,7 @@ class _MachineInactivitiesDialogState
     }
 
     final continueCapacity =
-        int.tryParse(_continueCapacityController.text.trim());
+        parseDurationMinutes(_continueCapacityController.text);
     if (continueCapacity == null || continueCapacity <= 0) {
       // Mensaje más descriptivo del archivo 7.
       _showSnack(
@@ -388,12 +389,14 @@ class _MachineInactivitiesDialogState
 
     final restMinutesText = _restMinutesController.text.trim();
     if (restMinutesText.isEmpty) {
-      _showSnack('Ingresa los minutos de descanso.', isError: true);
+      _showSnack('Ingresa el tiempo de descanso.', isError: true);
       return;
     }
-    final restMinutes = int.tryParse(restMinutesText);
+    final restMinutes = parseDurationMinutes(restMinutesText);
     if (restMinutes == null || restMinutes <= 0) {
-      _showSnack('Ingresa una duración en minutos válida.', isError: true);
+      _showSnack(
+          'Ingresa un descanso válido (${timeFormatLabel(timeInputFormat.value)}).',
+          isError: true);
       return;
     }
 
@@ -425,9 +428,11 @@ class _MachineInactivitiesDialogState
     }
 
     final durationMinutes =
-        int.tryParse(_scheduledDurationController.text.trim());
+        parseDurationMinutes(_scheduledDurationController.text);
     if (durationMinutes == null || durationMinutes <= 0) {
-      _showSnack('Ingresa una duración válida en minutos.', isError: true);
+      _showSnack(
+          'Ingresa una duración válida (${timeFormatLabel(timeInputFormat.value)}).',
+          isError: true);
       return;
     }
 
@@ -457,11 +462,12 @@ class _MachineInactivitiesDialogState
     _noAutomaticRest = state.continueCapacity <= 0 ||
         state.restTime == null ||
         state.restTime!.inMinutes <= 0;
-    _continueCapacityController.text =
-        state.continueCapacity > 0 ? state.continueCapacity.toString() : '';
+    _continueCapacityController.text = state.continueCapacity > 0
+        ? formatDurationMinutes(state.continueCapacity)
+        : '';
     _restMinutesController.text =
         state.restTime != null && state.restTime!.inMinutes > 0
-            ? state.restTime!.inMinutes.toString()
+            ? formatDurationMinutes(state.restTime!.inMinutes)
             : '';
   }
 

@@ -2,7 +2,10 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -123,6 +126,12 @@ class FlexibleFlowShop {
   final Map<int, Duration> _machineContinuousUsage = {};
   final Map<int, PreemptionEngine> _engineByMachine = {};
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
   FlexibleFlowShop(
     this.startDate,
     this.workingSchedule,
@@ -135,6 +144,8 @@ class FlexibleFlowShop {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     final r = rule.toUpperCase();
     switch (r) {
@@ -190,13 +201,22 @@ class FlexibleFlowShop {
       case "CDS":
         cdsAlgorithm();
         break;
-      case "GENETICS":
-        // Fallback genetics: order by combined score
+      // Composite priority score ((w + 1) / total route time). It used to be
+      // offered as "GENETICS", but it is a static order, not a genetic
+      // algorithm.
+      case "PRIORIDAD_COMPUESTA":
         _schedule((a, b) {
           final scoreA = (a.priority / max(1, _totalProcessingTime(a))) + (1 / max(1, _totalProcessingTime(a)));
           final scoreB = (b.priority / max(1, _totalProcessingTime(b))) + (1 / max(1, _totalProcessingTime(b)));
-          return scoreB.compareTo(scoreA);
+          final cmp = scoreB.compareTo(scoreA);
+          return cmp != 0 ? cmp : a.jobId.compareTo(b.jobId);
         });
+        break;
+      case "GENETICS":
+        geneticRule(settings: geneticParams);
+        break;
+      case "SECUENCIA_USUARIO":
+        userSequenceRule();
         break;
       case "MINSLACK":
         // The DB grants MINSLACK to some environments and MS to others; they
@@ -230,6 +250,94 @@ class FlexibleFlowShop {
   // LWR / MWR: nominal work the job still has from this station on.
   void lwrRule() => _runDynamicStagewise(DispatchCriterion.lwr);
   void mwrRule() => _runDynamicStagewise(DispatchCriterion.mwr);
+
+  /// Genetic algorithm with a job-permutation chromosome, the standard
+  /// encoding for the hybrid flow shop (Ruiz & Maroto, 2006): jobs enter the
+  /// line in chromosome order and, at every station, each goes to the
+  /// machine that finishes it first (ECT, with setups and interruptions).
+  /// Fitness: the objective chosen in [settings] (makespan by default). See
+  /// docs/diagnostico_genetics.md.
+  void geneticRule({GeneticParams settings = const GeneticParams()}) {
+    final jobs = List<FlexibleFlowInput>.of(inputJobs);
+    if (jobs.isEmpty) return;
+    final availability0 = Map<int, DateTime>.of(machinesAvailability);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
+    final lastJob0 = Map<int, int?>.of(_machineLastJob);
+
+    void decode(List<int> permutation) {
+      machinesAvailability
+        ..clear()
+        ..addAll(availability0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      _machineLastJob
+        ..clear()
+        ..addAll(lastJob0);
+      output = [];
+      inputJobs = [for (final i in permutation) jobs[i]];
+      for (final job in inputJobs) {
+        _assignJobToMachines(job);
+      }
+    }
+
+    double fitness(List<int> permutation) {
+      try {
+        decode(permutation);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      if (output.length < jobs.length) return double.infinity;
+      final done = completionByJob<FlexibleFlowOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in jobs)
+            JobCompletion(j.availableDate, j.dueDate, done[j.jobId]!),
+        ],
+        startDate,
+      );
+    }
+
+    // Seeds: the order received and the composite-priority order.
+    final identity = List<int>.generate(jobs.length, (i) => i);
+    final byScore = List<int>.of(identity)
+      ..sort((a, b) {
+        double score(FlexibleFlowInput j) =>
+            (j.priority + 1) / max(1, _totalProcessingTime(j));
+        final cmp = score(jobs[b]).compareTo(score(jobs[a]));
+        return cmp != 0 ? cmp : jobs[a].jobId.compareTo(jobs[b].jobId);
+      });
+
+    final result = runGenetic<List<int>>(
+      seeds: [identity, byScore],
+      randomIndividual: (r) => List<int>.of(identity)..shuffle(r),
+      fitness: fitness,
+      crossover: orderCrossover,
+      mutate: insertionMutation,
+      key: (p) => p.join(','),
+      settings: settings,
+    );
+    decode(result.best);
+  }
+
+  /// The jobs enter the line in the order the user chose; jobs left out of
+  /// [userSequence] follow in arrival order.
+  void userSequenceRule() {
+    inputJobs = orderByUserSequence(
+        inputJobs, userSequence, (j) => j.jobId, (j) => j.availableDate);
+    _scheduleInOrder();
+  }
+
+  /// Schedules [inputJobs] exactly in their current order. Johnson and CDS
+  /// used to call _schedule with a comparator that always returned 0; the
+  /// sort is not stable, so the sequence they had built could be lost.
+  void _scheduleInOrder() {
+    for (final job in inputJobs) {
+      _assignJobToMachines(job);
+    }
+  }
 
   void _schedule(
       int Function(FlexibleFlowInput, FlexibleFlowInput) comparator) {
@@ -923,7 +1031,7 @@ class FlexibleFlowShop {
     }
 
     inputJobs = bestSequence;
-    _schedule((a, b) => 0); // Puedes usar una regla dummy o alguna prioridad
+    _scheduleInOrder();
     print("Optimal sequence: ${bestSequence.map((job) => job.jobId).toList()}");
     print("Optimal makespan: $bestMakespan");
   }
@@ -951,7 +1059,7 @@ class FlexibleFlowShop {
 
 
     inputJobs = [...groupI, ...groupII];
-    _schedule((a, b) => 0);
+    _scheduleInOrder();
   }
 
   Duration _averageProcessingTime(Map<int, Duration> times) {
@@ -1177,6 +1285,9 @@ List<Map<String, dynamic>> flexibleFlowShopSchedule(Map<String, dynamic> payload
     machineInactivities: machineInactivities,
     machineContinueCapacity: machineContinueCapacity,
     machineRestTime: machineRestTime,
+    geneticParams: GeneticParams.fromMap(
+        payload['geneticParams'] as Map<dynamic, dynamic>?),
+    userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
   ).output;
 
   List<Map<String, dynamic>> segmentsToPayload(

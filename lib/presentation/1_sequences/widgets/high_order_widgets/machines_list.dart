@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_type_entity.dart';
 
@@ -59,11 +60,15 @@ class _MachinesListState extends State<MachinesList> {
                   child: Text('Ninguna estación coincide',
                       style: TextStyle(color: colorScheme.onSurfaceVariant)))
               : ListView.separated(
+                  // Build every row so the guided tutorial can reach them.
+                  cacheExtent: 100000,
                   itemCount: shown.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final m = shown[index];
-                    return Material(
+                    return TutorialTarget(
+                      id: 'routes.station:${m.name}',
+                      child: Material(
                       color: colorScheme.surface,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -81,6 +86,7 @@ class _MachinesListState extends State<MachinesList> {
                             color: colorScheme.primary),
                         onTap: () => widget.onSelectMachine(m),
                       ),
+                    ),
                     );
                   },
                 ),

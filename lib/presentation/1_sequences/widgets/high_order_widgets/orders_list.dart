@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
@@ -34,10 +35,13 @@ class _RouteListPanelState extends State<RouteListPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            FilledButton.icon(
+            TutorialTarget(
+              id: 'routes.new',
+              child: FilledButton.icon(
               onPressed: widget.onNewRoute,
               icon: const Icon(Icons.add),
               label: const Text('Nueva ruta de proceso'),
+            ),
             ),
             const SizedBox(height: 16),
             Text('Rutas de proceso',
@@ -72,11 +76,16 @@ class _RouteListPanelState extends State<RouteListPanel> {
                           ),
                         )
                       : ListView.builder(
+                          // Build every row so the guided tutorial can
+                          // reach them.
+                          cacheExtent: 100000,
                           itemCount: routes.length,
                           itemBuilder: (context, i) {
                             final seq = routes[i];
                             final selected = seq.id == state.selectedProcess;
-                            return ListTile(
+                            return TutorialTarget(
+                              id: 'route:${seq.name}',
+                              child: ListTile(
                               dense: true,
                               selected: selected,
                               selectedTileColor:
@@ -88,6 +97,7 @@ class _RouteListPanelState extends State<RouteListPanel> {
                               onTap: () => context
                                   .read<SeeProcessBloc>()
                                   .selectSequence(seq.id!),
+                            ),
                             );
                           },
                         ),

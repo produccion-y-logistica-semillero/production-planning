@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/tabu_objective.dart';
+
 /// Resumen de UNA corrida de la busqueda tabu para maquinas paralelas.
 /// Vive en entities/ junto a [TabuParams]: lo escribe services/algorithms,
 /// viaja dentro de [Metrics] y lo lee presentation.
@@ -18,11 +20,16 @@ class TabuRunStats {
   /// Presupuesto de tiempo efectivo, en milisegundos.
   final int timeBudgetMs;
 
-  /// Flujo total (minutos) del punto de partida de la busqueda.
-  final int initialFlowMinutes;
+  /// Funcion objetivo con la que se corrio la busqueda. Define el nombre y
+  /// la unidad de [initialValue] y [bestValue].
+  final TabuObjective objective;
 
-  /// Mejor flujo total (minutos) encontrado.
-  final int bestFlowMinutes;
+  /// Valor de [objective] en el punto de partida de la busqueda
+  /// (minutos, o trabajos para [TabuObjective.tardyJobs]).
+  final int initialValue;
+
+  /// Mejor valor de [objective] encontrado.
+  final int bestValue;
 
   /// true si la busqueda paro por el limite de tiempo antes de agotar las
   /// iteraciones; false si llego a [maxIterations].
@@ -33,15 +40,16 @@ class TabuRunStats {
     required this.maxIterations,
     required this.elapsedMs,
     required this.timeBudgetMs,
-    required this.initialFlowMinutes,
-    required this.bestFlowMinutes,
+    required this.objective,
+    required this.initialValue,
+    required this.bestValue,
     required this.stoppedByTime,
   });
 
-  /// Mejora del flujo total respecto al punto de partida, en porcentaje.
-  double get improvementPercent => initialFlowMinutes == 0
+  /// Mejora de [objective] respecto al punto de partida, en porcentaje.
+  double get improvementPercent => initialValue == 0
       ? 0.0
-      : (initialFlowMinutes - bestFlowMinutes) * 100 / initialFlowMinutes;
+      : (initialValue - bestValue) * 100 / initialValue;
 
   /// Costo promedio de una iteracion, en milisegundos.
   int get msPerIteration =>
@@ -50,6 +58,7 @@ class TabuRunStats {
   @override
   String toString() =>
       'TabuRunStats(iter: $iterations/$maxIterations, ${elapsedMs}ms/'
-      '${timeBudgetMs}ms, flujo: $initialFlowMinutes→$bestFlowMinutes, '
+      '${timeBudgetMs}ms, ${objective.label}: $initialValue→$bestValue '
+      '${objective.unit}, '
       'stoppedByTime: $stoppedByTime)';
 }

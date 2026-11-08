@@ -1,9 +1,11 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/shared/functions/functions.dart';
-import 'package:intl/intl.dart';
+import 'package:production_planning/shared/duration_input.dart';
 
 class AddMachineDialog extends StatefulWidget {
   final String machineTypeName;
@@ -64,7 +66,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
   @override
   void initState() {
     super.initState();
-    final capacity = int.tryParse(widget.continueController.text.trim()) ?? 0;
+    final capacity = parseDurationMinutes(widget.continueController.text) ?? 0;
     _noAutomaticRest = capacity <= 0;
   }
 
@@ -72,8 +74,8 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
     setState(() {
       _noAutomaticRest = value;
       if (value) {
-        widget.continueController.text = '0';
-        widget.restTimeController.text = '0';
+        widget.continueController.text = formatDurationMinutes(0);
+        widget.restTimeController.text = formatDurationMinutes(0);
       } else {
         widget.continueController.clear();
         widget.restTimeController.clear();
@@ -112,9 +114,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
     }
 
     final durationMinutes =
-        int.tryParse(_scheduledDurationController.text.trim());
+        parseDurationMinutes(_scheduledDurationController.text);
     if (durationMinutes == null || durationMinutes <= 0) {
-      _showSnack('Ingresa una duración válida en minutos.', isError: true);
+      _showSnack(
+          'Ingresa una duración válida (${timeFormatLabel(timeInputFormat.value)}).',
+          isError: true);
       return;
     }
 
@@ -199,9 +203,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Define cuántos minutos de procesamiento continuo puede realizar '
-          'la máquina antes de tomar un descanso y la duración en minutos de '
-          'esa pausa. Si la máquina no descansa, marca "No aplica".',
+          'Define cuánto tiempo de procesamiento continuo puede realizar '
+          'la máquina antes de tomar un descanso y la duración de esa pausa '
+          '(${timeFormatLabel(timeInputFormat.value)}). Si la máquina no '
+          'descansa, marca "No aplica".',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         CheckboxListTile(
@@ -220,13 +225,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 controller: widget.continueController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Procesamiento continuo (minutos)',
-                  hintText: 'Ej. 240',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Procesamiento continuo (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(240)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -238,13 +241,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                 controller: widget.restTimeController,
                 enabled: !_noAutomaticRest,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Descanso (minutos)',
-                  hintText: 'Ej. 15',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Descanso (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(15)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -329,9 +330,9 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _scheduledStart ??
+                  final picked = await pickTime(
+                    context,
+                    initial: _scheduledStart ??
                         const TimeOfDay(hour: 8, minute: 0),
                   );
                   if (picked != null) {
@@ -352,9 +353,11 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               child: TextField(
                 controller: _scheduledDurationController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Duración (minutos)',
-                  hintText: 'Ej. 30',
+                inputFormatters: durationInputFormatters(),
+                decoration: InputDecoration(
+                  labelText:
+                      'Duración (${timeFormatLabel(timeInputFormat.value)})',
+                  hintText: 'Ej. ${formatDurationMinutes(30)}',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -383,7 +386,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                       subtitle: Text(
                         '${_formatWeekdays(inactivity.weekdays)} • '
                         '${inactivity.formattedStartTime()} • '
-                        '${inactivity.duration.inMinutes} min',
+                        '${timeInputFormat.value == TimeInputFormat.minutes ? '${inactivity.duration.inMinutes} min' : formatDurationMinutes(inactivity.duration.inMinutes)}',
                       ),
                       trailing: IconButton(
                         onPressed: () => _onDeleteScheduled(inactivity),
@@ -409,7 +412,9 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
       builder: (context, mode, _) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: SegmentedButton<MachineStartMode>(
+          child: TutorialTarget(
+            id: 'machine.startMode',
+            child: SegmentedButton<MachineStartMode>(
             segments: const [
               ButtonSegment(
                 value: MachineStartMode.now,
@@ -426,6 +431,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
             onSelectionChanged: (selection) {
               widget.startModeNotifier.value = selection.first;
             },
+          ),
           ),
         );
       },
@@ -446,7 +452,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
         readOnly: true,
         controller: widget.availabilityDateTimeController,
         decoration: InputDecoration(
-          hintText: 'Selecciona fecha y hora',
+          hintText: 'dd/mm/aaaa hh:mm',
           prefixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           isDense: true,
@@ -454,111 +460,13 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         ),
         onTap: () async {
-          final date = await showDatePicker(
-            context: context,
+          final fullDateTime = await pickDateTime(
+            context,
             firstDate: DateTime.now().subtract(const Duration(days: 1)),
-            lastDate: DateTime(2100),
-            initialDate: DateTime.now(),
           );
-          if (date == null) return;
-
-          final time = await showTimePicker(
-            context: context,
-            initialTime: TimeOfDay.now(),
-            builder: (context, child) {
-              return Theme(
-                data: Theme.of(context).copyWith(
-                  // WidgetState replaces the deprecated MaterialState API.
-                  timePickerTheme: TimePickerThemeData(
-                    backgroundColor: const Color(0xFFF9F9F9),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    hourMinuteShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    hourMinuteColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                    ),
-                    hourMinuteTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    hourMinuteTextStyle: const TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -1,
-                    ),
-                    dialBackgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.08),
-                    dialHandColor: Theme.of(context).colorScheme.primary,
-                    dialTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    dialTextStyle: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    dayPeriodShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    dayPeriodColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                    ),
-                    dayPeriodTextColor: WidgetStateColor.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    entryModeIconColor:
-                        Theme.of(context).colorScheme.primary,
-                  ),
-                  textButtonTheme: TextButtonThemeData(
-                    style: TextButton.styleFrom(
-                      foregroundColor:
-                          Theme.of(context).colorScheme.primary,
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
-                    ),
-                  ),
-                ),
-                child: child!,
-              );
-            },
-          );
-          if (time == null) return;
-
-          final fullDateTime = DateTime(
-            date.year,
-            date.month,
-            date.day,
-            time.hour,
-            time.minute,
-          );
+          if (fullDateTime == null) return;
           widget.availabilityDateTimeController.text =
-              DateFormat('yyyy-MM-dd HH:mm').format(fullDateTime);
+              kDateTimeFormat.format(fullDateTime);
         },
       ),
     );
@@ -619,7 +527,10 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               buildLabeledField(
                 label: 'Nombre maquina',
                 margin: const EdgeInsets.only(bottom: 20),
-                field: TextField(
+                field: TutorialTarget(
+                  id: 'machine.name',
+                  text: widget.nameController,
+                  child: TextField(
                   controller: widget.nameController,
                   decoration: InputDecoration(
                     hintText: 'Nombre',
@@ -631,6 +542,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                         vertical: 12, horizontal: 12),
                   ),
                 ),
+                ),
               ),
 
               // Machine start-date mode toggle + availability date-time picker
@@ -638,13 +550,20 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
               _buildDateTimeField(),
 
               // Sections only shown when creating (not editing)
-              if (!widget.isEditing) _buildAutomaticPauseForm(),
-              if (!widget.isEditing) _buildScheduledForm(),
+              if (!widget.isEditing)
+                TutorialTarget(
+                    id: 'machine.rest', child: _buildAutomaticPauseForm()),
+              if (!widget.isEditing)
+                TutorialTarget(
+                    id: 'machine.maintenance', child: _buildScheduledForm()),
               if (!widget.isEditing)
                 buildLabeledField(
                   label: 'Cantidad de máquinas a crear',
                   margin: const EdgeInsets.only(bottom: 32),
-                  field: TextField(
+                  field: TutorialTarget(
+                    id: 'machine.quantity',
+                    text: widget.quantityController,
+                    child: TextField(
                     controller: widget.quantityController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -661,6 +580,7 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                           vertical: 12, horizontal: 12),
                     ),
                   ),
+                  ),
                 ),
 
               // Action buttons
@@ -675,13 +595,16 @@ class _AddMachineDialogState extends State<AddMachineDialog> {
                     child: const Text('Cancelar'),
                   ),
                   const SizedBox(width: 50),
-                  TextButton(
+                  TutorialTarget(
+                    id: 'machine.add',
+                    child: TextButton(
                     onPressed: () =>
                         widget.addMachineHandle(_scheduledInactivities),
                     style: const ButtonStyle(
                       padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
                     ),
                     child: Text(widget.isEditing ? 'Guardar' : 'Agregar'),
+                  ),
                   ),
                 ],
               ),

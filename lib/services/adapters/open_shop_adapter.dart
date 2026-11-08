@@ -1,3 +1,5 @@
+import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/entities/genetic_params.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/foundation.dart';
 import 'package:production_planning/dependency_injection.dart';
@@ -14,6 +16,7 @@ import 'package:production_planning/services/algorithms/open_shop.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import '../../shared/utils/task_time_utils.dart';
+import 'package:production_planning/services/adapters/station_names.dart';
 
 class OpenShopAdapter {
   final OrderRepository orderRepository;
@@ -25,7 +28,8 @@ class OpenShopAdapter {
   });
 
   Future<Tuple2<List<PlanningMachineEntity>, Metrics>?> openShopAdapter(
-      int orderId, String rule) async {
+      int orderId, String rule,
+      {AlgorithmParams params = const AlgorithmParams()}) async {
     // Obtener la orden completa
     final responseOrder = await orderRepository.getFullOrder(orderId);
     OrderEntity? order = responseOrder.fold((f) => null, (o) => o);
@@ -181,6 +185,10 @@ class OpenShopAdapter {
       'stateSetupMatrix': stateSetupMatrix,
       'jobStates': jobStates,
       'initialMachineState': initialMachineState,
+      'geneticParams': (params.genetic ?? const GeneticParams()).toMap(),
+      'userSequence': params.userSequence,
+      'machineSequences': params.machineSequences,
+      'userRoutes': params.userRoutes,
     };
 
     List<Map<String, dynamic>> rawOutput;
@@ -282,6 +290,8 @@ class OpenShopAdapter {
       }
     }
 
+    final stations = await stationNamesById(
+        machineRepository, machines.map((m) => m.machineTypeId));
     final List<PlanningMachineEntity> planningMachines =
         machineTasksMap.entries.map((entry) {
       final machine = machines.firstWhere((m) => m.id == entry.key);
@@ -290,6 +300,7 @@ class OpenShopAdapter {
         machine.name,
         entry.value,
         scheduledInactivities: machine.scheduledInactivities,
+        stationName: stations[machine.machineTypeId],
       );
     }).toList();
 
@@ -299,7 +310,7 @@ class OpenShopAdapter {
       output.map((out) {
         final job = order.orderJobs!.firstWhere((j) => j.jobId == out.dbJobId);
         return Tuple5(
-            out.jobId, out.startDate, out.endTime, out.dueDate, job.priority);
+            out.jobId, job.availableDate, out.endTime, out.dueDate, job.priority);
       }).toList(),
     );
 

@@ -2,7 +2,10 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'dart:math';
 
@@ -106,6 +109,7 @@ class _FlowShopPlacement {
 }
 
 class FlowShop {
+
   final DateTime startDate;
   final Tuple2<TimeOfDay, TimeOfDay> workingSchedule; // like 8-17
 
@@ -134,6 +138,12 @@ class FlowShop {
   final Map<int, Duration> _machineContinuousUsage = {};
   final Map<int, PreemptionEngine> _engineByMachine = {};
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
   FlowShop(
     this.startDate,
     this.workingSchedule,
@@ -146,6 +156,8 @@ class FlowShop {
     this.machineInactivities = const {},
     this.machineContinueCapacity = const {},
     this.machineRestTime = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
   }) {
     _initializeMachineLastSequence();
     // Preemption engine per machine (rest cap + maintenance windows).
@@ -216,7 +228,10 @@ class FlowShop {
         mwrRule();
         break;
       case "GENETICS":
-        scheduleGeneticAlgorithm();
+        scheduleGeneticAlgorithm(settings: geneticParams);
+        break;
+      case "SECUENCIA_USUARIO":
+        userSequenceRule();
         break;
       default:
         // no-op: unknown rule
@@ -276,6 +291,23 @@ class FlowShop {
   void msRule() => _runDynamic(DispatchCriterion.ms);
   void crRule() => _runDynamic(DispatchCriterion.cr);
   void atcRule() => _runDynamic(DispatchCriterion.atcs);
+
+  /// The permutation the user chose; jobs left out of [userSequence] follow
+  /// in arrival order.
+  void userSequenceRule() {
+    inputJobs = orderByUserSequence(
+        inputJobs, userSequence, (j) => j.jobId, (j) => j.availableDate);
+    _scheduleInOrder();
+  }
+
+  /// Schedules [inputJobs] exactly in their current order. Johnson and CDS
+  /// used to call _schedule with a comparator that always returned 0, and
+  /// its job-id tie-break re-sorted the sequence they had just built.
+  void _scheduleInOrder() {
+    for (final job in inputJobs) {
+      _assignJobToMachines(job);
+    }
+  }
 
   void _schedule(int Function(FlowShopInput, FlowShopInput) comparator) {
     // List.sort is not stable: ties go to the lowest job id so two runs
@@ -783,7 +815,7 @@ class FlowShop {
     }
 
     inputJobs = bestSequence;
-    _schedule((a, b) => 0);
+    _scheduleInOrder();
     print("Optimal sequence: ${bestSequence.map((job) => job.jobId).toList()}");
     print("Optimal makespan: $bestMakespan");
   }
@@ -806,7 +838,7 @@ class FlowShop {
     conjuntoII.sort((a, b) => b.taskTimesInMachines[b.taskSequence[1].value1]!.compareTo(a.taskTimesInMachines[a.taskSequence[1].value1]!));
 
     inputJobs = [...conjuntoI, ...conjuntoII];
-    _schedule((a, b) => 0);
+    _scheduleInOrder();
   }
 
   List<FlowShopInput> _getJohnsonOrderedJobs(List<FlowShopInput> jobs) {
@@ -883,173 +915,82 @@ class FlowShop {
 
   /* ---------- Genetic algorithm (Flow Shop sequencing) ---------- */
 
-  void scheduleGeneticAlgorithm() {
-    print("EJECUTANDO ALGORITMO GENÉTICO EN FLOW SHOP");
+  /// Genetic algorithm on the job permutation, the standard encoding for the
+  /// permutation flow shop (Reeves, 1995; Ruiz & Maroto, 2005), run by the
+  /// shared engine. Each permutation is decoded with the same placement the
+  /// rules use (setups, shifts, rests, maintenance), so the GA evaluates
+  /// exactly what gets scheduled. Fitness: the objective chosen in
+  /// [settings] (makespan by default).
+  void scheduleGeneticAlgorithm({GeneticParams settings = const GeneticParams()}) {
+    final jobs = List<FlowShopInput>.of(inputJobs);
+    if (jobs.isEmpty) return;
+    final availability0 = Map<int, DateTime>.of(machinesAvailability);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
+    final lastSequence0 = Map<int, int?>.of(_machineLastSequence);
+    final lastJob0 = Map<int, int?>.of(_machineLastJob);
 
-    const int populationSize = 15;
-    const int maxGenerations = 25;
-    const int maxGenerationsNoImprovement = 5;
-    const double mutationRate = 0.1;
+    void decode(List<int> permutation) {
+      machinesAvailability
+        ..clear()
+        ..addAll(availability0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      _machineLastSequence
+        ..clear()
+        ..addAll(lastSequence0);
+      _machineLastJob
+        ..clear()
+        ..addAll(lastJob0);
+      output = [];
+      inputJobs = [for (final i in permutation) jobs[i]];
+      _scheduleInOrder();
+    }
 
-    if (inputJobs.isEmpty) return;
-
-    List<List<FlowShopInput>> population = _initializePopulation(populationSize);
-
-    List<FlowShopInput> bestIndividual = List.from(inputJobs);
-    int bestFitness = _evaluateFitnessFlowShop(bestIndividual);
-    int generationsNoImprovement = 0;
-
-    for (int generation = 0; generation < maxGenerations; generation++) {
-      List<Tuple2<List<FlowShopInput>, int>> evaluated = population.map((individual) {
-        return Tuple2(individual, _evaluateFitnessFlowShop(individual));
-      }).toList();
-
-      evaluated.sort((a, b) => a.value2.compareTo(b.value2));
-
-      if (evaluated.first.value2 < bestFitness) {
-        bestFitness = evaluated.first.value2;
-        bestIndividual = List.from(evaluated.first.value1);
-        generationsNoImprovement = 0;
-        print("Generación $generation: Mejor makespan = $bestFitness minutos");
-      } else {
-        generationsNoImprovement++;
-        // Early stopping: si no hay mejora en N generaciones, termina
-        if (generationsNoImprovement >= maxGenerationsNoImprovement) {
-          print("Sin mejora en $maxGenerationsNoImprovement generaciones. Deteniendo búsqueda.");
-          break;
-        }
+    double fitness(List<int> permutation) {
+      try {
+        decode(permutation);
+      } on SchedulingHorizonException {
+        return double.infinity;
       }
-
-      population = _generateNewPopulation(evaluated, populationSize, mutationRate);
+      if (output.length < jobs.length) return double.infinity;
+      final done = completionByJob<FlowShopOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in jobs)
+            JobCompletion(j.availableDate, j.dueDate, done[j.jobId]!),
+        ],
+        startDate,
+      );
     }
 
-    print("Mejor secuencia encontrada: ${bestIndividual.map((j) => j.jobId).toList()}");
-    print("Makespan óptimo: $bestFitness minutos");
+    // Seeds: the order received, EDD and the first-station SPT order.
+    final identity = List<int>.generate(jobs.length, (i) => i);
+    int byId(int a, int b) => jobs[a].jobId.compareTo(jobs[b].jobId);
+    final edd = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = jobs[a].dueDate.compareTo(jobs[b].dueDate);
+        return c != 0 ? c : byId(a, b);
+      });
+    final spt = List<int>.of(identity)
+      ..sort((a, b) {
+        final c = _firstStageTime(jobs[a]).compareTo(_firstStageTime(jobs[b]));
+        return c != 0 ? c : byId(a, b);
+      });
 
-    inputJobs = bestIndividual;
-    _schedule((a, b) => 0);
-  }
-
-  List<List<FlowShopInput>> _initializePopulation(int size) {
-    List<List<FlowShopInput>> population = [];
-    for (int i = 0; i < size; i++) {
-      List<FlowShopInput> shuffled = List.from(inputJobs);
-      shuffled.shuffle();
-      population.add(shuffled);
-    }
-    return population;
-  }
-
-  int _evaluateFitnessFlowShop(List<FlowShopInput> jobSequence) {
-    Map<int, DateTime> machineAvailability = {};
-    Map<int, int?> machineSequence = {};
-    Map<int, int?> machineJob = {};
-
-    for (var job in jobSequence) {
-      for (var task in job.taskSequence) {
-        final machineId = task.value2;
-        machineAvailability.putIfAbsent(machineId, () => startDate);
-        machineSequence.putIfAbsent(machineId, () => null);
-        machineJob.putIfAbsent(machineId, () => null);
-      }
-    }
-
-    DateTime makespanEndTime = startDate;
-
-    for (var job in jobSequence) {
-      DateTime jobStartTime = job.availableDate;
-
-      for (var task in job.taskSequence) {
-        int taskId = task.value1;
-        int machineId = task.value2;
-        Duration duration = job.taskTimesInMachines[taskId]!;
-
-        DateTime machineAvailable = machineAvailability[machineId] ?? startDate;
-        DateTime startTime = jobStartTime.isAfter(machineAvailable) ? jobStartTime : machineAvailable;
-        startTime = _adjustForWorkingSchedule(startTime);
-
-        final int? previousSequence = machineSequence[machineId];
-        final int? previousJob = machineJob[machineId];
-        final Duration setupDuration = _getSetupDuration(
-          machineId,
-          job.sequenceId,
-          previousSequence,
-          currentJobId: job.jobId,
-          previousJobId: previousJob,
-        );
-        final Duration totalDuration = duration + setupDuration;
-
-        DateTime endTime = _calculateEndWithSchedule(startTime, totalDuration);
-
-        machineAvailability[machineId] = endTime;
-        machineSequence[machineId] = job.sequenceId;
-        machineJob[machineId] = job.jobId;
-        jobStartTime = endTime;
-      }
-
-      if (jobStartTime.isAfter(makespanEndTime)) makespanEndTime = jobStartTime;
-    }
-
-    return makespanEndTime.difference(startDate).inMinutes;
-  }
-
-  List<List<FlowShopInput>> _generateNewPopulation(
-    List<Tuple2<List<FlowShopInput>, int>> evaluated,
-    int size,
-    double mutationRate,
-  ) {
-    List<List<FlowShopInput>> newPop = [];
-
-    for (int i = 0; i < size; i++) {
-      final parent1 = _selectParent(evaluated);
-      final parent2 = _selectParent(evaluated);
-      List<FlowShopInput> child = _crossover(parent1, parent2);
-      if (Random().nextDouble() < mutationRate) {
-        child = _mutate(child);
-      }
-      newPop.add(child);
-    }
-
-    return newPop;
-  }
-
-  List<FlowShopInput> _selectParent(List<Tuple2<List<FlowShopInput>, int>> evaluated) {
-    int k = min(5, evaluated.length);
-    final selected = List.generate(k, (_) => evaluated[Random().nextInt(evaluated.length)]);
-    selected.sort((a, b) => a.value2.compareTo(b.value2));
-    return selected.first.value1;
-  }
-
-  List<FlowShopInput> _crossover(List<FlowShopInput> p1, List<FlowShopInput> p2) {
-    final length = p1.length;
-    if (length == 0) return [];
-
-    final int point = Random().nextInt(length);
-    final Set<int> jobIds = p1.sublist(0, point).map((j) => j.jobId).toSet();
-
-    final List<FlowShopInput> child = [
-      ...p1.sublist(0, point),
-      ...p2.where((j) => !jobIds.contains(j.jobId)),
-    ];
-
-    // if child shorter (shouldn't) fill with remaining from p1
-    if (child.length < length) {
-      for (var j in p1) {
-        if (!child.contains(j)) child.add(j);
-        if (child.length == length) break;
-      }
-    }
-
-    return child;
-  }
-
-  List<FlowShopInput> _mutate(List<FlowShopInput> individual) {
-    if (individual.length < 2) return individual;
-    int i = Random().nextInt(individual.length);
-    int j = Random().nextInt(individual.length);
-    final temp = individual[i];
-    individual[i] = individual[j];
-    individual[j] = temp;
-    return individual;
+    final result = runGenetic<List<int>>(
+      seeds: [identity, edd, spt],
+      randomIndividual: (r) => List<int>.of(identity)..shuffle(r),
+      fitness: fitness,
+      crossover: orderCrossover,
+      mutate: insertionMutation,
+      key: (p) => p.join(','),
+      settings: settings,
+    );
+    print("GENETICS flow shop: ${settings.objective.label} = "
+        "${result.bestFitness.toStringAsFixed(1)} tras ${result.generations} generaciones");
+    decode(result.best);
   }
 }

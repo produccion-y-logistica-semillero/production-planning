@@ -48,6 +48,9 @@ class MetricDef {
 
   bool get ranked => sense != MetricSense.neutral;
 
+  /// The metric in the literature's notation (Pinedo, 2016).
+  String get symbol => kMetricSymbols[id] ?? '';
+
   /// The value as text, at the column's [precision] for durations.
   String format(Metrics m, DurationPrecision precision) {
     final d = duration;
@@ -114,6 +117,23 @@ final List<MetricDef> kMetrics = [
     'Retraso promedio por trabajo (los que llegan a tiempo cuentan 0).',
     (m) => m.avarageDelayTime,
   ),
+  _durationMetric(
+    'maxTardiness',
+    'Tardanza\nmáxima',
+    'Tardanza máxima',
+    'El mayor retraso de un solo trabajo respecto a su fecha de entrega '
+        '(si todos llegan a tiempo es 0).',
+    (m) => m.maxTardiness,
+  ),
+  _durationMetric(
+    'maxLateness',
+    'Retraso\nmáximo',
+    'Retraso máximo',
+    'Mayor diferencia entre la finalización y la fecha de entrega entre los '
+        'trabajos. Puede ser negativo: si todos terminan antes, indica cuánto '
+        'margen tiene el trabajo más ajustado.',
+    (m) => m.maxLateness,
+  ),
   MetricDef(
     id: 'delayedJobs',
     header: 'Trabajos\nretrasados',
@@ -126,14 +146,13 @@ final List<MetricDef> kMetrics = [
         '${m.delayedJobs} · ${m.percentageDelayedJobs.toStringAsFixed(0)} %',
   ),
   _durationMetric(
-    'avgEarliness',
-    'Adelanto\npromedio',
-    'Adelanto promedio',
-    'Cuánto antes de su fecha de entrega terminan los trabajos, en promedio. '
-        'No se califica como mejor ni peor: terminar muy antes puede '
-        'significar inventario en espera.',
-    (m) => m.avarageEarlinessTime,
-    sense: MetricSense.neutral,
+    'totalEarliness',
+    'Anticipo\ntotal',
+    'Anticipo total',
+    'Suma de cuánto antes de su fecha de entrega terminan los trabajos '
+        '(los que llegan tarde cuentan 0). Menos es mejor: terminar muy '
+        'antes significa inventario en espera.',
+    (m) => m.totalEarliness,
   ),
   _durationMetric(
     'idle',
@@ -144,13 +163,30 @@ final List<MetricDef> kMetrics = [
   ),
 ];
 
-/// The five headline objectives (dashboard cards, default overall score).
+/// Theoretical symbol of each metric, shown while the notation switch is on.
+const Map<String, String> kMetricSymbols = {
+  'makespan': 'Cmax',
+  'totalFlow': 'Σ(Cj − rj)',
+  'totalTardiness': 'ΣTj',
+  'weightedTardiness': 'ΣwjTj',
+  'avgTardiness': 'ΣTj / n',
+  'maxTardiness': 'Tmax',
+  'maxLateness': 'Lmax',
+  'delayedJobs': 'ΣUj',
+  'totalEarliness': 'ΣEj',
+  'idle': 'Σi (Cmax − ocupación de Mi)',
+};
+
+/// The headline objectives (dashboard cards, default overall score).
 const List<String> kHeadlineMetricIds = [
   'makespan',
   'totalFlow',
   'totalTardiness',
   'weightedTardiness',
+  'maxTardiness',
+  'maxLateness',
   'delayedJobs',
+  'totalEarliness',
 ];
 
 MetricDef metricById(String id) => kMetrics.firstWhere((m) => m.id == id);

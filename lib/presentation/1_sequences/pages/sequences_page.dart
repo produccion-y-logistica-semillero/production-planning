@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -286,11 +287,24 @@ class _SequencesBodyState extends State<_SequencesBody> {
                     ),
                     icon: const Icon(Icons.info_outline),
                   ),
+                  const NotationButton(
+                    notationContext: NotationContext.routes,
+                    title: 'Notación: rutas de proceso',
+                  ),
                 ],
               ),
               SizedBox(width: 280, child: left),
               const SizedBox(width: 16),
-              Expanded(child: board),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const NotationStrip(
+                        notationContext: NotationContext.routes),
+                    Expanded(child: board),
+                  ],
+                ),
+              ),
             ],
           ),
         );

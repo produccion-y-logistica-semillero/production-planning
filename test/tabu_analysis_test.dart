@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:production_planning/entities/metrics.dart';
+import 'package:production_planning/entities/tabu_objective.dart';
 import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/tabu_analysis.dart';
@@ -36,8 +37,9 @@ void main() {
     maxIterations: 100,
     elapsedMs: 1200,
     timeBudgetMs: 4000,
-    initialFlowMinutes: 800,
-    bestFlowMinutes: 760,
+    objective: TabuObjective.totalFlow,
+    initialValue: 800,
+    bestValue: 760,
     stoppedByTime: false,
   );
 

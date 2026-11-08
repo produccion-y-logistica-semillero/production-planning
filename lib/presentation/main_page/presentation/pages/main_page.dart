@@ -1,8 +1,12 @@
+import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_side_menu/flutter_side_menu.dart';
 import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
+import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/notation.dart';
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -30,7 +34,7 @@ class MainPage extends StatelessWidget {
         toolbarHeight: 50,
         title: Center(
           child: Text(
-            "Planeacion de Producción",
+            "Programación de Operaciones",
             style: TextStyle(
                 fontSize: 16,
                 color: onTertiaryContainer,
@@ -85,7 +89,22 @@ class MainPage extends StatelessWidget {
                       onTap: () => _showScheduleDialog(context),
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: Icon(Icons.schedule, color: onPrimaryContainer),
+                      icon: TutorialTarget(
+                          id: 'menu.horario',
+                          inflate: _menuRow,
+                          child: Icon(Icons.schedule, color: onPrimaryContainer)),
+                      isSelected: false,
+                    ),
+                    SideMenuItemDataTile(
+                      title: 'Formato de tiempos',
+                      onTap: () => _showTimeFormatDialog(context),
+                      titleStyle:
+                          TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      icon: TutorialTarget(
+                          id: 'menu.formato',
+                          inflate: _menuRow,
+                          child: Icon(Icons.timer_outlined,
+                              color: onPrimaryContainer)),
                       isSelected: false,
                     ),
                     const SideMenuItemDataDivider(
@@ -101,6 +120,34 @@ class MainPage extends StatelessWidget {
                         'Programas de produccion',
                         3,
                         Icons.schedule_send_sharp),
+                    const SideMenuItemDataDivider(
+                        divider: Divider(height: 20, color: Colors.white)),
+                    createItem(provider, context, '/manual',
+                        'Manual de usuario', 4, Icons.menu_book_outlined),
+                    createItem(provider, context, '/notacion',
+                        'Glosario de notación', 5, Icons.functions),
+                    // Global switch: adds the theoretical symbols to every
+                    // screen. The icon shows whether it is on.
+                    SideMenuItemDataTile(
+                      title: showNotation.value
+                          ? 'Notación teórica: sí'
+                          : 'Notación teórica: no',
+                      onTap: () async {
+                        await setNotation(!showNotation.value);
+                        provider.changeOption(provider.selectedOption);
+                      },
+                      titleStyle:
+                          TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      icon: TutorialTarget(
+                          id: 'menu.notacion',
+                          inflate: _menuRow,
+                          child: Icon(
+                              showNotation.value
+                                  ? Icons.toggle_on
+                                  : Icons.toggle_off_outlined,
+                              color: onPrimaryContainer)),
+                      isSelected: false,
+                    ),
                   ],
                   footer: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -159,9 +206,16 @@ class MainPage extends StatelessWidget {
       highlightSelectedColor: primaryFixed.withOpacity(0.2),
       selectedTitleStyle: TextStyle(
           color: onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 18),
-      icon: Icon(icon, color: onPrimaryContainer),
+      icon: TutorialTarget(
+        id: 'menu$route',
+        inflate: _menuRow,
+        child: Icon(icon, color: onPrimaryContainer),
+      ),
     );
   }
+
+  /// Lights the whole menu row in the tutorial, not only its icon.
+  static const EdgeInsets _menuRow = EdgeInsets.fromLTRB(8, 8, 190, 8);
 
   Future<void> _showWorkspaceDialog(BuildContext context) async {
     final dir = await getApplicationSupportDirectory();
@@ -243,39 +297,44 @@ class MainPage extends StatelessWidget {
 
     await showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
+      // StatefulBuilder: the chosen hours are shown as soon as they are
+      // picked, not only after reopening the dialog.
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
           title: const Text('Configuración de Horario'),
-          content: Column(
+          content: TutorialTarget(
+            id: 'horario.content',
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 title: const Text('Hora de inicio'),
-                trailing: Text(startTime.format(context)),
+                trailing: Text(formatTimeOfDay(startTime)),
                 onTap: () async {
-                  final pickedTime = await showTimePicker(
-                      context: context, initialTime: startTime);
+                  final pickedTime = await pickTime(context, initial: startTime);
 
                   if (pickedTime != null) {
-                    startTime = pickedTime;
+                    setDialogState(() => startTime = pickedTime);
                   }
                 },
               ),
               ListTile(
                 title: const Text('Hora de fin'),
-                trailing: Text(endTime.format(context)),
+                trailing: Text(formatTimeOfDay(endTime)),
                 onTap: () async {
-                  final pickedTime = await showTimePicker(
-                      context: context, initialTime: endTime);
+                  final pickedTime = await pickTime(context, initial: endTime);
                   if (pickedTime != null) {
-                    endTime = pickedTime;
+                    setDialogState(() => endTime = pickedTime);
                   }
                 },
               ),
             ],
           ),
+          ),
           actions: [
-            TextButton(
+            TutorialTarget(
+              id: 'horario.save',
+              child: TextButton(
               onPressed: () async {
                 START_SCHEDULE = startTime;
                 END_SCHEDULE = endTime;
@@ -291,6 +350,7 @@ class MainPage extends StatelessWidget {
               },
               child: const Text('Guardar'),
             ),
+            ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
@@ -298,6 +358,66 @@ class MainPage extends StatelessWidget {
               child: const Text('Cancelar'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// All duration fields (processing time, setup matrix, continuous use,
+  /// rest, maintenance) are typed and shown in the chosen format. Durations
+  /// are still saved in whole minutes.
+  Future<void> _showTimeFormatDialog(BuildContext context) async {
+    TimeInputFormat selected = timeInputFormat.value;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Formato de tiempos'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cómo se escriben y se muestran los tiempos de proceso, '
+                  'alistamiento, uso continuo, descanso y mantenimientos.',
+                ),
+                const SizedBox(height: 12),
+                RadioListTile<TimeInputFormat>(
+                  title: const Text('Todo en minutos'),
+                  subtitle: const Text('Ejemplo: 90'),
+                  value: TimeInputFormat.minutes,
+                  groupValue: selected,
+                  onChanged: (v) => setState(() => selected = v!),
+                ),
+                RadioListTile<TimeInputFormat>(
+                  title: const Text('Todo en hh:mm:ss'),
+                  subtitle: const Text(
+                      'Ejemplo: 01:30:00. Los segundos se redondean al minuto '
+                      'al guardar.'),
+                  value: TimeInputFormat.hms,
+                  groupValue: selected,
+                  onChanged: (v) => setState(() => selected = v!),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  timeInputFormat.value = selected;
+                  final dir = await getApplicationSupportDirectory();
+                  await File('${dir.path}/$timeFormatFileName')
+                      .writeAsString(timeFormatToStorage(selected));
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+                child: const Text('Guardar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
+            ],
+          ),
         );
       },
     );

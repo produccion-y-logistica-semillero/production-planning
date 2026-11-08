@@ -2,7 +2,11 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/machine_inactivity_entity.dart';
 import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
+import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
+import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
+import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
 import 'dart:math';
@@ -100,6 +104,16 @@ class FlexibleJobShop {
   final Map<int, int?> _machineLastJob = {};
   List<FlexibleJobOutput> output = [];
 
+  /// Settings and objective of GENETICS, chosen in the algorithm picker.
+  final GeneticParams geneticParams;
+
+  /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
+  final List<int>? userSequence;
+
+  /// machineId -> job ids in the order that machine processes them (rule
+  /// SECUENCIA_USUARIO, strict). When set it replaces [userSequence].
+  final Map<int, List<int>>? machineSequences;
+
   FlexibleJobShop(
     this.startDate,
     this.workingSchedule,
@@ -112,6 +126,9 @@ class FlexibleJobShop {
     this.stateSetupMatrix,
     this.jobStates,
     this.initialMachineState = const {},
+    this.geneticParams = const GeneticParams(),
+    this.userSequence,
+    this.machineSequences,
   }) {
     _initializeMachineLastSequence();
 
@@ -149,26 +166,210 @@ class FlexibleJobShop {
       case "CR":
         scheduleFlexibleJobShopCR();
         break;
+      // Composite priority score (1/CR + w/p). It used to be offered as
+      // "GENETICS", but it is a dispatching index, not a genetic algorithm.
+      case "PRIORIDAD_COMPUESTA":
+        scheduleFlexibleJobShopCompositePriority();
+        break;
       case "GENETICS":
-        scheduleFlexibleJobShopGENETICS();
+        scheduleFlexibleJobShopGenetic(settings: geneticParams);
+        break;
+      case "SECUENCIA_USUARIO":
+        if (machineSequences != null) {
+          scheduleFlexibleJobShopMachineSequence();
+        } else {
+          scheduleFlexibleJobShopUserSequence();
+        }
         break;
     }
   }
 
-  void scheduleFlexibleJobShopGENETICS() {
-    // Simple genetics-like heuristic: combine CR and WSPT into a score
-    print('FlexibleJobShop: starting scheduling (GENETICS)');
+  /// Operations as the plan builder sees them: the machines each can run on
+  /// and the tasks it waits for (same readiness rule as [_isTaskReady]).
+  List<SeqOperation> _sequenceOperations() => [
+        for (final job in inputJobs)
+          for (int i = 0; i < job.taskSequence.length; i++)
+            SeqOperation(
+              jobId: job.jobId,
+              taskId: job.taskSequence[i].value1,
+              index: i,
+              machines: job.taskSequence[i].value2.keys.toSet(),
+              predecessors: job.dependencies.isEmpty
+                  ? (i > 0 ? {job.taskSequence[i - 1].value1} : <int>{})
+                  : {
+                      for (final d in job.dependencies)
+                        if (d.successor_id == job.taskSequence[i].value1)
+                          d.predecessor_id,
+                    },
+            ),
+      ];
+
+  /// Strict per-machine sequences: each machine processes its jobs exactly
+  /// in the order the user typed (even if it has to wait), and each
+  /// operation runs on the machine whose list it is in. A plan that cannot
+  /// run (wrong counts, deadlock) throws a [MachineSequenceException].
+  void scheduleFlexibleJobShopMachineSequence() {
+    final plan = buildMachineSequencePlan(
+      ops: _sequenceOperations(),
+      machineSequences: machineSequences!,
+    );
+    _schedule(
+      (a, b) {
+        final cmp = (a.job.jobId as int).compareTo(b.job.jobId as int);
+        return cmp != 0 ? cmp : (a.taskId as int).compareTo(b.taskId as int);
+      },
+      forcedMachine: plan.machineOf,
+      machineQueues: plan.queues,
+    );
+  }
+
+  /// The user's job order as a priority list: among the operations that can
+  /// start first, the job earlier in the list goes first.
+  void scheduleFlexibleJobShopUserSequence() {
+    final rank = userSequenceRank(userSequence);
     _schedule((a, b) {
-      final scoreA = _geneticsScore(a.job, a.duration, a.earliestStart);
-      final scoreB = _geneticsScore(b.job, b.duration, b.earliestStart);
-      return scoreB.compareTo(scoreA);
+      final cmp = compareByUserSequence(
+        rank,
+        a.job.jobId as int,
+        b.job.jobId as int,
+        a.job.availableDate as DateTime,
+        b.job.availableDate as DateTime,
+      );
+      if (cmp != 0) return cmp;
+      return (a.taskId as int).compareTo(b.taskId as int);
     });
-    print('FlexibleJobShop: scheduling finished (GENETICS)');
+  }
+
+  void scheduleFlexibleJobShopCompositePriority() {
+    _schedule((a, b) {
+      final scoreA = _compositeScore(a.job, a.duration, a.earliestStart);
+      final scoreB = _compositeScore(b.job, b.duration, b.earliestStart);
+      final cmp = scoreB.compareTo(scoreA);
+      if (cmp != 0) return cmp;
+      // List.sort is not stable: settle ties so runs agree.
+      final byJob = (a.job.jobId as int).compareTo(b.job.jobId as int);
+      if (byJob != 0) return byJob;
+      return (a.taskId as int).compareTo(b.taskId as int);
+    });
+  }
+
+  /// Genetic algorithm with an operation-based chromosome (Bierwirth, 1995)
+  /// plus a machine-assignment vector for the flexible variants (Pezzella,
+  /// Morganti & Ciaschetti, 2008). Each chromosome is decoded with the same
+  /// non-delay loop the rules use: among the operations that can start at
+  /// t*, the one earlier in the chromosome goes first, on the machine its
+  /// gene assigns. Fitness: the objective chosen in [settings] (makespan by
+  /// default). See docs/diagnostico_genetics.md.
+  void scheduleFlexibleJobShopGenetic({
+    GeneticParams settings = const GeneticParams(),
+  }) {
+    final ops = <({FlexibleJobInput job, int taskId, List<int> machines})>[
+      for (final job in inputJobs)
+        for (final task in job.taskSequence)
+          (
+            job: job,
+            taskId: task.value1,
+            machines: task.value2.keys.toList()..sort(),
+          ),
+    ];
+    if (ops.isEmpty) return;
+    final jobOf = [for (final op in ops) op.job.jobId];
+    final machineCount = [for (final op in ops) op.machines.length];
+
+    // Every decode starts from the same machine state.
+    final availability0 = Map<int, DateTime>.of(machinesAvailability);
+    final usage0 = Map<int, Duration>.of(_machineContinuousUsage);
+    final lastJob0 = Map<int, int?>.of(_machineLastJob);
+    final lastSequence0 = Map<int, int?>.of(_machineLastSequence);
+
+    void decode(OperationChromosome c, {bool quiet = true}) {
+      machinesAvailability
+        ..clear()
+        ..addAll(availability0);
+      _machineContinuousUsage
+        ..clear()
+        ..addAll(usage0);
+      _machineLastJob
+        ..clear()
+        ..addAll(lastJob0);
+      _machineLastSequence
+        ..clear()
+        ..addAll(lastSequence0);
+      output = [];
+      final position = <(int, int), int>{};
+      for (int i = 0; i < c.order.length; i++) {
+        final op = ops[c.order[i]];
+        position[(op.job.jobId, op.taskId)] = i;
+      }
+      final forced = <(int, int), int>{
+        for (int i = 0; i < ops.length; i++)
+          (ops[i].job.jobId, ops[i].taskId): ops[i].machines[c.machineChoice[i]],
+      };
+      _schedule(
+        (a, b) => position[(a.job.jobId as int, a.taskId as int)]!
+            .compareTo(position[(b.job.jobId as int, b.taskId as int)]!),
+        forcedMachine: forced,
+        quiet: quiet,
+      );
+    }
+
+    double fitness(OperationChromosome c) {
+      try {
+        decode(c);
+      } on SchedulingHorizonException {
+        return double.infinity;
+      }
+      final done = output.fold<int>(0, (n, o) => n + o.scheduling.length);
+      if (done < ops.length || output.isEmpty) return double.infinity;
+      final end = completionByJob<FlexibleJobOutput>(
+          output, (o) => o.jobId, (o) => o.endTime);
+      return scheduleObjectiveValue(
+        settings.objective,
+        [
+          for (final j in inputJobs)
+            if (end[j.jobId] != null)
+              JobCompletion(j.availableDate, j.dueDate, end[j.jobId]!),
+        ],
+        startDate,
+      );
+    }
+
+    // Seed: operations in job/route order, each on its fastest machine.
+    final seed = OperationChromosome(
+      List<int>.generate(ops.length, (i) => i),
+      [
+        for (final op in ops)
+          () {
+            final task =
+                op.job.taskSequence.firstWhere((t) => t.value1 == op.taskId);
+            int best = 0;
+            for (int k = 1; k < op.machines.length; k++) {
+              if (task.value2[op.machines[k]]! <
+                  task.value2[op.machines[best]]!) {
+                best = k;
+              }
+            }
+            return best;
+          }(),
+      ],
+    );
+
+    final result = runGenetic<OperationChromosome>(
+      seeds: [seed],
+      randomIndividual: (r) => randomOperationChromosome(machineCount, r),
+      fitness: fitness,
+      crossover: (a, b, r) => poxCrossover(a, b, jobOf, r),
+      mutate: (c, r) => operationMutation(c, machineCount, r),
+      key: (c) => c.key,
+      settings: settings,
+    );
+    // The schedule that is kept is the best chromosome's own decoding.
+    decode(result.best, quiet: false);
   }
 
   int _safeMinutes(Duration duration) => max(duration.inMinutes, 1);
 
-  double _geneticsScore(
+  double _compositeScore(
       FlexibleJobInput job, Duration duration, DateTime now) {
     final cr = _calculateCR(job, duration, now);
     final wspt = job.priority / _safeMinutes(duration);
@@ -250,7 +451,7 @@ class FlexibleJobShop {
 
   void scheduleFlexibleJobShopCR() => _scheduleBy(DispatchCriterion.cr);
 
-  /// Critical ratio used only by the GENETICS score, at [now] — the
+  /// Critical ratio used only by the PRIORIDAD_COMPUESTA score, at [now] — the
   /// schedule's clock, never the wall clock.
   double _calculateCR(FlexibleJobInput job, Duration duration, DateTime now) {
     final cr = job.dueDate.difference(now).inMinutes / _safeMinutes(duration);
@@ -540,8 +741,27 @@ class FlexibleJobShop {
   /// ready)`: an operation facing a long changeover, a maintenance window or
   /// the wait for a block that fits it uninterrupted looked as if it could
   /// start right away and took the machine from one that really could.
-  void _schedule(int Function(dynamic, dynamic) comparator) {
-    print('FlexibleJobShop._schedule: entering main loop');
+  ///
+  /// [forcedMachine] (job id, task id) → machine restricts each operation to
+  /// one machine (the genetic algorithm's assignment gene); [quiet] silences
+  /// the progress logs during the GA's many decodings.
+  ///
+  /// [machineQueues] machine -> operations in the order the machine must
+  /// process them (strict user sequence): an operation is a candidate only
+  /// when it is the head of its machine's queue, so the machine never takes
+  /// another one first even if it would be idle.
+  void _schedule(
+    int Function(dynamic, dynamic) comparator, {
+    Map<(int, int), int>? forcedMachine,
+    Map<int, List<(int, int)>>? machineQueues,
+    bool quiet = false,
+  }) {
+    if (!quiet) print('FlexibleJobShop._schedule: entering main loop');
+
+    // Private copy: heads are consumed as operations are committed.
+    final Map<int, List<(int, int)>>? queues = machineQueues == null
+        ? null
+        : {for (final e in machineQueues.entries) e.key: [...e.value]};
 
     Map<int, Set<int>> completedTasks = {
       for (var job in inputJobs) job.jobId: <int>{},
@@ -561,6 +781,13 @@ class FlexibleJobShop {
 
     Map<int, Map<int, List<ProcessingSegment>>> jobSetupSegments = {
       for (var job in inputJobs) job.jobId: {},
+    };
+
+    // A job is one physical piece: it is at one station at a time, even when
+    // its route is a graph with branches that have no arrow between them.
+    // Free once its last committed operation ends.
+    final Map<int, DateTime> jobFreeAt = {
+      for (var job in inputJobs) job.jobId: job.availableDate,
     };
 
     int iter = 0;
@@ -619,10 +846,24 @@ class FlexibleJobShop {
 
           if (!_isTaskReady(job, taskId, completed)) continue;
 
-          final jobReadyTime = _getJobReadyTime(job, taskId, compTimes);
+          final DateTime precedenceReady =
+              _getJobReadyTime(job, taskId, compTimes);
+          final DateTime jobFree = jobFreeAt[job.jobId]!;
+          final jobReadyTime =
+              jobFree.isAfter(precedenceReady) ? jobFree : precedenceReady;
 
+          final int? onlyMachine = forcedMachine?[(job.jobId, taskId)];
           for (var entry in task.value2.entries) {
             final machineId = entry.key;
+            if (onlyMachine != null && machineId != onlyMachine) continue;
+            if (queues != null) {
+              final queue = queues[machineId];
+              if (queue == null ||
+                  queue.isEmpty ||
+                  queue.first != (job.jobId, taskId)) {
+                continue;
+              }
+            }
             final duration = entry.value;
             final machineAvailable =
                 machinesAvailability[machineId] ?? startDate;
@@ -661,8 +902,10 @@ class FlexibleJobShop {
         // Every ready operation was unplaceable on every machine: that is
         // the calendar's fault, and the user has to hear about it.
         if (pricingFailure != null) throw pricingFailure;
-        print(
-            'FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
+        if (!quiet) {
+          print(
+              'FlexibleJobShop._schedule: no schedulable candidates remaining, aborting loop');
+        }
         break;
       }
 
@@ -705,10 +948,12 @@ class FlexibleJobShop {
       jobSegments[selected.job.jobId]![selected.taskId] = schedule.segments;
       jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
+      queues?[selected.machineId]?.removeAt(0);
       machinesAvailability[selected.machineId] = adjustedEnd;
       _machineContinuousUsage[selected.machineId] = placed.usageAfter;
       completedTasks[selected.job.jobId]!.add(selected.taskId);
       taskCompletionTimes[selected.job.jobId]![selected.taskId] = adjustedEnd;
+      jobFreeAt[selected.job.jobId] = adjustedEnd;
       _machineLastSequence[selected.machineId] = selected.job.sequenceId;
       // A job with no state (A-J) registered for this machine leaves the
       // machine in the state it found it. Recording it as the last job
@@ -718,7 +963,9 @@ class FlexibleJobShop {
         _machineLastJob[selected.machineId] = selected.job.dbJobId;
       }
     }
-    print('FlexibleJobShop._schedule: exiting main loop after iter=$iter');
+    if (!quiet) {
+      print('FlexibleJobShop._schedule: exiting main loop after iter=$iter');
+    }
 
     for (var job in inputJobs) {
       final sched = jobSchedulings[job.jobId]!;
@@ -922,6 +1169,12 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
     stateSetupMatrix: stateSetupMatrix,
     jobStates: jobStates,
     initialMachineState: initialMachineState,
+    geneticParams: GeneticParams.fromMap(
+        payload['geneticParams'] as Map<dynamic, dynamic>?),
+    userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
+    machineSequences: (payload['machineSequences'] as Map<dynamic, dynamic>?)
+        ?.map((machine, jobs) => MapEntry(
+            machine as int, (jobs as List<dynamic>).cast<int>())),
   ).output;
 
   return output.map((out) {

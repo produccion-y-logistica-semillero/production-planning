@@ -1,3 +1,5 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/notation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/0_machines/bloc/machine_types_bloc/machine_types_bloc.dart';
@@ -22,6 +24,7 @@ class MachinesListPage extends StatelessWidget {
       appBar: getAppBar(),
       body: Column(
         children: [
+          const NotationStrip(notationContext: NotationContext.machines),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -31,6 +34,10 @@ class MachinesListPage extends StatelessWidget {
                       content:
                           "Aca puedes manejar los tipos de maquinas que tienes, un tipo de maquina es un tipo generico no asociado a una maquina fisica, sino a la categoria de la misma, asi como Horno, Microondas, Nevera.\n\nCada tipo de maquina tendra sus maquinas fisicas especificas con sus capacidades, asi como Hornos de hasta 200 grados, hornos que calientan en 1 minuto, mientras otros en 10 minutos"),
                   icon: const Icon(Icons.info)),
+              const NotationButton(
+                notationContext: NotationContext.machines,
+                title: 'Notación: estaciones y máquinas',
+              ),
               // The button shrinks with the screen: a fixed 60 px side
               // margin plus its label used to overflow on a phone.
               Flexible(
@@ -39,7 +46,9 @@ class MachinesListPage extends StatelessWidget {
                     horizontal:
                         MediaQuery.sizeOf(context).width < 600 ? 12 : 60,
                     vertical: 10),
-                child: TextButton.icon(
+                child: TutorialTarget(
+                  id: 'machines.addStation',
+                  child: TextButton.icon(
                   label: Text(
                     "Agregar estacion de trabajo",
                     overflow: TextOverflow.ellipsis,
@@ -57,6 +66,7 @@ class MachinesListPage extends StatelessWidget {
                     shape: WidgetStatePropertyAll(RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))),
                   ),
+                ),
                 ),
               ),
               ),

@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'dart:math';
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:flutter/material.dart';
@@ -432,9 +433,10 @@ class _GanttChartState extends State<GanttChart> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildTopControls(),
+            TutorialTarget(
+                id: 'gantt.controls', child: _buildTopControls()),
             const SizedBox(height: 8),
-            _buildZoomSliders(),
+            TutorialTarget(id: 'gantt.zoom', child: _buildZoomSliders()),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,13 +452,16 @@ class _GanttChartState extends State<GanttChart> {
                   ),
                 ),
                 Expanded(
-                  child: _buildChartArea(
+                  child: TutorialTarget(
+                    id: 'gantt.chart',
+                    child: _buildChartArea(
                     chartContainerWidth: chartContainerWidth,
                     chartVisibleHeight: chartRowsVisibleHeight,
                     chartTotalWidth: chartTotalWidth,
                     chartTotalHeight: chartTotalHeight,
                     headerHeight: rowHeaderHeight,
                     rowHeight: rowHeight,
+                  ),
                   ),
                 ),
               ],

@@ -1,3 +1,4 @@
+import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/route_draft.dart';
 import 'graph_editor.dart';
@@ -37,12 +38,16 @@ class RouteEditorBoard extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre de la ruta',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              child: TutorialTarget(
+                id: 'routes.name',
+                text: nameController,
+                child: TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la ruta',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
               ),
             ),
@@ -52,7 +57,9 @@ class RouteEditorBoard extends StatelessWidget {
               child: const Text('Cancelar'),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
+            TutorialTarget(
+              id: 'routes.save',
+              child: FilledButton.icon(
               onPressed: saving ? null : onSave,
               icon: saving
                   ? const SizedBox(
@@ -61,6 +68,7 @@ class RouteEditorBoard extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.save),
               label: Text(isEdit ? 'Guardar cambios' : 'Guardar ruta'),
+            ),
             ),
           ],
         ),
@@ -110,15 +118,20 @@ class RouteViewerBoard extends StatelessWidget {
                 style: theme.textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Editar'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onDuplicate,
-              icon: const Icon(Icons.copy_all_outlined),
-              label: const Text('Duplicar'),
+            TutorialTarget(
+              id: 'routes.viewActions',
+              child: Wrap(spacing: 8, children: [
+                FilledButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editar'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onDuplicate,
+                  icon: const Icon(Icons.copy_all_outlined),
+                  label: const Text('Duplicar'),
+                ),
+              ]),
             ),
             OutlinedButton.icon(
               onPressed: onDelete,

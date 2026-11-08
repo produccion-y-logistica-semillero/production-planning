@@ -48,9 +48,9 @@ void main() {
       expect(columnExtremes(metricById('idle'), rows).best, isEmpty);
     });
 
-    test('earliness is shown but never ranked', () {
-      expect(metricById('avgEarliness').ranked, isFalse);
-      expect(columnExtremes(metricById('avgEarliness'), rows).best, isEmpty);
+    test('total earliness is ranked, lower is better', () {
+      expect(metricById('totalEarliness').ranked, isTrue);
+      expect(kHeadlineMetricIds, contains('totalEarliness'));
     });
 
     test('ranks share places on ties (1, 1, 3)', () {

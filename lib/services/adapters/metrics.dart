@@ -93,7 +93,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
   Duration totalLateness = Duration.zero;
   Duration totalEarliness = Duration.zero;
   Duration maxTardiness = Duration.zero;
-  Duration maxLateness = Duration.zero;
+  Duration? maxLatenessOrNull;
   int delayedJobs = 0;
   int totalWeightedTardinessMicros = 0;
 
@@ -121,8 +121,8 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     if (tardiness > maxTardiness) {
       maxTardiness = tardiness;
     }
-    if (lateness > maxLateness) {
-      maxLateness = lateness;
+    if (maxLatenessOrNull == null || lateness > maxLatenessOrNull) {
+      maxLatenessOrNull = lateness;
     }
     if (!tardiness.isNegative && tardiness > Duration.zero) {
       delayedJobs += 1;
@@ -177,7 +177,7 @@ Metrics getMetricts(List<PlanningMachineEntity> machines,
     tabuStats: tabuStats,
     totalWeightedTardiness:
         Duration(microseconds: totalWeightedTardinessMicros),
-    maxLateness: maxLateness,
+    maxLateness: maxLatenessOrNull ?? Duration.zero,
   );
 }
 

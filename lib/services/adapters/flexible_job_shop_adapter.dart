@@ -189,6 +189,7 @@ class FlexibleJobShopAdapter {
       'initialMachineState': initialMachineState,
       'geneticParams': (params.genetic ?? const GeneticParams()).toMap(),
       'userSequence': params.userSequence,
+      'machineSequences': params.machineSequences,
     };
 
     List<Map<String, dynamic>> rawOutput;

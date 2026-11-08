@@ -21,17 +21,43 @@ class AlgorithmParams {
   /// el usuario. Null si no definio secuencia.
   final List<int>? userSequence;
 
-  const AlgorithmParams({this.tabu, this.genetic, this.userSequence});
+  /// Secuencia por maquina (machineId -> jobIds en el orden en que la
+  /// maquina los procesa), para ambientes donde la secuencia cambia por
+  /// maquina (Job Shop, Open Shop, Recurrente y sus variantes flexibles).
+  /// Es estricta: cada maquina respeta exactamente su lista. Null si no la
+  /// definio.
+  final Map<int, List<int>>? machineSequences;
+
+  /// Ruta decidida por el usuario (jobId -> machineIds visitadas en orden,
+  /// una por operacion), donde la ruta es parte de la solucion (Open Shop).
+  /// Solo se usa junto con [machineSequences].
+  final Map<int, List<int>>? userRoutes;
+
+  const AlgorithmParams({
+    this.tabu,
+    this.genetic,
+    this.userSequence,
+    this.machineSequences,
+    this.userRoutes,
+  });
+
+  /// Si hay algo que programar como "secuencia del usuario" (orden de jobs o
+  /// secuencia por maquina): activa la regla [kUserSequenceRule].
+  bool get hasUserSequence => userSequence != null || machineSequences != null;
 
   AlgorithmParams copyWith({
     TabuParams? tabu,
     GeneticParams? genetic,
     List<int>? userSequence,
+    Map<int, List<int>>? machineSequences,
+    Map<int, List<int>>? userRoutes,
   }) {
     return AlgorithmParams(
       tabu: tabu ?? this.tabu,
       genetic: genetic ?? this.genetic,
       userSequence: userSequence ?? this.userSequence,
+      machineSequences: machineSequences ?? this.machineSequences,
+      userRoutes: userRoutes ?? this.userRoutes,
     );
   }
 }

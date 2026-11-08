@@ -20,7 +20,7 @@ class GanttBloc extends Cubit<GanttState> {
   /// [env] con la secuencia del usuario como una regla más, si la definió,
   /// para que aparezca en el desplegable del Gantt.
   EnvironmentEntity _withUserSequence(EnvironmentEntity env) {
-    if (_params.userSequence == null ||
+    if (!_params.hasUserSequence ||
         env.rules.any((r) => r.value1 == kUserSequenceRuleId)) {
       return env;
     }

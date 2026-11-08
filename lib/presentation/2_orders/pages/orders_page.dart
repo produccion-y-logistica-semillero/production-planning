@@ -490,7 +490,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
 
     if (result == null ||
-        (result.value1.isEmpty && result.value2.userSequence == null)) {
+        (result.value1.isEmpty && !result.value2.hasUserSequence)) {
       return;
     }
     if (!context.mounted) return;

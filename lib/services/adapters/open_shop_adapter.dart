@@ -187,6 +187,8 @@ class OpenShopAdapter {
       'initialMachineState': initialMachineState,
       'geneticParams': (params.genetic ?? const GeneticParams()).toMap(),
       'userSequence': params.userSequence,
+      'machineSequences': params.machineSequences,
+      'userRoutes': params.userRoutes,
     };
 
     List<Map<String, dynamic>> rawOutput;

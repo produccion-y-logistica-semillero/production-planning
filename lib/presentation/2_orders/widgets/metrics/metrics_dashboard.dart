@@ -227,6 +227,10 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
         return c != 0 ? c : a.compareTo(b);
       });
     final maxValue = values.fold<num>(0, (a, b) => b > a ? b : a);
+    // Lateness (Lmax) can be negative: bars are then measured from the lowest
+    // value so every algorithm still gets a visible, comparable bar.
+    final minValue = values.fold<num>(0, (a, b) => b < a ? b : a);
+    final hasNegative = minValue < 0;
     final ext = columnExtremes(metric, _rows);
     final ranks = columnRanks(metric, _rows);
 
@@ -276,8 +280,10 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
                     ),
                     Expanded(
                       child: LayoutBuilder(builder: (context, c) {
-                        final frac =
-                            maxValue <= 0 ? 0.0 : values[i] / maxValue;
+                        final span = maxValue - minValue;
+                        final frac = span <= 0
+                            ? 0.0
+                            : (values[i] - minValue) / span;
                         return Stack(
                           alignment: Alignment.centerLeft,
                           children: [
@@ -290,7 +296,7 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
                             ),
                             Container(
                               height: 18,
-                              width: values[i] <= 0
+                              width: (!hasNegative && values[i] <= 0)
                                   ? 0
                                   : (c.maxWidth * frac).clamp(4.0, c.maxWidth),
                               decoration: BoxDecoration(

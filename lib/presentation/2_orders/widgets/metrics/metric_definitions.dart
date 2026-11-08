@@ -117,6 +117,23 @@ final List<MetricDef> kMetrics = [
     'Retraso promedio por trabajo (los que llegan a tiempo cuentan 0).',
     (m) => m.avarageDelayTime,
   ),
+  _durationMetric(
+    'maxTardiness',
+    'Tardanza\nmáxima',
+    'Tardanza máxima',
+    'El mayor retraso de un solo trabajo respecto a su fecha de entrega '
+        '(si todos llegan a tiempo es 0).',
+    (m) => m.maxTardiness,
+  ),
+  _durationMetric(
+    'maxLateness',
+    'Retraso\nmáximo',
+    'Retraso máximo',
+    'Mayor diferencia entre la finalización y la fecha de entrega entre los '
+        'trabajos. Puede ser negativo: si todos terminan antes, indica cuánto '
+        'margen tiene el trabajo más ajustado.',
+    (m) => m.maxLateness,
+  ),
   MetricDef(
     id: 'delayedJobs',
     header: 'Trabajos\nretrasados',
@@ -153,6 +170,8 @@ const Map<String, String> kMetricSymbols = {
   'totalTardiness': 'ΣTj',
   'weightedTardiness': 'ΣwjTj',
   'avgTardiness': 'ΣTj / n',
+  'maxTardiness': 'Tmax',
+  'maxLateness': 'Lmax',
   'delayedJobs': 'ΣUj',
   'totalEarliness': 'ΣEj',
   'idle': 'Σi (Cmax − ocupación de Mi)',
@@ -164,6 +183,8 @@ const List<String> kHeadlineMetricIds = [
   'totalFlow',
   'totalTardiness',
   'weightedTardiness',
+  'maxTardiness',
+  'maxLateness',
   'delayedJobs',
   'totalEarliness',
 ];

@@ -40,7 +40,7 @@ class MetricsBloc extends Cubit<MetricsState> {
       else
         for (final i in ruleIndexes)
           if (i >= 0 && i < environment.rules.length) environment.rules[i],
-      if (params.userSequence != null)
+      if (params.hasUserSequence)
         const Tuple2(kUserSequenceRuleId, kUserSequenceRule),
     ];
 

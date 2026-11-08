@@ -3,7 +3,8 @@ import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/tutorial/tutorial_tours.dart';
 import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
 
-/// In-app user manual: two guided tours, game-style. The app lights up the
+/// In-app user manual: two guided examples (one machine per station /
+/// several machines per station), game-style. The app lights up the
 /// exact button or field to use, says what to do and waits until the user
 /// does it, building a real program (in the "Tutorial" workspace) and
 /// covering everything the platform can do.
@@ -16,17 +17,11 @@ class ManualPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const icons = [Icons.linear_scale, Icons.hub_outlined];
-    const blurbs = [
-      'Panadería: 3 lotes de pan, todos por Mezcla → Horno → Empaque. '
-          'Configuración, estaciones, una ruta, fechas, tiempos, familias y '
-          'alistamiento, reglas, algoritmo genético, métricas, dashboard, '
-          'Gantt y notación.',
-      'Taller: ejes y bridas con rutas distintas y estaciones con 2 '
-          'máquinas. Descansos y mantenimientos, fechas automáticas, '
-          'tiempos por máquina, estado inicial, reglas compuestas, tu propia '
-          'secuencia, Gantt por trabajo y gestión de programas.',
-    ];
+    // Tours are examples of a family; group the cards by it.
+    final categories = <String>[];
+    for (final t in kTours) {
+      if (!categories.contains(t.category)) categories.add(t.category);
+    }
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: ListView(
@@ -37,20 +32,55 @@ class ManualPage extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
-            'Tutoriales guiados: la plataforma te dice qué tocar en cada '
+            'Ejemplos guiados: la plataforma te dice qué tocar en cada '
             'momento y avanza cuando lo haces. Se trabaja en un espacio de '
             'prueba ("Tutorial"); tus datos reales no se tocan y vuelven al '
             'terminar o al salir.',
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 16),
-          for (int i = 0; i < kTours.length; i++)
-            _TourCard(
-              tour: kTours[i],
-              icon: icons[i],
-              blurb: blurbs[i],
-              highlighted: i == initialCase,
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer.withValues(alpha: .4),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline,
+                    size: 18, color: theme.colorScheme.secondary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'No hay un tutorial por ambiente: la plataforma detecta '
+                    'sola el ambiente (máquina única, paralelas, Flow Shop, '
+                    'Job Shop, Open Shop, Recurrente y sus variantes '
+                    'flexibles) a partir de tus rutas y de cuántas máquinas '
+                    'tiene cada estación. Por eso basta con dos ejemplos: '
+                    'uno con una máquina por estación y otro con varias. Los '
+                    'pasos son los mismos en todos los ambientes de la '
+                    'familia.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (final category in categories) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(category,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            for (int i = 0; i < kTours.length; i++)
+              if (kTours[i].category == category)
+                _TourCard(
+                  tour: kTours[i],
+                  highlighted: i == initialCase,
+                ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
@@ -72,14 +102,10 @@ class ManualPage extends StatelessWidget {
 
 class _TourCard extends StatelessWidget {
   final TutorialTour tour;
-  final IconData icon;
-  final String blurb;
   final bool highlighted;
 
   const _TourCard({
     required this.tour,
-    required this.icon,
-    required this.blurb,
     required this.highlighted,
   });
 
@@ -104,7 +130,7 @@ class _TourCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 32, color: theme.colorScheme.primary),
+                Icon(tour.icon, size: 32, color: theme.colorScheme.primary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(tour.title,
@@ -118,7 +144,26 @@ class _TourCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(blurb),
+            Text(tour.blurb),
+            if (tour.environments.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Sirve para estos ambientes:',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final e in tour.environments)
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: const Icon(Icons.factory_outlined, size: 16),
+                      label: Text(e),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,

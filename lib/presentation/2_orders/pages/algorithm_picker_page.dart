@@ -14,6 +14,10 @@ import 'package:production_planning/entities/tabu_params.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/genetic_params_dialog.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/tabu_params_dialog.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/user_sequence_dialog.dart';
+import 'package:production_planning/presentation/2_orders/widgets/low_order/machine_sequence_dialog.dart';
+import 'package:production_planning/entities/machine_entity.dart';
+import 'package:production_planning/repositories/interfaces/machine_repository.dart';
+import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/graph_editor.dart';
 import 'package:production_planning/services/sequences_service.dart';
 import 'package:production_planning/services/orders_service.dart';
@@ -45,6 +49,29 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   /// The program being scheduled, to show its routes and jobs.
   OrderEntity? _order;
 
+  /// Secuencia por máquina (y ruta) que definió el usuario; null si no.
+  MachinePlan? _machinePlan;
+
+  /// Environment of the program, and the machines and stations it uses:
+  /// needed by the per-machine sequence dialog.
+  String? _environmentName;
+  Map<int, List<MachineEntity>> _machinesByType = const {};
+  Map<int, String> _stationNames = const {};
+
+  /// Environments where the sequence changes per machine (and, in the open
+  /// shop family, the route is part of the solution).
+  static const _machineSequenceEnvironments = {
+    'JOB SHOP',
+    'FLEXIBLE JOB SHOP',
+    'RECURRENTE',
+    'FLEXIBLE RECURRENTE',
+    'OPEN SHOP',
+    'FLEXIBLE OPEN SHOP',
+  };
+
+  bool get _supportsMachinePlan =>
+      _machineSequenceEnvironments.contains(_environmentName);
+
   @override
   void initState() {
     super.initState();
@@ -52,9 +79,39 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     // Sin parámetros de una sesión anterior: la lista no debe traer la
     // secuencia de usuario de otra orden.
     _ganttBloc.assignOrderId(widget.orderId, params: const AlgorithmParams());
-    GetIt.instance<OrdersService>().getFullOrder(widget.orderId).then((r) {
+    final service = GetIt.instance<OrdersService>();
+    service.getFullOrder(widget.orderId).then((r) {
       if (!mounted) return;
-      r.fold((_) {}, (order) => setState(() => _order = order));
+      r.fold((_) {}, (order) {
+        setState(() => _order = order);
+        _loadMachines(service.machineRepo, order);
+      });
+    });
+    service.getOrderEnvironment(widget.orderId).then((r) {
+      if (!mounted) return;
+      r.fold((_) {}, (env) => setState(() => _environmentName = env.name));
+    });
+  }
+
+  /// Machines and station names of every station the program uses.
+  Future<void> _loadMachines(MachineRepository repo, OrderEntity order) async {
+    final typeIds = {
+      for (final job in order.orderJobs ?? const [])
+        for (final task in job.sequence?.tasks ?? const [])
+          if (task.machineTypeId != null) task.machineTypeId as int,
+    };
+    final machines = <int, List<MachineEntity>>{};
+    final names = <int, String>{};
+    for (final id in typeIds) {
+      final list = (await repo.getAllMachinesFromType(id)).fold((_) => null, (m) => m);
+      if (list != null) machines[id] = list;
+      final name = (await repo.getMachineTypeName(id)).fold((_) => null, (n) => n);
+      if (name != null) names[id] = name;
+    }
+    if (!mounted) return;
+    setState(() {
+      _machinesByType = machines;
+      _stationNames = names;
     });
   }
 
@@ -200,8 +257,30 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     tutorial.emit('userSequenceDefined');
   }
 
+  Future<void> _editMachinePlan() async {
+    final jobs = _order?.orderJobs;
+    if (jobs == null || jobs.isEmpty || _machinesByType.isEmpty) return;
+    final env = _environmentName ?? '';
+    final plan = await showDialog<MachinePlan>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MachineSequenceDialog(
+        jobs: jobs,
+        machinesByType: _machinesByType,
+        stationNames: _stationNames,
+        freeRoute: env.contains('OPEN'),
+        initial: _machinePlan,
+      ),
+    );
+    if (plan == null) return; // canceló
+    setState(() => _machinePlan = plan);
+    tutorial.emit('userSequenceDefined');
+  }
+
   bool get _canCalculate =>
-      _selectedIndexes.isNotEmpty || _userSequence != null;
+      _selectedIndexes.isNotEmpty ||
+      _userSequence != null ||
+      _machinePlan != null;
 
   void _onCalculate() {
     if (!_canCalculate) {
@@ -233,6 +312,8 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
           tabu: _tabuParams,
           genetic: _geneticParams,
           userSequence: _userSequence,
+          machineSequences: _machinePlan?.machineSequences,
+          userRoutes: _machinePlan?.routes,
         ),
       ),
     );
@@ -539,6 +620,17 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
                                 onEdit: _editUserSequence,
                                 onClear: () =>
                                     setState(() => _userSequence = null),
+                                machinePlan: _machinePlan,
+                                machineNames: {
+                                  for (final list in _machinesByType.values)
+                                    for (final m in list) m.id!: m.name,
+                                },
+                                onEditMachinePlan: _supportsMachinePlan &&
+                                        _machinesByType.isNotEmpty
+                                    ? _editMachinePlan
+                                    : null,
+                                onClearMachinePlan: () =>
+                                    setState(() => _machinePlan = null),
                               ),
                               ),
                             ),
@@ -787,11 +879,22 @@ class _UserSequenceCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onClear;
 
+  /// Secuencia por máquina (y ruta): solo en ambientes donde aplica
+  /// ([onEditMachinePlan] es null en los demás).
+  final MachinePlan? machinePlan;
+  final Map<int, String> machineNames;
+  final VoidCallback? onEditMachinePlan;
+  final VoidCallback onClearMachinePlan;
+
   const _UserSequenceCard({
     required this.order,
     required this.sequence,
     required this.onEdit,
     required this.onClear,
+    required this.machinePlan,
+    required this.machineNames,
+    required this.onEditMachinePlan,
+    required this.onClearMachinePlan,
   });
 
   @override
@@ -800,44 +903,93 @@ class _UserSequenceCard extends StatelessWidget {
     final jobs = order?.orderJobs ?? const [];
     final names = {for (final j in jobs) j.jobId: j.jobName ?? 'Trabajo ${j.jobId}'};
     final active = sequence != null;
+    final plan = machinePlan;
+    final planActive = plan != null;
+    final anyActive = active || planActive;
+
+    // One line per machine: "Torno 1: J1 → J2 → J3".
+    String planSummary() => plan!.machineSequences.entries
+        .map((e) =>
+            '${machineNames[e.key] ?? 'M${e.key}'}: '
+            '${e.value.map((id) => names[id] ?? '#$id').join(' → ')}')
+        .join('   ·   ');
+
     return Container(
       decoration: BoxDecoration(
-        color: active
+        color: anyActive
             ? colorScheme.secondaryContainer.withOpacity(0.4)
             : colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: active ? colorScheme.secondary : colorScheme.outlineVariant,
+          color:
+              anyActive ? colorScheme.secondary : colorScheme.outlineVariant,
         ),
       ),
-      child: ListTile(
-        leading: Icon(Icons.low_priority, color: colorScheme.secondary),
-        title: const Text('Secuencia del usuario',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          active
-              ? sequence!.map((id) => names[id] ?? '#$id').join(' → ')
-              : 'Opcional: ordene usted los trabajos y compárelo con las '
-                  'reglas en el dashboard y el Gantt.',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Wrap(
-          spacing: 4,
-          children: [
-            if (active)
-              IconButton(
-                tooltip: 'Quitar secuencia',
-                icon: const Icon(Icons.close),
-                onPressed: onClear,
-              ),
-            FilledButton.tonalIcon(
-              onPressed: jobs.isEmpty ? null : onEdit,
-              icon: Icon(active ? Icons.edit : Icons.add),
-              label: Text(active ? 'Editar' : 'Definir'),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(Icons.low_priority, color: colorScheme.secondary),
+            title: const Text('Secuencia del usuario',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(
+              active
+                  ? sequence!.map((id) => names[id] ?? '#$id').join(' → ')
+                  : 'Opcional: ordene usted los trabajos y compárelo con las '
+                      'reglas en el dashboard y el Gantt.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+            trailing: Wrap(
+              spacing: 4,
+              children: [
+                if (active)
+                  IconButton(
+                    tooltip: 'Quitar secuencia',
+                    icon: const Icon(Icons.close),
+                    onPressed: onClear,
+                  ),
+                FilledButton.tonalIcon(
+                  onPressed: jobs.isEmpty ? null : onEdit,
+                  icon: Icon(active ? Icons.edit : Icons.add),
+                  label: Text(active ? 'Editar' : 'Definir'),
+                ),
+              ],
+            ),
+          ),
+          // Environments where the sequence changes per machine (and, in the
+          // open shop family, the route is part of the solution).
+          if (onEditMachinePlan != null)
+            ListTile(
+              leading: Icon(Icons.table_rows_outlined,
+                  color: colorScheme.secondary),
+              title: const Text('Secuencia por máquina y ruta',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                planActive
+                    ? planSummary()
+                    : 'Opcional: indique el orden de cada máquina (y, en Open '
+                        'Shop, la ruta de cada job). Se respeta exactamente.',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  if (planActive)
+                    IconButton(
+                      tooltip: 'Quitar secuencia por máquina',
+                      icon: const Icon(Icons.close),
+                      onPressed: onClearMachinePlan,
+                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: jobs.isEmpty ? null : onEditMachinePlan,
+                    icon: Icon(planActive ? Icons.edit : Icons.add),
+                    label: Text(planActive ? 'Editar' : 'Definir'),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

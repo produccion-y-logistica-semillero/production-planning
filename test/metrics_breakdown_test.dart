@@ -157,4 +157,44 @@ void main() {
     final corte = m.stationTardiness.firstWhere((s) => s.stationName == 'Corte');
     expect(corte.lateJobs, 0);
   });
+
+  test('Lmax is negative when every job finishes early, Tmax stays 0', () {
+    final machine = PlanningMachineEntity(
+      1,
+      'M1',
+      [task(1, [seg(mon(8), mon(9))]), task(2, [seg(mon(9), mon(10))])],
+      stationName: 'S',
+    );
+    final m = getMetricts(
+      [machine],
+      [
+        // Job 1 ends 09:00, due 12:00 -> L = -3 h. Job 2 ends 10:00, due
+        // 11:00 -> L = -1 h. The largest lateness is -1 h, not 0.
+        Tuple5(1, mon(8), mon(9), mon(12), 1),
+        Tuple5(2, mon(8), mon(10), mon(11), 1),
+      ],
+      workingSchedule: shift,
+    );
+    expect(m.maxLateness, const Duration(hours: -1));
+    expect(m.maxTardiness, Duration.zero);
+  });
+
+  test('Lmax and Tmax agree with the worst late job', () {
+    final machine = PlanningMachineEntity(
+      1,
+      'M1',
+      [task(1, [seg(mon(8), mon(9))]), task(2, [seg(mon(9), mon(12))])],
+      stationName: 'S',
+    );
+    final m = getMetricts(
+      [machine],
+      [
+        Tuple5(1, mon(8), mon(9), mon(12), 1), // L = -3 h
+        Tuple5(2, mon(8), mon(12), mon(10), 1), // L = +2 h
+      ],
+      workingSchedule: shift,
+    );
+    expect(m.maxLateness, const Duration(hours: 2));
+    expect(m.maxTardiness, const Duration(hours: 2));
+  });
 }

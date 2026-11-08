@@ -281,7 +281,16 @@ const Map<String, DispatchRuleInfo> _catalog = {
         'primero. En Job Shop, Open Shop y Recurrente el orden es una lista '
         'de prioridad: entre las operaciones que pueden empezar primero, va '
         'la del trabajo que está antes en su lista. Se respetan alistamientos '
-        'e interrupciones.',
+        'e interrupciones.\n\n'
+        'En Job Shop, Open Shop y Recurrente (y sus variantes flexibles) '
+        'también puede definir la secuencia POR MÁQUINA: cada máquina '
+        'procesa sus trabajos exactamente en el orden que escribió, aunque '
+        'tenga que esperar, y un trabajo aparece una vez por cada operación '
+        'que tiene en esa máquina (puede repetirla). En Open Shop además '
+        'decide la ruta de cada trabajo, es decir, qué máquina visita en '
+        'cada operación. Si las secuencias se esperan unas a otras en ciclo '
+        '(interbloqueo), el plan se rechaza y se indica qué operaciones '
+        'chocan.',
     goodFor:
         'Comparar el plan que ya usa la planta, o una idea propia, contra '
         'las reglas y metaheurísticas con las mismas métricas.',

@@ -132,6 +132,7 @@ class JobShopAdapter {
         initialMachineState: initialMachineState,
         geneticParams: params.genetic ?? const GeneticParams(),
         userSequence: params.userSequence,
+        machineSequences: params.machineSequences,
       ).output;
     } catch (error, stack) {
       print('JobShopAdapter.jobShopAdapter error: ${error.toString()}');

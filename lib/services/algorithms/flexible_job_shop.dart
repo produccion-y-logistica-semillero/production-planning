@@ -5,6 +5,7 @@ import 'package:production_planning/services/scheduling/dynamic_dispatch.dart';
 import 'package:production_planning/services/scheduling/genetic_engine.dart';
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/services/scheduling/schedule_objective_value.dart';
+import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
 import 'package:production_planning/services/scheduling/user_sequence.dart';
 import 'package:production_planning/shared/types/rnage.dart';
 import 'package:production_planning/entities/task_dependency_entity.dart';
@@ -109,6 +110,10 @@ class FlexibleJobShop {
   /// Job ids in the order the user chose (rule SECUENCIA_USUARIO).
   final List<int>? userSequence;
 
+  /// machineId -> job ids in the order that machine processes them (rule
+  /// SECUENCIA_USUARIO, strict). When set it replaces [userSequence].
+  final Map<int, List<int>>? machineSequences;
+
   FlexibleJobShop(
     this.startDate,
     this.workingSchedule,
@@ -123,6 +128,7 @@ class FlexibleJobShop {
     this.initialMachineState = const {},
     this.geneticParams = const GeneticParams(),
     this.userSequence,
+    this.machineSequences,
   }) {
     _initializeMachineLastSequence();
 
@@ -169,9 +175,52 @@ class FlexibleJobShop {
         scheduleFlexibleJobShopGenetic(settings: geneticParams);
         break;
       case "SECUENCIA_USUARIO":
-        scheduleFlexibleJobShopUserSequence();
+        if (machineSequences != null) {
+          scheduleFlexibleJobShopMachineSequence();
+        } else {
+          scheduleFlexibleJobShopUserSequence();
+        }
         break;
     }
+  }
+
+  /// Operations as the plan builder sees them: the machines each can run on
+  /// and the tasks it waits for (same readiness rule as [_isTaskReady]).
+  List<SeqOperation> _sequenceOperations() => [
+        for (final job in inputJobs)
+          for (int i = 0; i < job.taskSequence.length; i++)
+            SeqOperation(
+              jobId: job.jobId,
+              taskId: job.taskSequence[i].value1,
+              index: i,
+              machines: job.taskSequence[i].value2.keys.toSet(),
+              predecessors: job.dependencies.isEmpty
+                  ? (i > 0 ? {job.taskSequence[i - 1].value1} : <int>{})
+                  : {
+                      for (final d in job.dependencies)
+                        if (d.successor_id == job.taskSequence[i].value1)
+                          d.predecessor_id,
+                    },
+            ),
+      ];
+
+  /// Strict per-machine sequences: each machine processes its jobs exactly
+  /// in the order the user typed (even if it has to wait), and each
+  /// operation runs on the machine whose list it is in. A plan that cannot
+  /// run (wrong counts, deadlock) throws a [MachineSequenceException].
+  void scheduleFlexibleJobShopMachineSequence() {
+    final plan = buildMachineSequencePlan(
+      ops: _sequenceOperations(),
+      machineSequences: machineSequences!,
+    );
+    _schedule(
+      (a, b) {
+        final cmp = (a.job.jobId as int).compareTo(b.job.jobId as int);
+        return cmp != 0 ? cmp : (a.taskId as int).compareTo(b.taskId as int);
+      },
+      forcedMachine: plan.machineOf,
+      machineQueues: plan.queues,
+    );
   }
 
   /// The user's job order as a priority list: among the operations that can
@@ -696,12 +745,23 @@ class FlexibleJobShop {
   /// [forcedMachine] (job id, task id) → machine restricts each operation to
   /// one machine (the genetic algorithm's assignment gene); [quiet] silences
   /// the progress logs during the GA's many decodings.
+  ///
+  /// [machineQueues] machine -> operations in the order the machine must
+  /// process them (strict user sequence): an operation is a candidate only
+  /// when it is the head of its machine's queue, so the machine never takes
+  /// another one first even if it would be idle.
   void _schedule(
     int Function(dynamic, dynamic) comparator, {
     Map<(int, int), int>? forcedMachine,
+    Map<int, List<(int, int)>>? machineQueues,
     bool quiet = false,
   }) {
     if (!quiet) print('FlexibleJobShop._schedule: entering main loop');
+
+    // Private copy: heads are consumed as operations are committed.
+    final Map<int, List<(int, int)>>? queues = machineQueues == null
+        ? null
+        : {for (final e in machineQueues.entries) e.key: [...e.value]};
 
     Map<int, Set<int>> completedTasks = {
       for (var job in inputJobs) job.jobId: <int>{},
@@ -796,6 +856,14 @@ class FlexibleJobShop {
           for (var entry in task.value2.entries) {
             final machineId = entry.key;
             if (onlyMachine != null && machineId != onlyMachine) continue;
+            if (queues != null) {
+              final queue = queues[machineId];
+              if (queue == null ||
+                  queue.isEmpty ||
+                  queue.first != (job.jobId, taskId)) {
+                continue;
+              }
+            }
             final duration = entry.value;
             final machineAvailable =
                 machinesAvailability[machineId] ?? startDate;
@@ -880,6 +948,7 @@ class FlexibleJobShop {
       jobSegments[selected.job.jobId]![selected.taskId] = schedule.segments;
       jobSetupSegments[selected.job.jobId]![selected.taskId] = setupSegments;
 
+      queues?[selected.machineId]?.removeAt(0);
       machinesAvailability[selected.machineId] = adjustedEnd;
       _machineContinuousUsage[selected.machineId] = placed.usageAfter;
       completedTasks[selected.job.jobId]!.add(selected.taskId);
@@ -1103,6 +1172,9 @@ List<Map<String, dynamic>> flexibleJobShopSchedule(
     geneticParams: GeneticParams.fromMap(
         payload['geneticParams'] as Map<dynamic, dynamic>?),
     userSequence: (payload['userSequence'] as List<dynamic>?)?.cast<int>(),
+    machineSequences: (payload['machineSequences'] as Map<dynamic, dynamic>?)
+        ?.map((machine, jobs) => MapEntry(
+            machine as int, (jobs as List<dynamic>).cast<int>())),
   ).output;
 
   return output.map((out) {

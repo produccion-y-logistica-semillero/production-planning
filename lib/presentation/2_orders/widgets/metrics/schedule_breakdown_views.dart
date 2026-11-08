@@ -191,6 +191,7 @@ class JobComplianceView extends StatelessWidget {
               'Terminación',
               'Tardanza',
               'Adelanto',
+              'Retraso (Lj)',
               'Prioridad',
             ],
             [
@@ -202,10 +203,11 @@ class JobComplianceView extends StatelessWidget {
                   fmt.format(j.completion),
                   j.isLate ? _d(j.tardiness) : '—',
                   j.isLate ? '—' : _d(j.earliness),
+                  _d(j.lateness),
                   '${j.priority}',
                 ],
             ],
-            numeric: const {4, 5, 6},
+            numeric: const {4, 5, 6, 7},
           ),
           const SizedBox(height: 24),
           _section(

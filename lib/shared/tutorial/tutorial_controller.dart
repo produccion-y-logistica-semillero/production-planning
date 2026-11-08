@@ -67,10 +67,28 @@ class TutorialTour {
   final String id;
   final String title;
   final List<TutorialStep> steps;
+
+  /// Family the example belongs to (e.g. "Una máquina por estación"). The
+  /// manual groups the tours by it: each tour is an EXAMPLE of its family, not
+  /// "the" tutorial of one environment.
+  final String category;
+
+  /// Environments this example also teaches (the app detects the environment
+  /// from the program, so the same screens apply to all of them).
+  final List<String> environments;
+
+  /// Short description shown on the manual card.
+  final String blurb;
+  final IconData icon;
+
   const TutorialTour({
     required this.id,
     required this.title,
     required this.steps,
+    this.category = '',
+    this.environments = const [],
+    this.blurb = '',
+    this.icon = Icons.school_outlined,
   });
 
   /// Chapter names in order, without repeats.

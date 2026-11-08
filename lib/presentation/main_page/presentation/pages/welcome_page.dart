@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
+import 'package:production_planning/shared/tutorial/tutorial_tours.dart';
 import 'package:provider/provider.dart';
 
 /// First screen: what the platform does and a way into the guided manual.
@@ -67,19 +68,15 @@ class WelcomePage extends StatelessWidget {
                 runSpacing: 16,
                 alignment: WrapAlignment.center,
                 children: [
-                  card(
-                    Icons.linear_scale,
-                    'Tutorial: Flow Shop',
-                    'Guiado paso a paso: 3 lotes, la misma ruta para todos.',
-                    () => _open(context, '/manual', 4, arguments: 0),
-                  ),
-                  card(
-                    Icons.hub_outlined,
-                    'Tutorial: Flexible Job Shop',
-                    'Guiado paso a paso: ejes y bridas, rutas distintas y '
-                        'varias máquinas por estación.',
-                    () => _open(context, '/manual', 4, arguments: 1),
-                  ),
+                  // One card per example family, generated from the tours.
+                  for (int i = 0; i < kTours.length; i++)
+                    card(
+                      kTours[i].icon,
+                      'Ejemplo: ${kTours[i].category.toLowerCase()}',
+                      'Guiado paso a paso, sirve para ${kTours[i].environments.length} '
+                          'ambientes: ${kTours[i].environments.join(', ')}.',
+                      () => _open(context, '/manual', 4, arguments: i),
+                    ),
                   card(
                     Icons.functions,
                     'Notación teórica',

@@ -1,8 +1,15 @@
 // lib/shared/tutorial/tutorial_tours.dart
 //
-// The two guided tours of the in-app manual. Each one builds a real
-// production program from scratch in the tutorial workspace and, on the
-// way, goes through everything the platform can do:
+// The two guided tours of the in-app manual. They are EXAMPLES of two
+// families, not "the tutorial of one environment": the app detects the
+// environment from the program (see environment_detection.dart), so the same
+// screens apply to every environment of the family.
+//   * One machine per station (Single machine, Flow Shop, Job Shop, Open
+//     Shop, Recurrente): illustrated with a Flow Shop.
+//   * Several machines per station (Parallel machines and the flexible
+//     variants): illustrated with a Flexible Job Shop.
+// Each one builds a real production program from scratch in the tutorial
+// workspace and, on the way, goes through everything the platform can do:
 //   * Flow Shop: settings, stations, a route, a program with manual dates,
 //     processing times, product families and setup matrix, duplicated jobs,
 //     rules and the genetic algorithm, metrics, dashboard, Gantt, notation.
@@ -10,6 +17,7 @@
 //     rests, two routes, automatic dates, times per machine, initial
 //     machine states, composite rules, the user's own sequence, Gantt by
 //     job, program management (duplicate, edit, delete) and the glossary.
+import 'package:flutter/material.dart' show Icons;
 import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 
 const _text = TutorialAdvance.text;
@@ -90,12 +98,28 @@ const _c5 = '6 · Resultados';
 
 final TutorialTour flowShopTour = TutorialTour(
   id: 'flow_shop',
-  title: 'Tutorial guiado: Flow Shop',
+  title: 'Ejemplo guiado: una máquina por estación (Flow Shop)',
+  category: 'Una máquina por estación',
+  environments: [
+    'Máquina única',
+    'Flow Shop',
+    'Job Shop',
+    'Open Shop',
+    'Recurrente',
+  ],
+  icon: Icons.linear_scale,
+  blurb: 'Panadería: 3 lotes de pan, todos por Mezcla → Horno → Empaque. '
+      'Configuración, estaciones, una ruta, fechas, tiempos, familias y '
+      'alistamiento, reglas, algoritmo genético, métricas, dashboard, '
+      'Gantt y notación. Lo aprendido aplica igual a los demás ambientes '
+      'con una máquina por estación: solo cambian las rutas del programa.',
   steps: [
     const TutorialStep(
       chapter: _c0,
-      title: '¡Bienvenido al tutorial!',
-      text: 'Vas a programar 3 lotes de pan que pasan todos por Mezcla → '
+      title: '¡Bienvenido al ejemplo!',
+      text: 'Este ejemplo sirve para cualquier ambiente con UNA máquina por '
+          'estación (el ambiente se detecta solo según tus rutas). Aquí '
+          'programarás 3 lotes de pan que pasan todos por Mezcla → '
           'Horno → Empaque (un Flow Shop). Te diré exactamente qué hacer: '
           'lo iluminado es lo único que puedes tocar en cada paso. Trabajas '
           'en un espacio de prueba ("Tutorial"): tus datos reales no se '
@@ -232,7 +256,8 @@ final TutorialTour flowShopTour = TutorialTour(
           chapter: _c1,
           title: 'Mantenimientos',
           text: 'También puedes programar mantenimientos semanales (días, '
-              'hora de inicio y duración). En el caso 2 lo verás en acción.',
+              'hora de inicio y duración). Lo verás en acción en el ejemplo '
+              'de varias máquinas por estación.',
           target: 'machine.maintenance',
           advance: _ok,
         ),
@@ -516,7 +541,10 @@ final TutorialTour flowShopTour = TutorialTour(
       chapter: _c3,
       title: 'Tu programa',
       text: 'Aquí está tu programa con sus trabajos y rutas. La plataforma '
-          'detectó sola el ambiente: FLOW SHOP (todos siguen la misma ruta).',
+          'detectó sola el ambiente: FLOW SHOP (todos siguen la misma ruta y '
+          'cada estación tiene una sola máquina). Si las rutas fueran '
+          'distintas sería JOB SHOP, y si no tuvieran orden, OPEN SHOP: '
+          'tú no eliges el ambiente, lo deduce la plataforma.',
       target: 'order.card.latest',
       advance: _ok,
     ),
@@ -681,12 +709,14 @@ final TutorialTour flowShopTour = TutorialTour(
     ),
     const TutorialStep(
       chapter: _c5,
-      title: '¡Terminaste el caso Flow Shop!',
+      title: '¡Terminaste el ejemplo de una máquina por estación!',
       text: 'Creaste estaciones, una ruta y un programa, lo programaste con '
-          'reglas y un genético y comparaste los resultados. Al terminar '
-          'vuelves a tu workspace. Prueba el caso 2 (Flexible Job Shop) para '
-          'ver varias máquinas por estación, mantenimientos, tu propia '
-          'secuencia y la gestión de programas.',
+          'reglas y un genético y comparaste los resultados. Los mismos '
+          'pasos sirven para Máquina única, Job Shop, Open Shop y '
+          'Recurrente. Al terminar vuelves a tu workspace. Si quieres ver '
+          'varias máquinas por estación, mantenimientos, tu propia '
+          'secuencia y la gestión de programas, haz el ejemplo de varias '
+          'máquinas por estación.',
       advance: _ok,
     ),
   ],
@@ -705,14 +735,31 @@ const _d5 = '6 · Gestión de programas';
 
 final TutorialTour flexibleJobShopTour = TutorialTour(
   id: 'flexible_job_shop',
-  title: 'Tutorial guiado: Flexible Job Shop',
+  title: 'Ejemplo guiado: varias máquinas por estación (Flexible Job Shop)',
+  category: 'Varias máquinas por estación',
+  environments: [
+    'Máquinas paralelas',
+    'Flexible Flow Shop',
+    'Flexible Job Shop',
+    'Flexible Open Shop',
+    'Flexible Recurrente',
+  ],
+  icon: Icons.hub_outlined,
+  blurb: 'Taller: ejes y bridas con rutas distintas y estaciones con 2 '
+      'máquinas. Descansos y mantenimientos, fechas automáticas, '
+      'tiempos por máquina, estado inicial, reglas compuestas, tu propia '
+      'secuencia, Gantt por trabajo y gestión de programas. Aplica igual '
+      'a los demás ambientes con varias máquinas por estación.',
   steps: [
     const TutorialStep(
       chapter: _d0,
-      title: '¡Bienvenido al caso 2!',
-      text: 'Un taller fabrica ejes y bridas. Cada pieza tiene su propia '
-          'ruta y algunas estaciones tienen 2 máquinas: es un Flexible Job '
-          'Shop. Trabajas en el espacio "Tutorial"; tus datos no se tocan.',
+      title: '¡Bienvenido al ejemplo!',
+      text: 'Este ejemplo sirve para cualquier ambiente con VARIAS máquinas '
+          'en alguna estación (máquinas paralelas y las variantes '
+          'flexibles). Un taller fabrica ejes y bridas: cada pieza tiene su '
+          'propia ruta y algunas estaciones tienen 2 máquinas, así que es '
+          'un Flexible Job Shop. Trabajas en el espacio "Tutorial"; tus '
+          'datos no se tocan.',
       advance: _ok,
     ),
     const TutorialStep(
@@ -1071,7 +1118,9 @@ final TutorialTour flexibleJobShopTour = TutorialTour(
       chapter: _d2,
       title: 'Ambiente detectado',
       text: 'Rutas distintas y estaciones con varias máquinas: la plataforma '
-          'lo clasificó como FLEXIBLE JOB SHOP (FJc en la notación).',
+          'lo clasificó como FLEXIBLE JOB SHOP (FJc en la notación). La '
+          'regla es general: una estación con más de una máquina da la '
+          'variante flexible de cada ambiente.',
       target: 'order.card.latest',
       advance: _ok,
     ),
@@ -1213,7 +1262,7 @@ final TutorialTour flexibleJobShopTour = TutorialTour(
     ),
     const TutorialStep(
       chapter: _d5,
-      title: '¡Completaste los tutoriales!',
+      title: '¡Completaste el ejemplo!',
       text: 'Ya conoces toda la plataforma: estaciones, máquinas, '
           'mantenimientos, rutas, programas, alistamientos, reglas, '
           'metaheurísticas, tu propia secuencia, métricas, Gantt, gestión y '

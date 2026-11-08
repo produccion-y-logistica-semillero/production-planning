@@ -348,10 +348,20 @@ const List<NotationEntry> kNotation = [
     contexts: {_k, _p},
   ),
   NotationEntry(
-    symbol: 'Tmax / Lmax',
-    name: 'Tardanza / retraso máximo',
-    definition: 'El peor caso entre todos los trabajos.',
-    formula: 'Tmax = max Tj ; Lmax = max Lj',
+    symbol: 'Tmax',
+    name: 'Tardanza máxima',
+    definition: 'El mayor retraso de un solo trabajo; 0 si todos llegan a '
+        'tiempo.',
+    formula: 'Tmax = max Tj',
+    section: NotationSection.objectives,
+    contexts: {_k},
+  ),
+  NotationEntry(
+    symbol: 'Lmax',
+    name: 'Retraso máximo',
+    definition: 'El mayor retraso con signo entre los trabajos. Puede ser '
+        'negativo: indica el margen del trabajo más ajustado.',
+    formula: 'Lmax = max Lj',
     section: NotationSection.objectives,
     contexts: {_k},
   ),
@@ -500,7 +510,9 @@ const List<NotationEntry> kNotation = [
     symbol: 'π usuario',
     name: 'Secuencia del usuario',
     definition: 'Permutación de trabajos dada por el usuario; en talleres se '
-        'usa como lista de prioridad.',
+        'usa como lista de prioridad. En Job Shop, Open Shop y Recurrente '
+        'también puede darse una secuencia por máquina (π_i para cada Mi) y, '
+        'en Open Shop, la ruta de cada trabajo.',
     formula: 'π = (j[1], j[2], …, j[n])',
     section: NotationSection.rules,
     contexts: {_p},

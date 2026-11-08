@@ -34,7 +34,10 @@ class MetricsPage extends StatelessWidget {
               _buildMetricRow('Total trabajos', metrics.totalJobs.toString()),
 
               _buildMetricRow(
-                  'Tardanza máxima', _formatDuration(metrics.maxTardiness)),
+                  'Tardanza máxima (Tmax)',
+                  _formatDuration(metrics.maxTardiness)),
+              _buildMetricRow('Retraso máximo (Lmax)',
+                  _formatDuration(metrics.maxLateness)),
               _buildMetricRow('Flujo promedio',
                   _formatDuration(metrics.avarageProcessingTime)),
               _buildMetricRow('Tardanza promedio',
@@ -104,8 +107,10 @@ class MetricsPage extends StatelessWidget {
   }
 
   String _formatDuration(Duration duration) {
-    final d = duration.isNegative ? duration.abs() : duration;
-    return '${d.inHours}h ${d.inMinutes.remainder(60)}m ${d.inSeconds.remainder(60)}s';
+    // Keep the sign: Lmax is negative when every job finishes early.
+    final d = duration.abs();
+    final sign = duration.isNegative ? '-' : '';
+    return '$sign${d.inHours}h ${d.inMinutes.remainder(60)}m ${d.inSeconds.remainder(60)}s';
   }
   }
 

@@ -50,11 +50,16 @@ void main() {
     });
   });
 
-  testWidgets('manual offers both guided tours', (tester) async {
+  testWidgets('manual offers the two examples grouped by family',
+      (tester) async {
     await _pump(tester, const ManualPage());
-    expect(find.text('Tutorial guiado: Flow Shop'), findsOneWidget);
-    expect(find.text('Tutorial guiado: Flexible Job Shop'), findsOneWidget);
+    // Family headers: examples, not one tutorial per environment.
+    expect(find.text('Una máquina por estación'), findsOneWidget);
+    expect(find.text('Varias máquinas por estación'), findsOneWidget);
     expect(find.text('Comenzar tutorial'), findsNWidgets(2));
+    // The environments each example also teaches are listed on the card.
+    expect(find.text('Open Shop'), findsOneWidget);
+    expect(find.text('Flexible Open Shop'), findsOneWidget);
   });
 
   testWidgets('glossary search finds Johnson', (tester) async {

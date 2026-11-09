@@ -1,15 +1,11 @@
-import 'package:production_planning/shared/date_time_pickers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_side_menu/flutter_side_menu.dart';
-import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/presentation/main_page/presentation/widgets/high_order_widgets/main_navigator.dart';
-import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/presentation/main_page/presentation/widgets/settings/settings_dialog.dart';
 import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 
 class MainPage extends StatelessWidget {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -75,36 +71,18 @@ class MainPage extends StatelessWidget {
                     ),
                   ),
                   items: [
+                    // Workspace, Horario and Formato de tiempos live in one
+                    // dialog with a section for each.
                     SideMenuItemDataTile(
-                      title: 'Workspace',
-                      onTap: () => _showWorkspaceDialog(context),
+                      title: 'Configuración',
+                      onTap: () => showSettingsDialog(context),
                       titleStyle:
                           TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: Icon(Icons.workspaces_outline,
-                          color: onPrimaryContainer),
-                      isSelected: false,
-                    ),
-                    SideMenuItemDataTile(
-                      title: 'Horario',
-                      onTap: () => _showScheduleDialog(context),
-                      titleStyle:
-                          TextStyle(color: onPrimaryContainer, fontSize: 18),
+                      hoverColor: primaryFixed.withValues(alpha: 0.15),
                       icon: TutorialTarget(
-                          id: 'menu.horario',
+                          id: 'menu.config',
                           inflate: _menuRow,
-                          child: Icon(Icons.schedule, color: onPrimaryContainer)),
-                      isSelected: false,
-                    ),
-                    SideMenuItemDataTile(
-                      title: 'Formato de tiempos',
-                      onTap: () => _showTimeFormatDialog(context),
-                      titleStyle:
-                          TextStyle(color: onPrimaryContainer, fontSize: 18),
-                      icon: TutorialTarget(
-                          id: 'menu.formato',
-                          inflate: _menuRow,
-                          child: Icon(Icons.timer_outlined,
-                              color: onPrimaryContainer)),
+                          child: Icon(Icons.tune, color: onPrimaryContainer)),
                       isSelected: false,
                     ),
                     const SideMenuItemDataDivider(
@@ -216,232 +194,4 @@ class MainPage extends StatelessWidget {
 
   /// Lights the whole menu row in the tutorial, not only its icon.
   static const EdgeInsets _menuRow = EdgeInsets.fromLTRB(8, 8, 190, 8);
-
-  Future<void> _showWorkspaceDialog(BuildContext context) async {
-    final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/workspace.txt');
-    List<String> options = [];
-    String currentWorkspace = 'default';
-
-    if (await file.exists()) {
-      List<String> lines = await file.readAsLines();
-      if (lines.isNotEmpty) {
-        currentWorkspace = lines[0];
-        options = lines.sublist(1);
-      }
-    }
-
-    String? selectedWorkspace = currentWorkspace;
-    TextEditingController newWorkspaceController = TextEditingController();
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Selecciona o crea un workspace'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (options.isNotEmpty)
-                DropdownButton<String>(
-                  value: selectedWorkspace,
-                  items: options.map((option) {
-                    return DropdownMenuItem<String>(
-                      value: option,
-                      child: Text(option),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    selectedWorkspace = value;
-                  },
-                ),
-              TextField(
-                controller: newWorkspaceController,
-                decoration: const InputDecoration(hintText: 'Nuevo workspace'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                if (newWorkspaceController.text.isNotEmpty) {
-                  selectedWorkspace = newWorkspaceController.text;
-                  options.add(newWorkspaceController.text);
-                }
-
-                if (selectedWorkspace != null) {
-                  await file.writeAsString(
-                      '$selectedWorkspace\n${options.join('\n')}');
-
-                  Navigator.of(context).pop();
-                  _showRestartMessage(context);
-                }
-              },
-              child: const Text('Enviar'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancelar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showScheduleDialog(BuildContext context) async {
-    TimeOfDay startTime = START_SCHEDULE;
-    TimeOfDay endTime = END_SCHEDULE;
-
-    await showDialog(
-      context: context,
-      // StatefulBuilder: the chosen hours are shown as soon as they are
-      // picked, not only after reopening the dialog.
-      builder: (BuildContext context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Configuración de Horario'),
-          content: TutorialTarget(
-            id: 'horario.content',
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: const Text('Hora de inicio'),
-                trailing: Text(formatTimeOfDay(startTime)),
-                onTap: () async {
-                  final pickedTime = await pickTime(context, initial: startTime);
-
-                  if (pickedTime != null) {
-                    setDialogState(() => startTime = pickedTime);
-                  }
-                },
-              ),
-              ListTile(
-                title: const Text('Hora de fin'),
-                trailing: Text(formatTimeOfDay(endTime)),
-                onTap: () async {
-                  final pickedTime = await pickTime(context, initial: endTime);
-                  if (pickedTime != null) {
-                    setDialogState(() => endTime = pickedTime);
-                  }
-                },
-              ),
-            ],
-          ),
-          ),
-          actions: [
-            TutorialTarget(
-              id: 'horario.save',
-              child: TextButton(
-              onPressed: () async {
-                START_SCHEDULE = startTime;
-                END_SCHEDULE = endTime;
-
-                final dir = await getApplicationSupportDirectory();
-                final file = File('${dir.path}/schedule.txt');
-                await file.writeAsString(
-                  '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}\n'
-                  '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
-                );
-
-                Navigator.of(context).pop();
-              },
-              child: const Text('Guardar'),
-            ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancelar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// All duration fields (processing time, setup matrix, continuous use,
-  /// rest, maintenance) are typed and shown in the chosen format. Durations
-  /// are still saved in whole minutes.
-  Future<void> _showTimeFormatDialog(BuildContext context) async {
-    TimeInputFormat selected = timeInputFormat.value;
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('Formato de tiempos'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Cómo se escriben y se muestran los tiempos de proceso, '
-                  'alistamiento, uso continuo, descanso y mantenimientos.',
-                ),
-                const SizedBox(height: 12),
-                RadioListTile<TimeInputFormat>(
-                  title: const Text('Todo en minutos'),
-                  subtitle: const Text('Ejemplo: 90'),
-                  value: TimeInputFormat.minutes,
-                  groupValue: selected,
-                  onChanged: (v) => setState(() => selected = v!),
-                ),
-                RadioListTile<TimeInputFormat>(
-                  title: const Text('Todo en hh:mm:ss'),
-                  subtitle: const Text(
-                      'Ejemplo: 01:30:00. Los segundos se redondean al minuto '
-                      'al guardar.'),
-                  value: TimeInputFormat.hms,
-                  groupValue: selected,
-                  onChanged: (v) => setState(() => selected = v!),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  timeInputFormat.value = selected;
-                  final dir = await getApplicationSupportDirectory();
-                  await File('${dir.path}/$timeFormatFileName')
-                      .writeAsString(timeFormatToStorage(selected));
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-                child: const Text('Guardar'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancelar'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showRestartMessage(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Se requiere reinicio'),
-          content: const Text(
-              'La aplicacion requiere reiniciar para aplicar los cambios'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                exit(0);
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }

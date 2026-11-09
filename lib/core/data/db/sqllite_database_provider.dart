@@ -26,16 +26,27 @@ class SQLLiteDatabaseProvider {
     ''');
   }
 
+  /// Schema version of every workspace database. A file with a higher
+  /// user_version was made by a newer build and cannot be imported.
+  static const int schemaVersion = 16;
+
+  /// The connection currently open (the active workspace), or null.
+  static Database? get current => _database;
+
+  /// Name of the database file of [workspace] inside the app-support folder.
+  static String fileNameFor(String workspace) =>
+      '${workspace.replaceAll(' ', '')}_v3.db';
+
   static Future<Database> open(String workspace) async {
     final docsDir = await getApplicationSupportDirectory();
     final databasePath = docsDir.path;
-    final path = join(databasePath, '${workspace.replaceAll(' ', '')}_v3.db');
+    final path = join(databasePath, fileNameFor(workspace));
 
     print('Database path: $path');
 
     _database = await openDatabase(
       path,
-      version: 16,
+      version: schemaVersion,
       onCreate: (Database db, int version) async {
         final batch = db.batch();
 
@@ -1784,6 +1795,15 @@ class SQLLiteDatabaseProvider {
       );
     ''');
 
+    // Settings that belong to the workspace and travel with it when it is
+    // exported: the work shift, the time format and the export metadata.
+    await _database!.execute('''
+      CREATE TABLE IF NOT EXISTS workspace_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+      );
+    ''');
+
     return _database!;
   }
 
@@ -1844,8 +1864,7 @@ class SQLLiteDatabaseProvider {
   /// tutorial from a clean workspace). Close the connection first.
   static Future<void> deleteWorkspace(String workspace) async {
     final docsDir = await getApplicationSupportDirectory();
-    final file = File(
-        join(docsDir.path, '${workspace.replaceAll(' ', '')}_v3.db'));
+    final file = File(join(docsDir.path, fileNameFor(workspace)));
     if (await file.exists()) await file.delete();
   }
 }

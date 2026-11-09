@@ -94,6 +94,29 @@ class ManualPage extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          Text('Trabajar el mismo workspace en otro equipo',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 0,
+            color: theme.colorScheme.surfaceContainerLow,
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Abre "Configuración" › "Workspace". En el equipo donde '
+                'trabajaste pulsa "Exportar…" y guarda el archivo .ppws; '
+                'envíalo como quieras (correo, USB, nube). En el otro equipo '
+                'pulsa "Importar desde archivo…" y elígelo, aunque esté en '
+                'Descargas: la aplicación guarda una copia propia (el archivo '
+                'oficial, cuya ubicación te muestra) y sigues trabajando allí '
+                'con los mismos datos, horario y formato de tiempos. Para '
+                'volver, exporta en ese equipo e importa en el primero '
+                'eligiendo "Reemplazar".',
+              ),
+            ),
+          ),
         ],
       ),
     );

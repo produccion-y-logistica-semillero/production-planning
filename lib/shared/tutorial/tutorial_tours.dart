@@ -128,32 +128,48 @@ final TutorialTour flowShopTour = TutorialTour(
     ),
     const TutorialStep(
       chapter: _c0,
+      title: 'Configuración',
+      text: 'Abre "Configuración": allí están el workspace, el horario de la '
+          'planta y el formato de los tiempos.',
+      target: 'menu.config',
+    ),
+    const TutorialStep(
+      chapter: _c0,
       title: 'El horario de la planta',
-      text: 'Abre "Horario": es el turno en que trabajan las máquinas. Lo '
+      text: 'Elige "Horario": es el turno en que trabajan las máquinas. Lo '
           'que no cabe en el turno sigue al día siguiente.',
-      target: 'menu.horario',
+      target: 'config.nav.horario',
     ),
     const TutorialStep(
       chapter: _c0,
       title: 'Inicio y fin del turno',
-      text: 'Aquí cambias la hora de inicio y de fin (se escriben HH:mm). '
-          'Para el tutorial deja las que están.',
+      text: 'Pulsa una hora para cambiarla (se escribe HH:mm) y luego '
+          '"Guardar". El horario es de cada workspace y viaja con él. Para '
+          'el tutorial deja las que están.',
       target: 'horario.content',
       advance: _ok,
     ),
     const TutorialStep(
       chapter: _c0,
-      title: 'Guardar el horario',
-      text: 'Pulsa "Guardar".',
-      target: 'horario.save',
+      title: 'Formato de tiempos',
+      text: 'Elige "Formato de tiempos".',
+      target: 'config.nav.formato',
     ),
     const TutorialStep(
       chapter: _c0,
-      title: 'Formato de tiempos',
-      text: 'Desde aquí eliges si los tiempos se escriben en minutos (90) o '
-          'en hh:mm:ss (01:30:00). Durante el tutorial usamos minutos.',
-      target: 'menu.formato',
+      title: 'Minutos u hh:mm:ss',
+      text: 'Aquí eliges si los tiempos se escriben en minutos (90) o en '
+          'hh:mm:ss (01:30:00). Durante el tutorial usamos minutos.',
+      target: 'formato.content',
       advance: _ok,
+    ),
+    const TutorialStep(
+      chapter: _c0,
+      title: 'Cerrar la configuración',
+      text: 'En "Workspace" puedes crear otros workspaces y exportarlos o '
+          'importarlos para seguir en otro equipo. Ahora cierra la '
+          'configuración.',
+      target: 'config.close',
     ),
     const TutorialStep(
       chapter: _c0,

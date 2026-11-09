@@ -63,6 +63,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.6
   intl: ^0.19.0
+  #native open/save dialogs to export and import workspaces (.ppws)
+  file_selector: ^1.0.4
 
 dev_dependencies:
   flutter_test:

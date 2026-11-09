@@ -110,13 +110,19 @@ void main() {
     String step() => tutorial.step!.title;
 
     await next(); // welcome
+    expect(step(), 'Configuración');
+    await tapTarget('menu.config');
     expect(step(), 'El horario de la planta');
-    await tapTarget('menu.horario');
+    await tapTarget('config.nav.horario');
     expect(step(), 'Inicio y fin del turno');
     await next();
-    await tapTarget('horario.save');
     expect(step(), 'Formato de tiempos');
+    await tapTarget('config.nav.formato');
+    expect(step(), 'Minutos u hh:mm:ss');
     await next();
+    expect(step(), 'Cerrar la configuración');
+    await tapTarget('config.close');
+    expect(step(), 'Notación teórica');
     await tapTarget('menu.notacion');
     expect(step(), 'Estaciones de trabajo');
     await tapTarget('menu/machines');

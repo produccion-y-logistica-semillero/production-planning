@@ -7,6 +7,8 @@ import 'package:production_planning/presentation/main_page/presentation/provider
 import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/tutorial/tutorial_layer.dart';
 import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
+import 'package:production_planning/shared/workspace/workspace_session.dart'
+    show applyOpenWorkspacePreferences, openWorkspaceName;
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -39,12 +41,12 @@ Future<void> main() async {
     await scheduleFile.writeAsString('08:00\n16:00');
   }
 
-  // Format of every duration field: hh:mm:ss or minutes ("Formato de tiempos").
   final notationFile = File('${dir.path}/$notationFileName');
   if (await notationFile.exists()) {
     showNotation.value = (await notationFile.readAsString()).trim() == '1';
   }
 
+  // Format of every duration field: hh:mm:ss or minutes ("Formato de tiempos").
   final timeFormatFile = File('${dir.path}/$timeFormatFileName');
   if (await timeFormatFile.exists()) {
     timeInputFormat.value =
@@ -52,6 +54,11 @@ Future<void> main() async {
   }
 
   await initDependencies(workspace);
+  openWorkspaceName.value = workspace;
+  // The shift and the time format belong to the workspace (they travel
+  // with it to another computer); the files above are only the starting
+  // point of a workspace that has none yet.
+  await applyOpenWorkspacePreferences();
   runApp(const MyApp());
 }
 

@@ -16,10 +16,9 @@ class JobDaoSQLlite implements JobDao {
   // constraint with a harmless placeholder — nothing reads this column
   // anymore. Fresh installs never have the column, so they skip this.
   bool? _hasAmountColumn;
-
-  Future<bool> _jobsTableHasAmountColumn() async {
+  Future<bool> _jobsTableHasAmountColumn([DatabaseExecutor? executor]) async {
     if (_hasAmountColumn != null) return _hasAmountColumn!;
-    final info = await db.rawQuery('PRAGMA table_info(jobs);');
+    final info = await (executor ?? db).rawQuery('PRAGMA table_info(jobs);');
     _hasAmountColumn = info.any((row) => row['name'] == 'amount');
     return _hasAmountColumn!;
   }
@@ -31,7 +30,6 @@ class JobDaoSQLlite implements JobDao {
       where: 'order_id = ?',
       whereArgs: [orderId],
     );
-
 
     // Cargar preemption matrix para cada job
     List<JobModel> jobs = [];
@@ -89,7 +87,8 @@ class JobDaoSQLlite implements JobDao {
       if (statesMaps.isNotEmpty) {
         machineFinalStates = {};
         for (var sm in statesMaps) {
-          machineFinalStates[sm['machine_type_id'] as int] = sm['state_char'] as String;
+          machineFinalStates[sm['machine_type_id'] as int] =
+              sm['state_char'] as String;
         }
       }
 
@@ -113,7 +112,7 @@ class JobDaoSQLlite implements JobDao {
   Future<void> insertJob(JobEntity job, int orderId,
       {DatabaseExecutor? executor}) async {
     try {
-      final hasAmountColumn = await _jobsTableHasAmountColumn();
+      final hasAmountColumn = await _jobsTableHasAmountColumn(executor);
       // When an outer transaction is already running (e.g. updateOrder's
       // delete-then-reinsert), write onto it instead of opening a nested
       // one — sqflite Transaction has no .transaction() of its own.
@@ -129,8 +128,8 @@ class JobDaoSQLlite implements JobDao {
     }
   }
 
-  Future<void> _insertJobRows(DatabaseExecutor txn, JobEntity job,
-      int orderId, bool hasAmountColumn) async {
+  Future<void> _insertJobRows(DatabaseExecutor txn, JobEntity job, int orderId,
+      bool hasAmountColumn) async {
     // map job data for data base
     final jobMap = {
       'sequence_id': job.sequence!.id,

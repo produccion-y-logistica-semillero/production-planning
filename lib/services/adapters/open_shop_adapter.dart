@@ -9,6 +9,9 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/entities/tabu_objective.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
@@ -130,6 +133,8 @@ class OpenShopAdapter {
     final Map<int, String> initialMachineState =
         resolveMachineInitialStates(machines, order.machineInitialStates);
 
+    final TabuParams effectiveTabuParams = params.tabu ?? const TabuParams();
+
     // Ejecutar el algoritmo Open Shop en un isolate y transformar la salida en PlanningMachineEntity
     final payload = <String, dynamic>{
       'startDate': order.regDate.millisecondsSinceEpoch,
@@ -189,11 +194,39 @@ class OpenShopAdapter {
       'userSequence': params.userSequence,
       'machineSequences': params.machineSequences,
       'userRoutes': params.userRoutes,
+      // TabuParams en primitivos, como el resto del payload del isolate.
+      'tabuParams': {
+        'maxIterations': effectiveTabuParams.maxIterations,
+        'intraAttempts': effectiveTabuParams.intraAttempts,
+        'interJobSamples': effectiveTabuParams.interJobSamples,
+        'maxDestinations': effectiveTabuParams.maxDestinations,
+        'timeBudgetMs': effectiveTabuParams.timeBudgetMs,
+        'seed': effectiveTabuParams.seed,
+        'randomStart': effectiveTabuParams.randomStart,
+        'objective': effectiveTabuParams.objective.name,
+      },
     };
 
     List<Map<String, dynamic>> rawOutput;
+    TabuRunStats? tabuStats;
     try {
-      rawOutput = await compute(openShopSchedule, payload);
+      final Map<String, dynamic> rawResult =
+          await compute(openShopSchedule, payload);
+      rawOutput = (rawResult['output'] as List).cast<Map<String, dynamic>>();
+      final rawStats = rawResult['tabuStats'] as Map<dynamic, dynamic>?;
+      tabuStats = rawStats == null
+          ? null
+          : TabuRunStats(
+              iterations: rawStats['iterations'] as int,
+              maxIterations: rawStats['maxIterations'] as int,
+              elapsedMs: rawStats['elapsedMs'] as int,
+              timeBudgetMs: rawStats['timeBudgetMs'] as int,
+              objective:
+                  TabuObjective.values.byName(rawStats['objective'] as String),
+              initialValue: rawStats['initialValue'] as int,
+              bestValue: rawStats['bestValue'] as int,
+              stoppedByTime: rawStats['stoppedByTime'] as bool,
+            );
     } catch (error, stack) {
       print(
           'OpenShopAdapter.openShopAdapter compute error: ${error.toString()}');
@@ -304,7 +337,7 @@ class OpenShopAdapter {
       );
     }).toList();
 
-    // Calcular métricas
+    // Calcular métricas (con las estadísticas del TABU si la regla fue TABU)
     final metrics = getMetricts(
       planningMachines,
       output.map((out) {
@@ -312,6 +345,7 @@ class OpenShopAdapter {
         return Tuple5(
             out.jobId, job.availableDate, out.endTime, out.dueDate, job.priority);
       }).toList(),
+      tabuStats: tabuStats,
     );
 
     return Tuple2(planningMachines, metrics);

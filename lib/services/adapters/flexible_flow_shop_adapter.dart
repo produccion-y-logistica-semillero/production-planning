@@ -15,6 +15,8 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/entities/planning_machine_entity.dart';
 import 'package:production_planning/entities/planning_task_entity.dart';
+import 'package:production_planning/entities/tabu_params.dart';
+import 'package:production_planning/entities/tabu_run_stats.dart';
 import 'package:production_planning/repositories/interfaces/machine_repository.dart';
 import 'package:production_planning/repositories/interfaces/order_repository.dart';
 import 'package:production_planning/services/adapters/metrics.dart';
@@ -132,8 +134,9 @@ class FlexibleFlowShopAdapter {
     }
 
     List<FlexibleFlowOutput> output;
+    TabuRunStats? tabuStats;
     try {
-      output = FlexibleFlowShop(
+      final FlexibleFlowShop flexible = FlexibleFlowShop(
         order.regDate,
         Tuple2(START_SCHEDULE, END_SCHEDULE),
         inputJobs,
@@ -147,7 +150,10 @@ class FlexibleFlowShopAdapter {
         machineRestTime: machineRestTimeMap,
         geneticParams: params.genetic ?? const GeneticParams(),
         userSequence: params.userSequence,
-      ).output;
+        tabuParams: params.tabu ?? const TabuParams(),
+      );
+      output = flexible.output;
+      tabuStats = flexible.tabuStats;
     } catch (error, stack) {
       print('FlexibleFlowShopAdapter error: $error');
       print(stack.toString());
@@ -210,6 +216,7 @@ class FlexibleFlowShopAdapter {
           job.priority);
     }).toList();
 
-    return Tuple2(planningMachines, getMetricts(planningMachines, jobsDates));
+    return Tuple2(planningMachines,
+        getMetricts(planningMachines, jobsDates, tabuStats: tabuStats));
   }
 }

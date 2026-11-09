@@ -11,6 +11,7 @@ import 'package:production_planning/presentation/0_machines/bloc/machines_bloc/m
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/add_machine_dialog.dart';
 import 'package:production_planning/presentation/0_machines/widgets/low_order_widgets/machine_display_tile.dart';
 import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 // Changed to StatefulWidget to manage list expanded state
 class MachinesListView extends StatefulWidget {
@@ -28,7 +29,9 @@ class _MachinesListViewState extends State<MachinesListView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ListView.builder(
+    // Stations enter in a short cascade (once each) and lift on hover.
+    return EntranceScope(
+        child: ListView.builder(
       // Short list: build every row, so the guided tutorial can find and
       // scroll to any of them (a lazy list only builds the visible ones).
       cacheExtent: 100000,
@@ -36,146 +39,159 @@ class _MachinesListViewState extends State<MachinesListView> {
       itemBuilder: (context, index) {
         final machineType = widget.machineTypes[index];
 
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.15),
-                blurRadius: 6,
-                offset: const Offset(2, 3),
-              ),
-            ],
-            border: Border.all(
-              color: colorScheme.outlineVariant,
-              width: 0.75,
-            ),
-          ),
-          child: BlocProvider(
-            create: (_) => GetIt.instance.get<MachineBloc>(),
-            child: BlocBuilder<MachineBloc, MachinesState>(
-              builder: (context, state) {
-                List<Widget> children = [];
-
-                if (state is MachinesRetrieving) {
-                  children = [const ListTile(title: Text("Loading..."))];
-                } else if (state is MachinesRetrievingError) {
-                  children = [const ListTile(title: Text("Error loading"))];
-                } else if (state is MachinesRetrievingSuccess ||
-                    state is MachineDeletionSuccess ||
-                    state is MachineDeletionError) {
-                  children = state.machines!
-                      .map(
-                        (machine) => MachineDisplayTile(
-                          machine,
-                          () => _deleteMachine(
-                              context, machine.id!, machineType.id!),
-                          () => _editMachine(
-                              context, machine, machineType.id!),
-                        ),
-                      )
-                      .toList();
-                } else {
-                  children = [const ListTile(title: Text(""))];
-                }
-
-                return Row(
-                  children: [
-                    Expanded(
-                      flex: 8,
-                      child: TutorialTarget(
-                        id: 'station:${machineType.name}',
-                        child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: ExpansionTile(
-                          title: Text(
-                            machineType.name,
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            machineType.description,
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          leading: Icon(
-                            Icons.settings_applications_sharp,
-                            color: colorScheme.primary,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          collapsedBackgroundColor:
-                              colorScheme.surfaceContainerLow,
-                          backgroundColor: colorScheme.surfaceContainerHigh,
-                          onExpansionChanged: (value) {
-                            setState(() {
-                              if (value) {
-                                expandedTypes.add(machineType.id!);
-                                BlocProvider.of<MachineBloc>(context)
-                                    .retrieveMachines(machineType.id!);
-                              } else {
-                                expandedTypes.remove(machineType.id!);
-                                BlocProvider.of<MachineBloc>(context)
-                                    .machinesExpansionCollapses();
-                              }
-                            });
-                          },
-                          children: children,
-                        ),
-                      ),
-                      ),
-                    ),
-                    // The two actions take their natural width (they used to
-                    // get 1/9 of the row, which on a phone is less than two
-                    // icon buttons need); the tile above takes the rest.
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TutorialTarget(
-                            id: 'station.addMachine:${machineType.name}',
-                            child: IconButton(
-                              onPressed: () => _addNewMachine(
-                                context,
-                                machineType.id!,
-                                machineType.name,
-                              ),
-                              icon: Icon(Icons.add, color: colorScheme.primary),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _deleteMachineType(
-                              context,
-                              machineType.id!,
-                              index,
-                            ),
-                            icon: Icon(Icons.delete, color: colorScheme.error),
-                          ),
-                        ],
-                      ),
+        return FadeSlideIn.staggered(
+          index: index,
+          id: 'station-${machineType.id}',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            child: HoverLift(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.shadow.withValues(alpha: 0.15),
+                      blurRadius: 6,
+                      offset: const Offset(2, 3),
                     ),
                   ],
-                );
-              },
+                  border: Border.all(
+                    color: colorScheme.outlineVariant,
+                    width: 0.75,
+                  ),
+                ),
+                child: BlocProvider(
+                  create: (_) => GetIt.instance.get<MachineBloc>(),
+                  child: BlocBuilder<MachineBloc, MachinesState>(
+                    builder: (context, state) {
+                      List<Widget> children = [];
+
+                      if (state is MachinesRetrieving) {
+                        children = [const ListTile(title: Text("Loading..."))];
+                      } else if (state is MachinesRetrievingError) {
+                        children = [
+                          const ListTile(title: Text("Error loading"))
+                        ];
+                      } else if (state is MachinesRetrievingSuccess ||
+                          state is MachineDeletionSuccess ||
+                          state is MachineDeletionError) {
+                        children = state.machines!
+                            .map(
+                              (machine) => MachineDisplayTile(
+                                machine,
+                                () => _deleteMachine(
+                                    context, machine.id!, machineType.id!),
+                                () => _editMachine(
+                                    context, machine, machineType.id!),
+                              ),
+                            )
+                            .toList();
+                      } else {
+                        children = [const ListTile(title: Text(""))];
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(
+                            flex: 8,
+                            child: TutorialTarget(
+                              id: 'station:${machineType.name}',
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: ExpansionTile(
+                                  title: Text(
+                                    machineType.name,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurface,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    machineType.description,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  leading: Icon(
+                                    Icons.settings_applications_sharp,
+                                    color: colorScheme.primary,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  collapsedBackgroundColor:
+                                      colorScheme.surfaceContainerLow,
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHigh,
+                                  onExpansionChanged: (value) {
+                                    setState(() {
+                                      if (value) {
+                                        expandedTypes.add(machineType.id!);
+                                        BlocProvider.of<MachineBloc>(context)
+                                            .retrieveMachines(machineType.id!);
+                                      } else {
+                                        expandedTypes.remove(machineType.id!);
+                                        BlocProvider.of<MachineBloc>(context)
+                                            .machinesExpansionCollapses();
+                                      }
+                                    });
+                                  },
+                                  children: children,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // The two actions take their natural width (they used to
+                          // get 1/9 of the row, which on a phone is less than two
+                          // icon buttons need); the tile above takes the rest.
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TutorialTarget(
+                                  id: 'station.addMachine:${machineType.name}',
+                                  child: IconButton(
+                                    onPressed: () => _addNewMachine(
+                                      context,
+                                      machineType.id!,
+                                      machineType.name,
+                                    ),
+                                    icon: Icon(Icons.add,
+                                        color: colorScheme.primary),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _deleteMachineType(
+                                    context,
+                                    machineType.id!,
+                                    index,
+                                  ),
+                                  icon: Icon(Icons.delete,
+                                      color: colorScheme.error),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
             ),
           ),
         );
       },
-    );
+    ));
   }
 
   // ─── Dialogs ───────────────────────────────────────────────────────────────
 
   void _deleteMachineType(
       BuildContext context, int machineId, int index) async {
-    await showDialog(
+    await showAppDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -204,7 +220,7 @@ class _MachinesListViewState extends State<MachinesListView> {
 
   void _deleteMachine(
       BuildContext context, int machineId, int machineTypeId) async {
-    await showDialog(
+    await showAppDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -258,7 +274,7 @@ class _MachinesListViewState extends State<MachinesListView> {
       return double.tryParse(normalized);
     }
 
-    await showDialog(
+    await showAppDialog(
       context: context,
       builder: (dialogContext) {
         return AddMachineDialog(
@@ -273,10 +289,8 @@ class _MachinesListViewState extends State<MachinesListView> {
           startModeNotifier: startModeNotifier,
           // scheduledInactivities is passed from the dialog to the BLoC.
           addMachineHandle: (scheduledInactivities) async {
-            final quantity =
-                int.tryParse(quantityController.text.trim()) ?? 0;
-            final processingPercent =
-                parsePercentage(controllerCapacity.text);
+            final quantity = int.tryParse(quantityController.text.trim()) ?? 0;
+            final processingPercent = parsePercentage(controllerCapacity.text);
             final preparationPercent =
                 parsePercentage(controllerPreparation.text);
             // Convert minutes → percentage: (minutes * 100) / 60
@@ -310,7 +324,7 @@ class _MachinesListViewState extends State<MachinesListView> {
                 quantity <= 0;
 
             if (hasInvalidFields) {
-              await showDialog(
+              await showAppDialog(
                 context: dialogContext,
                 builder: (subDialogContext) {
                   return const AlertDialog(
@@ -324,30 +338,25 @@ class _MachinesListViewState extends State<MachinesListView> {
             }
 
             final state = context.read<MachineBloc>().state;
-            final existingMachines = state is MachinesRetrievingSuccess
-                ? state.machines ?? []
-                : [];
-            final existingNames =
-                existingMachines.map((m) => m.name).toList();
+            final existingMachines =
+                state is MachinesRetrievingSuccess ? state.machines ?? [] : [];
+            final existingNames = existingMachines.map((m) => m.name).toList();
 
             final baseName = nameController.text.trim();
-            final regex =
-                RegExp('^${RegExp.escape(baseName)}(?: (\\d+))?\$');
+            final regex = RegExp('^${RegExp.escape(baseName)}(?: (\\d+))?\$');
             int maxIndex = 0;
 
             for (final name in existingNames) {
               final match = regex.firstMatch(name);
               if (match != null) {
                 final group = match.group(1);
-                final idx =
-                    group != null ? int.tryParse(group) ?? 1 : 1;
+                final idx = group != null ? int.tryParse(group) ?? 1 : 1;
                 if (idx > maxIndex) maxIndex = idx;
               }
             }
 
             for (int i = 1; i <= quantity; i++) {
-              final suffix =
-                  (maxIndex + i) == 1 ? '' : ' ${maxIndex + i}';
+              final suffix = (maxIndex + i) == 1 ? '' : ' ${maxIndex + i}';
               final newName = '$baseName$suffix';
 
               BlocProvider.of<MachineBloc>(context).addNewMachine(
@@ -368,8 +377,7 @@ class _MachinesListViewState extends State<MachinesListView> {
 
             await Future.delayed(const Duration(milliseconds: 300));
             if (expandedTypes.contains(machineId)) {
-              BlocProvider.of<MachineBloc>(context)
-                  .retrieveMachines(machineId);
+              BlocProvider.of<MachineBloc>(context).retrieveMachines(machineId);
             } else {
               setState(() => expandedTypes.add(machineId));
             }
@@ -402,7 +410,7 @@ class _MachinesListViewState extends State<MachinesListView> {
       machine.startMode ?? MachineStartMode.specificDate,
     );
 
-    await showDialog(
+    await showAppDialog(
       context: context,
       builder: (dialogContext) {
         return AddMachineDialog(

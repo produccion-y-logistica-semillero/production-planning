@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_state.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// Saved process routes, with a search box. Clicking one shows it.
 class RouteListPanel extends StatefulWidget {
@@ -75,7 +76,8 @@ class _RouteListPanelState extends State<RouteListPanel> {
                                 TextStyle(color: colorScheme.onSurfaceVariant),
                           ),
                         )
-                      : ListView.builder(
+                      : EntranceScope(
+                          child: ListView.builder(
                           // Build every row so the guided tutorial can
                           // reach them.
                           cacheExtent: 100000,
@@ -83,7 +85,11 @@ class _RouteListPanelState extends State<RouteListPanel> {
                           itemBuilder: (context, i) {
                             final seq = routes[i];
                             final selected = seq.id == state.selectedProcess;
-                            return TutorialTarget(
+                            // Routes enter in a short cascade (once each).
+                            return FadeSlideIn.staggered(
+                              index: i,
+                              id: 'route-${seq.id}',
+                              child: TutorialTarget(
                               id: 'route:${seq.name}',
                               child: ListTile(
                               dense: true,
@@ -98,8 +104,10 @@ class _RouteListPanelState extends State<RouteListPanel> {
                                   .read<SeeProcessBloc>()
                                   .selectSequence(seq.id!),
                             ),
+                            ),
                             );
                           },
+                        ),
                         ),
             ),
           ],

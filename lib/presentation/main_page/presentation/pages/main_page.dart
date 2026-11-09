@@ -6,6 +6,7 @@ import 'package:production_planning/presentation/main_page/presentation/widgets/
 import 'package:production_planning/shared/notation.dart';
 import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:provider/provider.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 class MainPage extends StatelessWidget {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -38,7 +39,22 @@ class MainPage extends StatelessWidget {
           ),
         ),
         leading: IconButton(
-          icon: Icon(Icons.menu, color: onTertiaryContainer),
+          tooltip: 'Menú',
+          // The icon turns into "menu open" with a short cross-fade.
+          icon: Consumer<SideMenuProvider>(
+            builder: (context, provider, _) => AnimatedSwitcher(
+              duration: motionDuration(context, Motion.medium),
+              transitionBuilder: (child, anim) => RotationTransition(
+                turns: Tween<double>(begin: 0.85, end: 1).animate(anim),
+                child: FadeTransition(opacity: anim, child: child),
+              ),
+              child: Icon(
+                provider.expanded ? Icons.menu_open : Icons.menu,
+                key: ValueKey(provider.expanded),
+                color: onTertiaryContainer,
+              ),
+            ),
+          ),
           onPressed: () {
             Provider.of<SideMenuProvider>(context, listen: false)
                 .changeExpansion();

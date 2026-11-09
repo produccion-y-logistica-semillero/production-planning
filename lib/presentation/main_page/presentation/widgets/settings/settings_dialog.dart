@@ -9,6 +9,7 @@ import 'package:production_planning/presentation/main_page/presentation/widgets/
 import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
 import 'package:production_planning/shared/workspace/workspace_session.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 enum SettingsSection { workspace, schedule, timeFormat }
 
@@ -51,7 +52,7 @@ Future<void> showSettingsDialog(
   BuildContext context, {
   SettingsSection initial = SettingsSection.workspace,
 }) =>
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => SettingsDialog(initial: initial),
@@ -75,7 +76,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Future<bool> _confirmDiscard() async {
     if (!_dirty) return true;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('¿Descartar los cambios?'),

@@ -12,6 +12,7 @@ import 'package:production_planning/presentation/2_orders/widgets/high_order/add
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/utils/task_time_utils.dart';
 import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// One station (machine type) of the order, with ALL its machines.
 class _OrderStation {
@@ -82,7 +83,7 @@ class NewOrderPage extends StatelessWidget {
           listener: (context, state) {
             if (state is NewOrdersState && state.justSaved != null) {
               if (state.justSaved!) tutorial.emit('orderSaved');
-              showDialog(
+              showAppDialog(
                 context: context,
                 barrierDismissible: false,
                 builder: (subcontext) => AlertDialog(
@@ -501,7 +502,7 @@ class NewOrderPage extends StatelessWidget {
     }
     buildControllers(selectedMachine);
 
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -760,7 +761,7 @@ class NewOrderPage extends StatelessWidget {
     }
 
     if (machineNames.isEmpty) {
-      showDialog(
+      showAppDialog(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Estado inicial de máquinas'),
@@ -783,7 +784,7 @@ class NewOrderPage extends StatelessWidget {
     final current =
         Map<String, String>.from(state.machineInitialStates ?? {});
 
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(builder: (context, setState) {
@@ -906,7 +907,7 @@ class NewOrderPage extends StatelessWidget {
   }
 
   void _showValidationDialog(BuildContext context, ColorScheme colorScheme) {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (subcontext) => AlertDialog(
         title: Text("Campos Incompletos",

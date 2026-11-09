@@ -4,6 +4,7 @@ import 'package:production_planning/entities/job_entity.dart';
 import 'package:production_planning/entities/machine_entity.dart';
 import 'package:production_planning/services/scheduling/machine_plan_text.dart';
 import 'package:production_planning/services/scheduling/machine_sequence_plan.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// Dialogo para definir la secuencia POR MAQUINA y, donde la ruta es parte de
 /// la solucion (Open Shop), la ruta de cada job. Son las dos tablas de la
@@ -285,7 +286,7 @@ class _MachineSequenceDialogState extends State<MachineSequenceDialog> {
     } catch (_) {}
     if (!mounted) return;
     final controller = TextEditingController(text: initialText);
-    final text = await showDialog<String>(
+    final text = await showAppDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Pegar desde Excel'),

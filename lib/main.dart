@@ -5,6 +5,7 @@ import 'package:production_planning/dependency_injection.dart';
 import 'package:production_planning/presentation/main_page/presentation/pages/main_page.dart';
 import 'package:production_planning/presentation/main_page/presentation/provider/side_menu_provider.dart';
 import 'package:production_planning/shared/duration_input.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 import 'package:production_planning/shared/tutorial/tutorial_layer.dart';
 import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
 import 'package:production_planning/shared/workspace/workspace_session.dart'
@@ -90,6 +91,12 @@ class MyApp extends StatelessWidget {
             brightness: Brightness.light,
             dynamicSchemeVariant: DynamicSchemeVariant.content),
         // textTheme: GoogleFonts.lexendDecaTextTheme()
+        // Every page (side menu and pushed screens) fades in rising a bit.
+        pageTransitionsTheme: kAppPageTransitions,
+        tooltipTheme: const TooltipThemeData(
+          waitDuration: Duration(milliseconds: 400),
+          showDuration: Duration(seconds: 3),
+        ),
       ),
       // The guided tutorial is drawn above every route and dialog.
       builder: (context, child) => TutorialLayer(child: child!),

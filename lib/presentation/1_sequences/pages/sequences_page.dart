@@ -15,6 +15,7 @@ import 'package:production_planning/presentation/1_sequences/widgets/high_order_
 import 'package:production_planning/presentation/1_sequences/widgets/high_order_widgets/sequence_editor_panel.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// Process routes: browse (read-only), create, edit in place, duplicate,
 /// rename and delete.
@@ -101,7 +102,7 @@ class _SequencesBodyState extends State<_SequencesBody> {
     if (state.mode == RouteEditorMode.edit) {
       final jobs = await bloc.jobsUsingCurrentRoute();
       if (jobs > 0 && context.mounted) {
-        final ok = await showDialog<bool>(
+        final ok = await showAppDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Esta ruta está en uso'),
@@ -152,7 +153,7 @@ class _SequencesBodyState extends State<_SequencesBody> {
     final messenger = ScaffoldMessenger.of(context);
     final jobs = await seeBloc.countJobsUsing(route.id!);
     if (!context.mounted) return;
-    final confirm = await showDialog<bool>(
+    final confirm = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Eliminar ruta?'),

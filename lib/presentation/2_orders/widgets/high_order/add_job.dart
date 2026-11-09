@@ -27,6 +27,7 @@ import 'package:production_planning/presentation/2_orders/bloc/new_order_bloc/ne
 import 'package:production_planning/services/scheduling/preemption_engine.dart';
 import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/utils/task_time_utils.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 // Helper widget for numeric input with max value validation
 class _MaxValueFormatter extends TextInputFormatter {
@@ -820,7 +821,7 @@ class AddJobState extends State<AddJobWidget> {
 
   Future<void> _showMachineSelectionDialog(
       TaskEntity task, List<MachineEntity> options) async {
-    final selected = await showDialog<MachineEntity>(
+    final selected = await showAppDialog<MachineEntity>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
@@ -902,7 +903,7 @@ class AddJobState extends State<AddJobWidget> {
             baseOffset: 0, extentOffset: processingController.text.length);
       }
     });
-    final result = await showDialog<bool>(
+    final result = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(

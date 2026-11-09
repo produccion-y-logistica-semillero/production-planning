@@ -17,6 +17,7 @@ import 'package:production_planning/shared/duration_input.dart';
 import 'package:production_planning/shared/tutorial/tutorial_workspace.dart';
 import 'package:production_planning/shared/workspace/workspace_session.dart';
 import 'package:production_planning/shared/workspace/workspace_store.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 const _ppwsGroup = XTypeGroup(
   label: 'Workspace (.ppws)',
@@ -92,7 +93,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
     ));
   }
 
-  Future<void> _showError(String message) => showDialog<void>(
+  Future<void> _showError(String message) => showAppDialog<void>(
         context: context,
         builder: (c) => AlertDialog(
           icon: Icon(Icons.error_outline,
@@ -119,7 +120,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
 
   Future<void> _create() async {
     final store = _store!;
-    final result = await showDialog<({String name, bool open})>(
+    final result = await showAppDialog<({String name, bool open})>(
       context: context,
       builder: (_) => NameDialog(
         title: 'Nuevo workspace',
@@ -144,7 +145,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
 
   Future<void> _rename(WorkspaceInfo w) async {
     final store = _store!;
-    final result = await showDialog<({String name, bool open})>(
+    final result = await showAppDialog<({String name, bool open})>(
       context: context,
       builder: (_) => NameDialog(
         title: 'Renombrar workspace',
@@ -169,7 +170,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
     final store = _store!;
     final suggested = await store.freeName('${w.name} (copia)');
     if (!mounted) return;
-    final result = await showDialog<({String name, bool open})>(
+    final result = await showAppDialog<({String name, bool open})>(
       context: context,
       builder: (_) => NameDialog(
         title: 'Duplicar "${w.name}"',
@@ -188,7 +189,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
   }
 
   Future<void> _delete(WorkspaceInfo w) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (c) {
         final cs = Theme.of(c).colorScheme;
@@ -248,7 +249,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
         () => _store!.exportTo(w.name, dest,
             openDb: w.isCurrent ? SQLLiteDatabaseProvider.current : null));
     if (path == null || !mounted) return;
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (_) => ExportDoneDialog(name: w.name, path: path),
     );
@@ -270,7 +271,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
         await _run('Revisando el archivo…', () => store.inspect(file.path));
     if (preview == null || !mounted) return;
 
-    final choice = await showDialog<({String name, bool replace})>(
+    final choice = await showAppDialog<({String name, bool replace})>(
       context: context,
       builder: (_) => ImportDialog(preview: preview, store: store),
     );
@@ -291,7 +292,7 @@ class _WorkspaceSectionState extends State<WorkspaceSection> {
 
     final imported = await store.find(choice.name);
     if (!mounted) return;
-    final openNow = await showDialog<bool>(
+    final openNow = await showAppDialog<bool>(
       context: context,
       builder: (_) => ImportDoneDialog(
         name: imported?.name ?? choice.name,

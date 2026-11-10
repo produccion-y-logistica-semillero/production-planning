@@ -26,6 +26,7 @@ import 'package:production_planning/shared/notation.dart';
 
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_bloc.dart';
 import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_state.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 class AlgorithmPickerPage extends StatefulWidget {
   final int orderId;
@@ -137,7 +138,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
 
   void _showRuleHelp(BuildContext context, String code) {
     final info = dispatchRuleInfo(code);
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(info == null ? code : '${info.code} · ${info.title}'),
@@ -158,7 +159,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   }
 
   void _showAllRulesHelp(BuildContext context, List<String> codes) {
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Guía de reglas de este ambiente'),
@@ -220,7 +221,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   }
 
   Future<void> _configureTabu() async {
-    final params = await showDialog<TabuParams>(
+    final params = await showAppDialog<TabuParams>(
       context: context,
       barrierDismissible: false,
       builder: (_) => TabuParamsDialog(
@@ -232,7 +233,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   }
 
   Future<void> _configureGenetic() async {
-    final params = await showDialog<GeneticParams>(
+    final params = await showAppDialog<GeneticParams>(
       context: context,
       barrierDismissible: false,
       builder: (_) => GeneticParamsDialog(
@@ -247,7 +248,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
   Future<void> _editUserSequence() async {
     final jobs = _order?.orderJobs;
     if (jobs == null || jobs.isEmpty) return;
-    final sequence = await showDialog<List<int>>(
+    final sequence = await showAppDialog<List<int>>(
       context: context,
       barrierDismissible: false,
       builder: (_) => UserSequenceDialog(jobs: jobs, initial: _userSequence),
@@ -261,7 +262,7 @@ class _AlgorithmPickerPageState extends State<AlgorithmPickerPage> {
     final jobs = _order?.orderJobs;
     if (jobs == null || jobs.isEmpty || _machinesByType.isEmpty) return;
     final env = _environmentName ?? '';
-    final plan = await showDialog<MachinePlan>(
+    final plan = await showAppDialog<MachinePlan>(
       context: context,
       barrierDismissible: false,
       builder: (_) => MachineSequenceDialog(
@@ -1107,7 +1108,7 @@ class _ProgramSummary extends StatelessWidget {
                         '${e.key} (${e.value} ${e.value == 1 ? 'job' : 'jobs'})'),
                     onPressed: routeIds[e.key] == null
                         ? null
-                        : () => showDialog<void>(
+                        : () => showAppDialog<void>(
                               context: context,
                               builder: (_) => _RoutePreviewDialog(
                                 sequenceId: routeIds[e.key]!,

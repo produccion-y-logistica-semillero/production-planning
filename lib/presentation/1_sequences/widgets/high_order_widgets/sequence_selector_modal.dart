@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 class SequenceSelectorModal extends StatelessWidget {
   final List<SequenceEntity> sequences;
@@ -48,7 +49,7 @@ class SequenceSelectorModal extends StatelessWidget {
                 trailing: IconButton(
                   icon: Icon(Icons.delete, color: colorScheme.error),
                   onPressed: () async {
-                    final confirm = await showDialog<bool>(
+                    final confirm = await showAppDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('¿Eliminar ruta?'),

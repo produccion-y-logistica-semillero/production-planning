@@ -12,6 +12,7 @@ import 'package:production_planning/presentation/2_orders/bloc/gantt_bloc/gantt_
 import 'package:production_planning/presentation/2_orders/widgets/high_order/metrics_page.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_bloc.dart';
 import 'package:production_planning/presentation/2_orders/widgets/low_order/task_dialog.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 enum GanttViewMode { byMachine, byJob }
 
@@ -1276,14 +1277,14 @@ class _GanttChartState extends State<GanttChart> {
     Metrics metrics,
     BuildContext context,
   ) {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (_) => MetricsPage(metrics: metrics),
     );
   }
 
   void _openTaskDialog(task) {
-    showDialog(
+    showAppDialog(
       context: context,
       builder: (c) {
         return BlocProvider<TaskBloc>(

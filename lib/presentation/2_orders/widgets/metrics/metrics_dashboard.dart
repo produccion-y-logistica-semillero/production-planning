@@ -4,6 +4,7 @@ import 'package:production_planning/entities/metrics.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/metric_definitions.dart';
 import 'package:production_planning/presentation/2_orders/widgets/metrics/viz_palette.dart';
 import 'package:production_planning/shared/duration_format.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// Comparison of every algorithm at a glance:
 ///  1. who wins each objective (cards);
@@ -38,7 +39,7 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
       m.format(_rows[row], precisionFor(m, _rows));
 
   void _openActions(int row) {
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(widget.ruleNames[row]),
@@ -78,9 +79,14 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
           _winnerCards(context),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (context, c) {
-            final bars = _panel(context, 'Comparar por métrica', _bars(context));
-            final map = _panel(
-                context, 'Posiciones y puntaje global', _rankMap(context));
+            // The two panels follow the winner cards in the cascade.
+            final bars = FadeSlideIn(
+                delay: const Duration(milliseconds: 120),
+                child: _panel(context, 'Comparar por métrica', _bars(context)));
+            final map = FadeSlideIn(
+                delay: const Duration(milliseconds: 180),
+                child: _panel(
+                    context, 'Posiciones y puntaje global', _rankMap(context)));
             if (c.maxWidth < 1100) {
               return Column(children: [bars, const SizedBox(height: 16), map]);
             }
@@ -155,7 +161,8 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
 
       return SizedBox(
         width: 230,
-        child: Card(
+        child: HoverLift(
+          child: Card(
           margin: EdgeInsets.zero,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -204,13 +211,18 @@ class _MetricsDashboardState extends State<MetricsDashboard> {
             ),
           ),
         ),
+        ),
       );
     }
 
+    // The winner cards enter in a short cascade and lift on hover.
     return Wrap(
       spacing: 12,
       runSpacing: 12,
-      children: [for (final id in kHeadlineMetricIds) card(metricById(id))],
+      children: [
+        for (final (i, id) in kHeadlineMetricIds.indexed)
+          FadeSlideIn.staggered(index: i, child: card(metricById(id))),
+      ],
     );
   }
 

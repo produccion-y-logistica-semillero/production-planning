@@ -16,6 +16,7 @@ import 'package:production_planning/entities/order_entity.dart';
 import 'package:production_planning/presentation/2_orders/order_filter.dart';
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:production_planning/entities/algorithm_params.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 
 
@@ -170,8 +171,10 @@ class _OrdersPageState extends State<OrdersPage> {
       OrderEntity order, String? environment,
       {bool latest = false}) {
     final routes = routeNamesOf(order);
+    // The 8 px margin is added by the list, outside the hover lift, so the
+    // hover shadow follows the card's edge.
     final card = Card(
-      margin: const EdgeInsets.all(8.0),
+      margin: EdgeInsets.zero,
       color: colorScheme.surfaceContainer,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -365,7 +368,12 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
             Expanded(
               child: BlocBuilder<OrderBloc, OrdersState>(
-                builder: (context, state) {
+                // Cross-fade between loading, list and error (keyed by the
+                // kind of state, so list updates do not re-animate).
+                builder: (context, state) => StateSwitcher(
+                    child: KeyedSubtree(
+                        key: ValueKey(state.runtimeType),
+                        child: Builder(builder: (context) {
                   print("DEBUG: OrdersState actual: ${state.runtimeType}");
                   if (state is OrdersLoadingState) {
                     return const Center(child: CircularProgressIndicator());
@@ -423,12 +431,22 @@ class _OrdersPageState extends State<OrdersPage> {
                                     ),
                                   ),
                                 )
-                              : ListView.builder(
+                              : EntranceScope(
+                                  child: ListView.builder(
                                   // Build every card so the guided tutorial
                                   // can reach the newest one.
                                   cacheExtent: 100000,
                                   itemCount: filtered.length,
-                                  itemBuilder: (context, index) => _buildOrderCard(
+                                  // Programs enter in a short cascade (once
+                                  // each) and lift on hover.
+                                  itemBuilder: (context, index) =>
+                                      FadeSlideIn.staggered(
+                                    index: index,
+                                    id: 'order-${filtered[index].orderId}',
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: HoverLift(
+                                        child: _buildOrderCard(
                                     context,
                                     colorScheme,
                                     filtered[index],
@@ -439,7 +457,11 @@ class _OrdersPageState extends State<OrdersPage> {
                                         state.orders
                                             .map((o) => o.orderId ?? 0)
                                             .fold<int>(0, (a, b) => a > b ? a : b),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                ),
                                 ),
                         ),
                       ],
@@ -464,7 +486,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
                   );
-                },
+                }))),
               ),
             ),
           ],

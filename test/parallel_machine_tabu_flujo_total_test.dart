@@ -8,12 +8,12 @@
 // Criterio:
 //   • En TODO escenario  ->  flujo(TABU) <= min(flujo de cada regla).
 //     (TABU nunca debe empeorar respecto a la mejor regla.)
-//   • En los escenarios con setup dependiente de secuencia, donde las reglas
-//     intercalan familias y pagan cambios de preparación evitables, TABU
-//     debe ser ESTRICTAMENTE mejor.
-//   • En máquinas idénticas sin setup ni fechas de liberación, SPT + regla
-//     de menor tiempo de fin ya es óptimo para P||ΣC_j, así que TABU debe
-//     EMPATAR (no se le exige mejora).
+//   • En los escenarios donde ATCS (la regla que sí considera el setup) NO
+//     es óptima, TABU debe ser ESTRICTAMENTE mejor (S6 y S7).
+//   • Cuando la mejor regla ya es el óptimo, TABU debe EMPATAR: no se puede
+//     mejorar un óptimo. Es el caso de S1-S3 (con familias idénticas el
+//     óptimo se calculó exacto: 770, 1350 y 825 min), de S4 (máquinas
+//     idénticas sin setup, donde SPT ya es óptimo para P||ΣC_j) y de S5.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,8 +100,10 @@ List<ParallelInput> _families({
 
 final List<_Scenario> _scenarios = [
   // ── S1 · 3 familias, 2 máquinas, setup 90 ──────────────────────────────
-  // Patrón intercalado A,B,C,A,B,C,A,B,C. Las reglas alternan familias y
-  // pagan ~90 min de setup en casi cada trabajo; TABU agrupa familias.
+  // Patrón intercalado A,B,C,A,B,C,A,B,C. Las reglas puras alternan familias
+  // y pagan ~90 min de setup en casi cada trabajo, pero ATCS (que sí mira el
+  // setup) ya agrupa y llega al óptimo exacto (770 min, verificado por
+  // enumeración). TABU debe igualarlo, no se puede mejorar.
   _Scenario(
     'S1 · 3 familias · 2 máquinas · setup 90 · proc 20',
     () => _families(
@@ -111,10 +113,10 @@ final List<_Scenario> _scenarios = [
     ),
     const [1, 2],
     setupMatrix: _uniformSetup(const [1, 2], const ['A', 'B', 'C'], 90),
-    expectStrictlyBetter: true,
   ),
 
   // ── S2 · 4 familias, 2 máquinas, setup 120 (caso más grande) ───────────
+  // ATCS ya alcanza el óptimo exacto (1350 min): TABU debe igualarlo.
   _Scenario(
     'S2 · 4 familias · 2 máquinas · setup 120 · proc 15',
     () => _families(
@@ -127,13 +129,12 @@ final List<_Scenario> _scenarios = [
     const [1, 2],
     setupMatrix:
         _uniformSetup(const [1, 2], const ['A', 'B', 'C', 'D'], 120),
-    expectStrictlyBetter: true,
   ),
 
   // ── S3 · 4 familias, 3 máquinas, setup 75 ──────────────────────────────
   // Hay más familias que máquinas: al menos una máquina debe procesar 2
-  // familias, así que el ORDEN y el reparto importan. Las reglas intercalan;
-  // TABU consolida (p. ej. A+D en una máquina, B y C en las otras).
+  // familias, así que el ORDEN y el reparto importan. ATCS ya consolida y
+  // llega al óptimo exacto (825 min): TABU debe igualarlo.
   _Scenario(
     'S3 · 4 familias · 3 máquinas · setup 75 · proc 20',
     () => _families(
@@ -146,6 +147,57 @@ final List<_Scenario> _scenarios = [
     const [1, 2, 3],
     setupMatrix:
         _uniformSetup(const [1, 2, 3], const ['A', 'B', 'C', 'D'], 75),
+  ),
+
+  // ── S6 · tiempos de proceso distintos por familia ──────────────────────
+  // Con familias de 10, 35 y 60 min el reparto importa: ATCS agrupa por
+  // familia pero no equilibra bien las cargas; TABU sí lo mejora.
+  _Scenario(
+    'S6 · 3 familias · 2 máquinas · setup 90 · proc 10/35/60',
+    () {
+      const pattern = ['A', 'B', 'C', 'A', 'B', 'C', 'A', 'B', 'C'];
+      const proc = {'A': 10, 'B': 35, 'C': 60};
+      return [
+        for (int k = 0; k < pattern.length; k++)
+          ParallelInput(
+            k + 1,
+            DateTime(2026, 1, 7, 0, k + 1),
+            1,
+            _start,
+            {
+              for (final m in const [1, 2])
+                m: Duration(minutes: proc[pattern[k]]!),
+            },
+            jobState: pattern[k],
+          ),
+      ];
+    },
+    const [1, 2],
+    setupMatrix: _uniformSetup(const [1, 2], const ['A', 'B', 'C'], 90),
+    expectStrictlyBetter: true,
+  ),
+
+  // ── S7 · fechas de liberación escalonadas ──────────────────────────────
+  // Los trabajos llegan cada 40 min (r_j distintos). ATCS decide en el
+  // momento y paga setups evitables; TABU ve la secuencia completa.
+  _Scenario(
+    'S7 · 3 familias · 2 máquinas · setup 90 · liberaciones escalonadas',
+    () {
+      const pattern = ['A', 'B', 'C', 'A', 'B', 'C', 'A', 'B', 'C'];
+      return [
+        for (int k = 0; k < pattern.length; k++)
+          ParallelInput(
+            k + 1,
+            DateTime(2026, 1, 7, 0, k + 1),
+            1,
+            _start.add(Duration(minutes: 40 * k)),
+            {1: const Duration(minutes: 20), 2: const Duration(minutes: 20)},
+            jobState: pattern[k],
+          ),
+      ];
+    },
+    const [1, 2],
+    setupMatrix: _uniformSetup(const [1, 2], const ['A', 'B', 'C'], 90),
     expectStrictlyBetter: true,
   ),
 

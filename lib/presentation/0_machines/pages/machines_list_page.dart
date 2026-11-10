@@ -8,6 +8,7 @@ import 'package:production_planning/presentation/0_machines/widgets/low_order_wi
 import 'package:production_planning/presentation/0_machines/widgets/high_order_widgets/machines_list_view.dart';
 import 'package:production_planning/shared/functions/functions.dart';
 import 'package:production_planning/shared/widgets/custom_app_bar.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 class MachinesListPage extends StatelessWidget {
   final _nameController = TextEditingController();
@@ -101,10 +102,21 @@ class MachinesListPage extends StatelessWidget {
               BlocProvider.of<MachineTypesBloc>(context).retrieveMachineTypes();
             }
 
+            // Cross-fade only when the kind of state changes (loading →
+            // list); every list state shares a key, so the list keeps its
+            // state (expanded stations) across adds and deletes.
+            final kind = switch (state) {
+              (MachineTypeInitial _) => 'initial',
+              (MachineTypesRetrieving _) => 'loading',
+              (MachineTypesRetrievingError _) => 'error',
+              _ => 'list',
+            };
             return Expanded(
               child: Container(
                 padding: const EdgeInsets.all(30),
-                child: widget,
+                child: StateSwitcher(
+                  child: KeyedSubtree(key: ValueKey(kind), child: widget),
+                ),
               ),
             );
           })
@@ -114,7 +126,7 @@ class MachinesListPage extends StatelessWidget {
   }
 
   void _clickNewMachineType(BuildContext context) async {
-    await showDialog(
+    await showAppDialog(
         context: context,
         builder: (dialogContext) {
           return AddMachineTypeDialog(

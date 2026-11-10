@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 
 Duration ruleOf3(Duration baseCapacity, Duration processingUnits) {
@@ -36,7 +37,7 @@ void printInfo(
   required String content,
 
 }) {
-  showDialog(
+  showAppDialog(
       context: context,
       builder: (c) => Dialog(
             child: Container(

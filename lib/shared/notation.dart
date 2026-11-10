@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:production_planning/shared/tutorial/tutorial_controller.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 /// Global switch: when true, the screens add the theoretical symbols next
 /// to their labels. Read at start-up from [notationFileName] (main.dart).
@@ -615,7 +616,7 @@ Future<void> showNotationPanel(
   required String title,
   required List<NotationEntry> entries,
 }) {
-  return showDialog<void>(
+  return showAppDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Row(

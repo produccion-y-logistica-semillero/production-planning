@@ -58,7 +58,6 @@ class MachinesService {
     return repository.deleteMachineType(id);
   }
 
-
   Future<Either<Failure, List<MachineTypeEntity>>> getMachineTypes() async {
     return repository.getAllMachineTypes();
   }
@@ -97,30 +96,29 @@ class MachinesService {
   Future<Either<Failure, bool>> deleteMachineInactivity(int inactivityId) {
     return repository.deleteMachineInactivity(inactivityId);
   }
-  Future<Either<Failure, MachineEntity>> editMachine(
-  int machineId,
-  String machineName,
-  double processingPercentage,
-  double preparationPercentage,
-  double restPercentage,
-  int continueCapacity,
-  DateTime availabilityDateTime, {
-  MachineStartMode startMode = MachineStartMode.specificDate,
-}) async {
-  final machine = MachineEntity(
-    id: machineId,
-    name: machineName,
-    status: null,
-    processingPercentage: processingPercentage,
-    preparationPercentage: preparationPercentage,
-    restPercentage: restPercentage,
-    continueCapacity: continueCapacity,
-    availabilityDateTime: availabilityDateTime,
-    startMode: startMode,
-  );
-  final response = await repository.updateMachine(machine);
-  return response.fold((f) => Left(f), (success) => Right(machine));
-}
- 
 
+  Future<Either<Failure, MachineEntity>> editMachine(
+    int machineId,
+    String machineName,
+    double processingPercentage,
+    double preparationPercentage,
+    double restPercentage,
+    int continueCapacity,
+    DateTime availabilityDateTime, {
+    MachineStartMode startMode = MachineStartMode.specificDate,
+  }) async {
+    final machine = MachineEntity(
+      id: machineId,
+      name: machineName,
+      status: null,
+      processingPercentage: processingPercentage,
+      preparationPercentage: preparationPercentage,
+      restPercentage: restPercentage,
+      continueCapacity: continueCapacity,
+      availabilityDateTime: availabilityDateTime,
+      startMode: startMode,
+    );
+    final response = await repository.updateMachine(machine);
+    return response.fold((f) => Left(f), (success) => Right(machine));
+  }
 }

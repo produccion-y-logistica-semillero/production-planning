@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:production_planning/entities/sequence_entity.dart';
 import 'package:production_planning/presentation/1_sequences/bloc/see_processes_bloc/see_process_bloc.dart';
+import 'package:production_planning/shared/motion/motion.dart';
 
 class OrderProcess extends StatelessWidget {
   final SequenceEntity process;
@@ -125,7 +126,7 @@ class OrderProcess extends StatelessWidget {
             children: [
               TextButton.icon(
                 onPressed: () {
-                  showDialog(
+                  showAppDialog(
                     context: context,
                     builder: (dialogContext) {
                       return AlertDialog(
